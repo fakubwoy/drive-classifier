@@ -463,11 +463,74 @@ Return ONLY the JSON array. No markdown. No extra text."""
         try:
             response = model.generate_content(prompt)
             text = response.text.strip()
+            # Strip markdown fences
             text = re.sub(r"^```[a-z]*\n?", "", text)
             text = re.sub(r"\n?```$", "", text)
-            batch_results = json.loads(text)
-            for r in batch_results:
-                results[r["idx"]] = r
+            text = text.strip()
+
+            # Attempt 1: clean parse
+            try:
+                batch_results = json.loads(text)
+            except json.JSONDecodeError:
+                # Attempt 2: truncated JSON — find the last complete object
+                # by trimming after the last '}' and closing the array
+                last_brace = text.rfind("}")
+                if last_brace != -1:
+                    truncated = text[:last_brace + 1]
+                    # Remove any trailing comma before closing
+                    truncated = re.sub(r",\s*$", "", truncated.strip())
+                    try:
+                        batch_results = json.loads(truncated + "]")
+                    except json.JSONDecodeError:
+                        batch_results = None
+                else:
+                    batch_results = None
+
+                # Attempt 3: extract individual objects with regex
+                if batch_results is None:
+                    objects = re.findall(r'\{[^{}]*\}', text, re.DOTALL)
+                    parsed = []
+                    for obj in objects:
+                        try:
+                            parsed.append(json.loads(obj))
+                        except json.JSONDecodeError:
+                            continue
+                    batch_results = parsed if parsed else None
+
+            if batch_results:
+                successfully_parsed = {r["idx"] for r in batch_results if "idx" in r}
+                for r in batch_results:
+                    if "idx" in r:
+                        results[r["idx"]] = r
+                # Any items in the batch that didn't come back — retry individually
+                missing = [item for item in batch if item["idx"] not in successfully_parsed]
+                if missing:
+                    for item in missing:
+                        try:
+                            single_prompt = prompt.replace(
+                                f"Return a JSON array (same length, same order):",
+                                f"Return a JSON array with exactly 1 element:"
+                            ).replace(json.dumps(batch, indent=2), json.dumps([item], indent=2))
+                            r2 = model.generate_content(single_prompt)
+                            t2 = re.sub(r"^```[a-z]*\n?", "", r2.text.strip())
+                            t2 = re.sub(r"\n?```$", "", t2).strip()
+                            single_result = json.loads(t2)
+                            if isinstance(single_result, list) and single_result:
+                                results[item["idx"]] = single_result[0]
+                            elif isinstance(single_result, dict):
+                                results[item["idx"]] = single_result
+                        except Exception:
+                            results[item["idx"]] = {
+                                "idx": item["idx"],
+                                "classification": "Error",
+                                "reference_id": "",
+                                "matched_detail": "",
+                                "confidence": "low",
+                                "reasoning": "Could not classify after retry."
+                            }
+            else:
+                raise ValueError(f"All recovery attempts failed. Raw: {text[:200]}")
+
         except Exception as e:
             for item in batch:
                 results[item["idx"]] = {
