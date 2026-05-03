@@ -4,336 +4,705 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Alfaleus — Transaction Classifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d2e;
-    --surface2: #252840;
-    --border: #2e3158;
-    --accent: #6c63ff;
-    --accent2: #4ecdc4;
-    --text: #e2e8f0;
-    --text-muted: #8892a4;
-    --green: #10b981;
-    --yellow: #f59e0b;
-    --red: #ef4444;
-    --blue: #3b82f6;
-    --orange: #f97316;
+    --bg:       #0a0c10;
+    --surface:  #111318;
+    --surface2: #181c23;
+    --surface3: #1e2330;
+    --border:   #252c3a;
+    --border2:  #2e3850;
+    --accent:   #3b82f6;
+    --accent-dim: rgba(59,130,246,0.12);
+    --accent2:  #10b981;
+    --accent2-dim: rgba(16,185,129,0.12);
+    --text:     #e2e8f0;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+    --green:    #10b981;
+    --yellow:   #f59e0b;
+    --red:      #ef4444;
+    --blue:     #3b82f6;
+    --purple:   #8b5cf6;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+    --display: 'Syne', sans-serif;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
 
+  /* ---- SVG Icon helper ---- */
+  .icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .icon svg { display: block; }
+
+  /* ---- Scrollbar ---- */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ===================== HEADER ===================== */
   .header {
-    background: linear-gradient(135deg, #1a1d2e 0%, #252840 100%);
+    background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 18px 28px;
-    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
   }
-  .header-left { display: flex; align-items: center; gap: 14px; }
-  .logo { width: 42px; height: 42px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-  .header h1 { font-size: 1.3rem; font-weight: 700; }
-  .header h1 span { color: var(--accent2); }
-  .status-bar { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-muted); flex-wrap: wrap; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
-  .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .status-dot.warn { background: var(--yellow); }
-  .status-dot.err { background: var(--red); }
-  .sheets-badge { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid rgba(78,205,196,0.3); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }
-  .excel-badge { background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.25); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wordmark {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .wordmark span { color: var(--accent); }
+  .header-divider { width: 1px; height: 20px; background: var(--border); }
 
-  .toolbar {
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 12px 28px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  .status-pills { display: flex; align-items: center; gap: 8px; }
+  .pill {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 0.75rem; font-weight: 500;
+    font-family: var(--mono);
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
   }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+  .pill.ok .dot { background: var(--green); box-shadow: 0 0 5px var(--green); }
+  .pill.warn .dot { background: var(--yellow); }
+  .pill.err .dot { background: var(--red); }
+  .pill.ok { color: var(--text-dim); border-color: rgba(16,185,129,0.2); }
+
+  .header-right { display: flex; align-items: center; gap: 8px; }
+
+  /* ===================== BUTTONS ===================== */
   .btn {
-    padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
-    font-size: 0.88rem; font-weight: 600; transition: all 0.18s;
-    display: flex; align-items: center; gap: 7px;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px;
+    border-radius: 7px; border: 1px solid transparent;
+    cursor: pointer; font-size: 0.82rem; font-weight: 600;
+    font-family: var(--sans);
+    transition: all 0.15s;
+    white-space: nowrap;
+    line-height: 1;
   }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: #5a52e0; }
-  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-  .btn-secondary:hover { background: var(--border); }
-  .btn-success { background: var(--green); color: #fff; }
-  .btn-success:hover { background: #059669; }
-  .btn-warning { background: var(--yellow); color: #000; }
-  .btn-warning:hover { background: #d97706; }
-  .btn-danger { background: var(--red); color: #fff; }
-  .btn-danger:hover { background: #dc2626; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover:not(:disabled) { background: #2563eb; }
+  .btn-secondary { background: var(--surface2); color: var(--text-dim); border-color: var(--border); }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface3); border-color: var(--border2); color: var(--text); }
+  .btn-success { background: var(--green); color: #fff; border-color: var(--green); }
+  .btn-success:hover:not(:disabled) { background: #059669; }
+  .btn-warning { background: rgba(245,158,11,0.15); color: var(--yellow); border-color: rgba(245,158,11,0.3); }
+  .btn-warning:hover:not(:disabled) { background: rgba(245,158,11,0.25); }
+  .btn-danger { background: rgba(239,68,68,0.12); color: var(--red); border-color: rgba(239,68,68,0.25); }
+  .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.22); }
+  .btn-ghost { background: transparent; color: var(--text-muted); border-color: transparent; }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+  .btn-sm { padding: 4px 10px; font-size: 0.75rem; }
+  .btn-xs { padding: 3px 8px; font-size: 0.72rem; }
 
-  .search-box {
-    flex: 1; max-width: 320px; background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 0.88rem; outline: none;
+  /* ===================== NAV TABS ===================== */
+  .nav-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex; gap: 2px;
   }
-  .search-box:focus { border-color: var(--accent); }
-  .search-box::placeholder { color: var(--text-muted); }
-
-  .filter-select {
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 8px 12px; color: var(--text); font-size: 0.85rem; outline: none; cursor: pointer;
+  .nav-tab {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px 14px;
+    font-size: 0.82rem; font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.14s;
+    user-select: none;
   }
-  .filter-select:focus { border-color: var(--accent); }
-
-  .stats-bar { padding: 14px 28px; display: flex; gap: 16px; flex-wrap: wrap; }
-  .stat-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 20px; min-width: 130px; text-align: center;
-  }
-  .stat-card .num { font-size: 1.5rem; font-weight: 700; color: var(--accent2); }
-  .stat-card .lbl { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-
-  .main-grid { display: grid; grid-template-columns: 1fr 360px; gap: 0; min-height: calc(100vh - 200px); }
-
-  .table-panel { overflow: auto; padding: 0 0 40px 28px; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
-  thead th {
-    background: var(--surface); color: var(--text-muted); font-weight: 600;
-    text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em;
-    padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; z-index: 2; white-space: nowrap;
-  }
-  tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.12s; }
-  tbody tr:hover { background: var(--surface); }
-  tbody tr.selected { background: rgba(108, 99, 255, 0.12); border-left: 3px solid var(--accent); }
-  tbody tr.classifying { background: rgba(245, 158, 11, 0.07); }
-  tbody tr.duplicate-warn { border-left: 3px solid var(--yellow) !important; }
-  td { padding: 10px 14px; vertical-align: middle; }
-
-  .narration-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 0.8rem; }
-  .amount-cell { font-weight: 600; white-space: nowrap; }
-  .amount-cell.receipt { color: var(--green); }
-  .amount-cell.payment { color: var(--red); }
-
-  .badge {
-    display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px;
-    font-size: 0.72rem; font-weight: 600; white-space: nowrap;
-  }
-  .badge-receipt { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
-  .badge-payment { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
-  .badge-classified { background: rgba(108,99,255,0.15); color: #a78bfa; border: 1px solid rgba(108,99,255,0.3); }
-  .badge-learned { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid rgba(78,205,196,0.3); }
-  .badge-pending { background: rgba(136,146,164,0.12); color: var(--text-muted); border: 1px solid var(--border); }
-  .badge-invoice { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid rgba(78,205,196,0.3); }
-  .badge-dup { background: rgba(245,158,11,0.18); color: var(--yellow); border: 1px solid rgba(245,158,11,0.4); }
-  .badge-accepted { background: rgba(16,185,129,0.18); color: var(--green); border: 1px solid rgba(16,185,129,0.35); }
-  .badge-rejected { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
-
-  .confidence-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; }
-  .conf-high { background: var(--green); }
-  .conf-medium { background: var(--yellow); }
-  .conf-low { background: var(--red); }
-
-  /* Detail Panel */
-  .detail-panel {
-    background: var(--surface); border-left: 1px solid var(--border); padding: 20px;
-    position: sticky; top: 0; height: calc(100vh - 180px); overflow-y: auto;
-    display: flex; flex-direction: column; gap: 14px;
-  }
-  .detail-panel h2 { font-size: 1rem; font-weight: 700; color: var(--text); }
-  .detail-empty { color: var(--text-muted); font-size: 0.88rem; text-align: center; margin-top: 40px; }
-  .detail-section { background: var(--surface2); border-radius: 10px; padding: 14px; border: 1px solid var(--border); }
-  .detail-section h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 10px; }
-  .detail-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
-  .detail-row:last-child { margin-bottom: 0; }
-  .detail-label { font-size: 0.72rem; color: var(--text-muted); }
-  .detail-value { font-size: 0.88rem; font-weight: 500; word-break: break-word; }
-  .narration-full { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; background: var(--bg); padding: 10px; border-radius: 7px; font-family: monospace; word-break: break-all; }
-
-  .classify-result { border: 1px solid var(--accent); border-radius: 10px; padding: 14px; background: rgba(108,99,255,0.07); }
-  .classify-result h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--accent); margin-bottom: 10px; }
-  .classify-result .category { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
-  .classify-result .reasoning { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; }
-
-  /* Duplicate warning */
-  .dup-warning { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.4); border-radius: 10px; padding: 12px 14px; }
-  .dup-warning h3 { color: var(--yellow); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
-  .dup-link { color: var(--yellow); cursor: pointer; text-decoration: underline; font-size: 0.82rem; }
-
-  /* Feedback box */
-  .feedback-box { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--surface2); }
-  .feedback-box h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 10px; }
-  .cat-select {
-    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
-    padding: 8px 10px; color: var(--text); font-size: 0.85rem; outline: none; margin-bottom: 10px;
-  }
-  .cat-select:focus { border-color: var(--accent); }
-  .learn-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 0.82rem; color: var(--text-muted); cursor: pointer; }
-  .learn-toggle input { accent-color: var(--accent2); cursor: pointer; }
-  .feedback-actions { display: flex; gap: 8px; }
-  .feedback-actions .btn { flex: 1; justify-content: center; padding: 7px 12px; font-size: 0.82rem; }
-
-  /* Quick Review mode */
-  .review-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
-    backdrop-filter: blur(6px); z-index: 200; align-items: center; justify-content: center;
-  }
-  .review-overlay.show { display: flex; }
-  .review-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
-    padding: 32px 36px; max-width: 580px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-  }
-  .review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-  .review-progress { font-size: 0.82rem; color: var(--text-muted); }
-  .review-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; }
-  .review-narration { font-family: monospace; font-size: 0.82rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px; word-break: break-all; }
-  .review-meta { display: flex; gap: 16px; margin-bottom: 16px; font-size: 0.82rem; color: var(--text-muted); flex-wrap: wrap; }
-  .review-meta span { display: flex; align-items: center; gap: 5px; }
-  .review-classification { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
-  .review-reasoning { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 18px; }
-  .review-actions { display: flex; gap: 10px; margin-bottom: 14px; }
-  .review-actions .btn { flex: 1; justify-content: center; font-size: 0.92rem; padding: 10px; }
-  .review-correction { display: none; }
-  .review-correction.show { display: block; }
-  .review-cat-select {
-    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
-    padding: 8px 10px; color: var(--text); font-size: 0.85rem; outline: none; margin-bottom: 8px;
-  }
-  .review-shortcut { font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 8px; }
-
-  /* Progress Overlay */
-  .progress-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center;
-  }
-  .progress-overlay.show { display: flex; }
-  .progress-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 32px 40px; text-align: center; min-width: 320px; }
-  .progress-box h3 { font-size: 1.1rem; margin-bottom: 8px; }
-  .progress-box p { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px; }
-  .progress-bar-wrap { background: var(--surface2); border-radius: 20px; height: 8px; overflow: hidden; }
-  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 20px; transition: width 0.3s; }
-  .progress-count { font-size: 0.82rem; color: var(--text-muted); margin-top: 10px; }
-
-  /* Tabs */
-  .tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding: 0 28px; background: var(--surface); }
-  .tab { padding: 10px 18px; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .nav-tab:hover { color: var(--text-dim); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  /* Sales table */
-  .sales-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
-  .sales-table th { background: var(--surface); color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-  .sales-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-  .sales-table tr:hover td { background: var(--surface); }
-  .invoice-badge { font-family: monospace; font-weight: 600; color: var(--accent2); }
+  /* ===================== TOOLBAR ===================== */
+  .toolbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .toolbar-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
 
-  /* Rules table */
-  .rules-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
-  .rules-table th { background: var(--surface); color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-  .rules-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-  .rules-table tr:hover td { background: var(--surface); }
+  .search-wrap {
+    position: relative; flex: 1; max-width: 300px;
+  }
+  .search-wrap .icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); pointer-events: none;
+  }
+  .search-input {
+    width: 100%; padding: 7px 12px 7px 34px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 7px; color: var(--text); font-size: 0.82rem;
+    outline: none; font-family: var(--sans);
+  }
+  .search-input::placeholder { color: var(--text-muted); }
+  .search-input:focus { border-color: var(--accent); }
 
-  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  .filter-select {
+    padding: 7px 10px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 7px; color: var(--text-dim); font-size: 0.8rem;
+    outline: none; cursor: pointer; font-family: var(--sans);
+  }
+  .filter-select:focus { border-color: var(--accent); }
+
+  /* ===================== STATS BAR ===================== */
+  .stats-bar { padding: 12px 24px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex; flex-direction: column; gap: 3px;
+    min-width: 110px;
+  }
+  .stat-num { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; line-height: 1; }
+  .stat-lbl { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* ===================== MAIN GRID ===================== */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    min-height: calc(100vh - 180px);
+  }
+
+  /* ===================== TABLE ===================== */
+  .table-panel { overflow: auto; padding-bottom: 60px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  thead th {
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.68rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 2;
+    white-space: nowrap;
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  tbody tr:hover { background: var(--surface); }
+  tbody tr.row-selected { background: rgba(59,130,246,0.07); border-left: 2px solid var(--accent); }
+  tbody tr.row-dup { border-left: 2px solid var(--yellow) !important; }
+  td { padding: 9px 12px; vertical-align: middle; }
+
+  .narr-cell {
+    max-width: 260px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text-muted); font-family: var(--mono); font-size: 0.75rem;
+  }
+  .amount-cell { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+  .amount-cell.receipt { color: var(--green); }
+  .amount-cell.payment { color: var(--red); }
+
+  /* ===================== BADGES ===================== */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 600; white-space: nowrap;
+    font-family: var(--mono);
+  }
+  .badge-receipt  { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+  .badge-payment  { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+  .badge-classified { background: rgba(59,130,246,0.1); color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
+  .badge-learned  { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
+  .badge-pending  { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+  .badge-ref      { background: rgba(139,92,246,0.1); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.25); }
+  .badge-dup      { background: rgba(245,158,11,0.1); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
+  .badge-accepted { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
+  .badge-rejected { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+
+  .conf-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .conf-high   { background: var(--green); }
+  .conf-medium { background: var(--yellow); }
+  .conf-low    { background: var(--red); }
+
+  /* ===================== DETAIL PANEL ===================== */
+  .detail-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 18px;
+    position: sticky; top: 0;
+    height: calc(100vh - 160px);
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .detail-panel-title {
+    font-family: var(--display);
+    font-size: 0.88rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .detail-empty {
+    color: var(--text-muted); font-size: 0.82rem;
+    text-align: center; margin-top: 48px; line-height: 1.7;
+  }
+
+  .detail-section {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .detail-section-title {
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .detail-row { display: flex; flex-direction: column; gap: 2px; margin-bottom: 9px; }
+  .detail-row:last-child { margin-bottom: 0; }
+  .detail-label { font-size: 0.67rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .detail-value { font-size: 0.82rem; font-weight: 500; word-break: break-word; }
+  .narr-mono {
+    font-family: var(--mono); font-size: 0.73rem; color: var(--text-muted);
+    line-height: 1.6; background: var(--bg); padding: 8px 10px;
+    border-radius: 6px; word-break: break-all;
+  }
+
+  .ai-result-box {
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 8px; padding: 12px;
+    background: rgba(59,130,246,0.05);
+  }
+  .ai-result-title {
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--accent);
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .ai-category { font-family: var(--display); font-size: 0.95rem; font-weight: 700; margin-bottom: 5px; }
+  .ai-reasoning { font-size: 0.78rem; color: var(--text-muted); line-height: 1.55; }
+
+  .dup-box {
+    background: rgba(245,158,11,0.07);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 8px; padding: 11px;
+  }
+  .dup-box-title {
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--yellow);
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .dup-link { color: var(--yellow); cursor: pointer; text-decoration: underline; font-size: 0.78rem; }
+
+  .review-status-ok {
+    background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 7px; padding: 8px 12px; font-size: 0.8rem; color: var(--green);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .review-status-rej {
+    background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 7px; padding: 8px 12px; font-size: 0.8rem; color: var(--red);
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .feedback-box {
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+    background: var(--surface2);
+  }
+  .feedback-box-title {
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .cat-select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 9px; color: var(--text);
+    font-size: 0.8rem; outline: none; margin-bottom: 8px;
+    font-family: var(--sans);
+  }
+  .cat-select:focus { border-color: var(--accent); }
+
+  .learn-toggle {
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 9px; font-size: 0.78rem; color: var(--text-muted); cursor: pointer;
+  }
+  .learn-toggle input { accent-color: var(--accent2); cursor: pointer; }
+  .feedback-actions { display: flex; gap: 7px; }
+  .feedback-actions .btn { flex: 1; justify-content: center; }
+
+  /* ===================== PROGRESS OVERLAY ===================== */
+  .overlay-bg {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    z-index: 200; align-items: center; justify-content: center;
+  }
+  .overlay-bg.show { display: flex; }
+
+  .progress-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 28px 36px;
+    text-align: center; min-width: 300px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+  .progress-box-title { font-family: var(--display); font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+  .progress-box-sub { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 18px; }
+  .progress-track { background: var(--surface2); border-radius: 20px; height: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #6366f1); border-radius: 20px; transition: width 0.35s; }
+  .progress-label { font-family: var(--mono); font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; }
+
+  /* ===================== QUICK REVIEW ===================== */
+  .review-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; max-width: 560px; width: 90%;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  }
+  .review-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  .review-label {
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .review-progress { font-family: var(--mono); font-size: 0.82rem; color: var(--text-dim); }
+  .review-narr {
+    font-family: var(--mono); font-size: 0.75rem; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px;
+    color: var(--text-muted); line-height: 1.6; margin-bottom: 10px; word-break: break-all;
+  }
+  .review-meta { display: flex; gap: 14px; margin-bottom: 14px; font-size: 0.78rem; color: var(--text-muted); flex-wrap: wrap; }
+  .review-meta-item { display: flex; align-items: center; gap: 5px; }
+  .review-suggest-label {
+    font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--accent); margin-bottom: 5px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .review-classification { font-family: var(--display); font-size: 1.05rem; font-weight: 700; margin-bottom: 5px; }
+  .review-reasoning { font-size: 0.78rem; color: var(--text-muted); line-height: 1.55; margin-bottom: 16px; }
+  .review-dup-warn {
+    display: none; margin-bottom: 12px;
+    background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 7px; padding: 9px 11px;
+    font-size: 0.78rem; color: var(--yellow);
+    display: none; align-items: center; gap: 6px;
+  }
+  .review-dup-warn.show { display: flex; }
+  .review-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+  .review-actions .btn { flex: 1; justify-content: center; }
+  .review-correction { display: none; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; }
+  .review-correction.show { display: block; }
+  .review-cat-select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 9px; color: var(--text);
+    font-size: 0.8rem; outline: none; margin-bottom: 8px;
+    font-family: var(--sans);
+  }
+  .review-shortcuts { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 6px; }
+  .key { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: var(--mono); font-size: 0.68rem; }
+
+  /* ===================== DRIVE MODAL ===================== */
+  .modal-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px 28px;
+    width: 520px; max-width: 94vw; max-height: 85vh;
+    display: flex; flex-direction: column; gap: 16px;
+    box-shadow: 0 28px 72px rgba(0,0,0,0.7);
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title {
+    font-family: var(--display); font-size: 1rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .modal-close {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; padding: 4px; border-radius: 5px;
+    transition: background 0.12s; display: flex;
+  }
+  .modal-close:hover { background: var(--surface2); color: var(--text); }
+  .modal-hint {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+    font-size: 0.76rem; color: var(--text-muted); line-height: 1.6;
+  }
+  .modal-hint code { color: var(--accent2); font-family: var(--mono); font-size: 0.73rem; }
+
+  .drive-search-wrap { position: relative; }
+  .drive-search-wrap .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+  .drive-search {
+    width: 100%; padding: 8px 12px 8px 34px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 7px; color: var(--text); font-size: 0.82rem;
+    outline: none; font-family: var(--sans);
+  }
+  .drive-search:focus { border-color: var(--accent); }
+  .drive-sheet-list {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+    gap: 5px; min-height: 0; max-height: 340px;
+  }
+  .drive-sheet-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 13px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 9px; cursor: pointer; transition: all 0.12s;
+  }
+  .drive-sheet-item:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .drive-sheet-item.active-sheet { border-color: var(--accent2); background: var(--accent2-dim); }
+  .drive-sheet-icon { color: var(--text-muted); flex-shrink: 0; }
+  .drive-sheet-name { font-size: 0.86rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drive-sheet-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+  .drive-sheet-tick { color: var(--accent2); margin-left: auto; flex-shrink: 0; }
+
+  /* ===================== TAB PICKER & CONTEXT PICKER ===================== */
+  .picker-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px 28px;
+    width: 440px; max-width: 94vw;
+    box-shadow: 0 28px 72px rgba(0,0,0,0.7);
+  }
+  .picker-title { font-family: var(--display); font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+  .picker-sub { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.55; }
+  .tab-list { display: flex; flex-direction: column; gap: 5px; max-height: 280px; overflow-y: auto; margin-bottom: 14px; }
+  .tab-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; transition: all 0.12s;
+    font-size: 0.83rem; font-weight: 500;
+  }
+  .tab-item:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .tab-item.selected { border-color: var(--accent2); background: var(--accent2-dim); }
+  .tab-item.selected .tab-check { color: var(--accent2); }
+  .tab-check { margin-left: auto; color: transparent; }
+
+  /* ===================== SALES & RULES TABLES ===================== */
+  .section-header {
+    padding: 16px 24px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .section-title { font-family: var(--display); font-size: 0.95rem; font-weight: 700; }
+  .section-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .data-table th {
+    background: var(--surface); color: var(--text-muted);
+    font-size: 0.67rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    padding: 9px 16px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td { padding: 9px 16px; border-bottom: 1px solid var(--border); }
+  .data-table tr:hover td { background: var(--surface); }
+  .inv-code { font-family: var(--mono); font-weight: 600; color: var(--accent2); font-size: 0.78rem; }
+
+  /* ===================== SPINNER ===================== */
+  .spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.65s linear infinite;
+    flex-shrink: 0;
+  }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  /* ===================== TOAST ===================== */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 9px; padding: 10px 20px;
+    font-size: 0.82rem; z-index: 999;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    transition: opacity 0.3s;
+    display: flex; align-items: center; gap: 8px;
+  }
 
-  /* Google Drive picker modal */
-  .drive-modal-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-    backdrop-filter: blur(6px); z-index: 300; align-items: center; justify-content: center;
+  /* ===================== CONTEXT TABS CHIP BAR ===================== */
+  .context-chips {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 0 24px 0; margin-top: -2px; padding-bottom: 8px;
   }
-  .drive-modal-overlay.show { display: flex; }
-  .drive-modal {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
-    padding: 28px 32px; width: 540px; max-width: 94vw; max-height: 80vh;
-    display: flex; flex-direction: column; gap: 18px;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  .context-chip-label { font-size: 0.69rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+  .context-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 8px; border-radius: 5px; font-size: 0.72rem; font-weight: 500;
+    font-family: var(--mono);
+    background: rgba(16,185,129,0.1); color: var(--accent2);
+    border: 1px solid rgba(16,185,129,0.2);
   }
-  .drive-modal-header { display: flex; align-items: center; justify-content: space-between; }
-  .drive-modal-header h2 { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
-  .drive-modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; }
-  .drive-search { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; color: var(--text); font-size: 0.88rem; outline: none; }
-  .drive-search:focus { border-color: var(--accent); }
-  .drive-sheet-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; max-height: 360px; }
-  .drive-sheet-item {
-    display: flex; align-items: center; gap: 12px; padding: 11px 14px;
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-    cursor: pointer; transition: all 0.14s;
-  }
-  .drive-sheet-item:hover { border-color: var(--accent); background: rgba(108,99,255,0.1); }
-  .drive-sheet-item.active-sheet { border-color: var(--accent2); background: rgba(78,205,196,0.1); }
-  .drive-sheet-icon { font-size: 1.3rem; flex-shrink: 0; }
-  .drive-sheet-info { flex: 1; min-width: 0; }
-  .drive-sheet-name { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .drive-sheet-meta { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
-  .drive-sheet-tick { color: var(--accent2); font-size: 1.1rem; flex-shrink: 0; }
-  .drive-status { font-size: 0.82rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
-  .drive-connect-section { display: flex; flex-direction: column; gap: 12px; }
-  .oauth-setup-hint { font-size: 0.78rem; color: var(--text-muted); background: var(--surface2); border-radius: 8px; padding: 10px 12px; line-height: 1.5; }
-  .oauth-setup-hint code { color: var(--accent2); font-family: monospace; }
-  .drive-btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-
-  /* Tab picker modal */
-  .tab-picker-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72);
-    backdrop-filter: blur(6px); z-index: 400; align-items: center; justify-content: center;
-  }
-  .tab-picker-overlay.show { display: flex; }
-  .tab-picker-modal {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
-    padding: 28px 32px; width: 460px; max-width: 94vw;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
-  }
-  .tab-picker-modal h2 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
-  .tab-picker-modal p { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 18px; line-height: 1.5; }
-  .tab-list { display: flex; flex-direction: column; gap: 7px; max-height: 300px; overflow-y: auto; margin-bottom: 18px; }
-  .tab-item {
-    display: flex; align-items: center; gap: 10px; padding: 11px 14px;
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-    cursor: pointer; transition: all 0.14s; font-size: 0.88rem;
-  }
-  .tab-item:hover { border-color: var(--accent); background: rgba(108,99,255,0.1); }
-  .tab-item.selected { border-color: var(--accent2); background: rgba(78,205,196,0.1); }
-
+  .context-chips-wrap { display: none; }
+  .context-chips-wrap.visible { display: flex; align-items: center; gap: 6px; padding: 6px 24px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); }
 </style>
 </head>
 <body>
 
+<!-- SVG Icon Defs -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="ic-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.66Z"/>
+    <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.66Z"/>
+  </symbol>
+  <symbol id="ic-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
+  </symbol>
+  <symbol id="ic-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+  </symbol>
+  <symbol id="ic-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+  </symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </symbol>
+  <symbol id="ic-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+  </symbol>
+  <symbol id="ic-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+  </symbol>
+  <symbol id="ic-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+  </symbol>
+  <symbol id="ic-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+  </symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </symbol>
+  <symbol id="ic-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </symbol>
+  <symbol id="ic-skip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>
+  </symbol>
+  <symbol id="ic-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+  </symbol>
+  <symbol id="ic-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+  </symbol>
+  <symbol id="ic-drive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 20H2l4-8h12l4 8z"/><path d="M6 12L10 4h4l4 8"/>
+  </symbol>
+  <symbol id="ic-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+  </symbol>
+  <symbol id="ic-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+  </symbol>
+  <symbol id="ic-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="ic-context" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+  </symbol>
+  <symbol id="ic-sheet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>
+  </symbol>
+  <symbol id="ic-comment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </symbol>
+  <symbol id="ic-google" viewBox="0 0 24 24">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </symbol>
+</svg>
+
+<!-- ===================== HEADER ===================== -->
 <div class="header">
   <div class="header-left">
-    <div class="logo">💊</div>
-    <div>
-      <h1>Alfaleus <span>Transaction Classifier</span></h1>
-      <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">Powered by Gemini 2.5 Flash · Suspense Account Ledger</div>
+    <div class="logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+    </div>
+    <div class="wordmark">Alfaleus <span>Classifier</span></div>
+    <div class="header-divider"></div>
+    <div class="status-pills">
+      <div class="pill" id="apiPill"><div class="dot"></div><span id="apiStatus">Checking...</span></div>
+      <div class="pill" id="dataPill"><div class="dot"></div><span id="dataStatus">Loading...</span></div>
+      <div class="pill" id="rulesPill" style="display:none"><div class="dot ok"></div><span id="rulesStatus"></span></div>
+      <div class="pill" id="ctxPill" style="display:none"><div class="dot" style="background:var(--accent2)"></div><span id="ctxStatus"></span></div>
+      <div class="pill" id="sourcePill"></div>
     </div>
   </div>
-  <div class="status-bar">
-    <div class="status-dot" id="apiDot"></div>
-    <span id="apiStatus">Checking...</span>
-    &nbsp;|&nbsp;
-    <div class="status-dot" id="dataDot"></div>
-    <span id="dataStatus">Loading...</span>
-    &nbsp;|&nbsp;
-    <span id="dataSourceBadge"></span>
-    &nbsp;|&nbsp;
-    <span id="rulesStatus" style="color:var(--accent2)"></span>
-    &nbsp;|&nbsp;
-    <button class="btn btn-secondary" id="driveConnectBtn" onclick="openDriveModal()" style="padding:4px 12px;font-size:0.78rem;">
-      📊 Connect Drive
+  <div class="header-right">
+    <button class="btn btn-secondary btn-sm" id="driveConnectBtn" onclick="openDriveModal()">
+      <svg class="icon" width="13" height="13"><use href="#ic-drive"/></svg>
+      Connect Drive
     </button>
   </div>
 </div>
 
-<div class="tab-bar">
-  <div class="tab active" onclick="switchTab('transactions', this)">📋 Transactions</div>
-  <div class="tab" onclick="switchTab('sales', this)">📦 Sales Records</div>
-  <div class="tab" onclick="switchTab('rules', this)">🧠 Learned Rules</div>
+<!-- ===================== NAV TABS ===================== -->
+<div class="nav-bar">
+  <div class="nav-tab active" onclick="switchTab('transactions', this)">
+    <svg class="icon" width="13" height="13"><use href="#ic-list"/></svg> Transactions
+  </div>
+  <div class="nav-tab" onclick="switchTab('rules', this)">
+    <svg class="icon" width="13" height="13"><use href="#ic-brain"/></svg> Learned Rules
+  </div>
 </div>
 
-<!-- Transactions Tab -->
+<!-- ===================== TRANSACTIONS TAB ===================== -->
 <div class="tab-content active" id="tab-transactions">
+  <!-- Context chips bar -->
+  <div class="context-chips-wrap" id="ctxChipsWrap"></div>
+
+  <!-- Toolbar -->
   <div class="toolbar">
-    <button class="btn btn-primary" id="classifyAllBtn" onclick="classifyAll()">✨ Classify All with AI</button>
-    <button class="btn btn-secondary" id="classifySelBtn" onclick="classifySelected()" disabled>🎯 Classify Selected</button>
-    <button class="btn btn-warning" onclick="openQuickReview()">⚡ Quick Review</button>
-    <button class="btn btn-secondary" onclick="exportCSV()">⬇️ Export CSV</button>
-    <button class="btn btn-success" id="saveToSheetBtn" onclick="saveToSheet()" style="display:none;">☁️ Save to Sheet</button>
-    <input class="search-box" type="text" id="searchBox" placeholder="🔍 Search narration, name..." oninput="filterTable()">
+    <button class="btn btn-primary" id="classifyAllBtn" onclick="classifyAll()">
+      <svg class="icon" width="13" height="13"><use href="#ic-sparkle"/></svg>
+      Classify All
+    </button>
+    <button class="btn btn-secondary" id="classifySelBtn" onclick="classifySelected()" disabled>
+      <svg class="icon" width="13" height="13"><use href="#ic-target"/></svg>
+      Classify Selected
+    </button>
+    <button class="btn btn-warning" onclick="openQuickReview()">
+      <svg class="icon" width="13" height="13"><use href="#ic-zap"/></svg>
+      Quick Review
+    </button>
+    <div class="toolbar-sep"></div>
+    <button class="btn btn-secondary" onclick="exportCSV()">
+      <svg class="icon" width="13" height="13"><use href="#ic-download"/></svg>
+      Export CSV
+    </button>
+    <button class="btn btn-secondary" id="saveToSheetBtn" onclick="saveToSheet()" style="display:none;">
+      <svg class="icon" width="13" height="13"><use href="#ic-cloud"/></svg>
+      Save to Sheet
+    </button>
+    <div class="toolbar-sep"></div>
+    <div class="search-wrap">
+      <span class="icon"><svg width="13" height="13"><use href="#ic-search"/></svg></span>
+      <input class="search-input" type="text" id="searchBox" placeholder="Search narration or bank..." oninput="filterTable()">
+    </div>
     <select class="filter-select" id="typeFilter" onchange="filterTable()">
       <option value="">All Types</option>
       <option value="Receipt">Receipts</option>
@@ -343,14 +712,16 @@
       <option value="">All Status</option>
       <option value="classified">Classified</option>
       <option value="unclassified">Unclassified</option>
-      <option value="duplicate">⚠️ Duplicates</option>
-      <option value="accepted">✅ Accepted</option>
-      <option value="rejected">❌ Rejected</option>
+      <option value="duplicate">Duplicates</option>
+      <option value="accepted">Accepted</option>
+      <option value="rejected">Rejected</option>
     </select>
   </div>
 
+  <!-- Stats -->
   <div class="stats-bar" id="statsBar"></div>
 
+  <!-- Main grid -->
   <div class="main-grid">
     <div class="table-panel">
       <table id="txnTable">
@@ -363,122 +734,231 @@
             <th>Narration</th>
             <th>Amount</th>
             <th>Classification</th>
-            <th>Invoice</th>
+            <th>Ref</th>
             <th>Conf</th>
           </tr>
         </thead>
         <tbody id="txnBody">
-          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)"><div class="spinner"></div><br>Loading transactions...</td></tr>
+          <tr><td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted)">
+            <div class="spinner" style="margin:0 auto 10px"></div><br>Loading transactions...
+          </td></tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Detail Panel -->
+    <!-- Detail panel -->
     <div class="detail-panel" id="detailPanel">
-      <h2>Transaction Detail</h2>
-      <div class="detail-empty">👆 Select a transaction to view details, classify, and give feedback</div>
+      <div class="detail-panel-title">
+        <svg class="icon" width="14" height="14"><use href="#ic-file"/></svg>
+        Transaction Detail
+      </div>
+      <div class="detail-empty">Select a transaction to view details, run classification, and give feedback.</div>
     </div>
   </div>
 </div>
 
-<!-- Sales Tab -->
-<div class="tab-content" id="tab-sales">
-  <div style="padding: 20px 28px; overflow: auto;">
-    <table class="sales-table" id="salesTable">
+<!-- ===================== RULES TAB ===================== -->
+<div class="tab-content" id="tab-rules">
+  <div style="padding:0 24px 40px">
+    <div class="section-header" style="padding-left:0">
+      <div>
+        <div class="section-title">Learned Rules</div>
+        <div class="section-sub">Rules created from your corrections. They override AI classification for matching narrations.</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="loadRules()">
+        <svg class="icon" width="12" height="12"><use href="#ic-refresh"/></svg> Refresh
+      </button>
+    </div>
+    <table class="data-table" id="rulesTable">
       <thead>
         <tr>
-          <th>Invoice No.</th><th>Date</th><th>Customer / Hospital</th><th>Address</th>
+          <th style="width:40%">Narration Pattern</th>
+          <th>Classifies As</th>
+          <th>Created</th>
+          <th style="width:70px"></th>
         </tr>
       </thead>
-      <tbody id="salesBody">
-        <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted)"><div class="spinner"></div></td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Rules Tab -->
-<div class="tab-content" id="tab-rules">
-  <div style="padding: 24px 28px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-      <div>
-        <h2 style="font-size:1rem;font-weight:700;">🧠 Learned Rules</h2>
-        <div style="font-size:0.82rem;color:var(--text-muted);margin-top:4px;">Rules created from your feedback. These override AI classification for matching transactions.</div>
-      </div>
-      <button class="btn btn-secondary" onclick="loadRules()">🔄 Refresh</button>
-    </div>
-    <table class="rules-table" id="rulesTable">
-      <thead>
-        <tr><th style="width:40%">Narration Pattern</th><th>Classifies As</th><th>Created</th><th style="width:80px">Action</th></tr>
-      </thead>
       <tbody id="rulesBody">
-        <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted)"><div class="spinner"></div></td></tr>
+        <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div></td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
-<!-- Progress Overlay -->
-<div class="progress-overlay" id="progressOverlay">
+<!-- ===================== PROGRESS OVERLAY ===================== -->
+<div class="overlay-bg" id="progressOverlay">
   <div class="progress-box">
-    <h3>🤖 AI Classification in Progress</h3>
-    <p>Sending transactions to Gemini 2.5 Flash...</p>
-    <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
-    <div class="progress-count" id="progressCount">0 / 0 classified</div>
+    <div class="progress-box-title">AI Classification Running</div>
+    <div class="progress-box-sub">Sending to Gemini 2.5 Flash...</div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-label" id="progressCount">0 / 0</div>
   </div>
 </div>
 
-<!-- Quick Review Overlay -->
-<div class="review-overlay" id="reviewOverlay">
+<!-- ===================== QUICK REVIEW OVERLAY ===================== -->
+<div class="overlay-bg" id="reviewOverlay">
   <div class="review-card">
     <div class="review-header">
       <div>
-        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:4px;">⚡ Quick Review Mode</div>
+        <div class="review-label">Quick Review</div>
         <div class="review-progress" id="reviewProgress">1 of 0</div>
       </div>
-      <button class="review-close" onclick="closeQuickReview()">✕</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeQuickReview()" style="padding:5px">
+        <svg class="icon" width="16" height="16"><use href="#ic-x"/></svg>
+      </button>
     </div>
-
-    <!-- Narration + meta — scan this quickly -->
-    <div class="review-narration" id="reviewNarration">—</div>
+    <div class="review-narr" id="reviewNarration">—</div>
     <div class="review-meta">
-      <span>📅 <strong id="reviewDate">—</strong></span>
-      <span id="reviewTypeSpan">—</span>
-      <span>💰 <strong id="reviewAmount" style="color:var(--green)">—</strong></span>
+      <div class="review-meta-item">
+        <svg class="icon" width="12" height="12" style="color:var(--text-muted)"><use href="#ic-file"/></svg>
+        <strong id="reviewDate">—</strong>
+      </div>
+      <div class="review-meta-item" id="reviewTypeSpan">—</div>
+      <div class="review-meta-item">
+        <strong id="reviewAmount" style="color:var(--green)">—</strong>
+      </div>
     </div>
-
-    <!-- AI suggestion -->
-    <div style="margin-bottom:6px;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--accent);">✨ AI Suggests</div>
+    <div class="review-dup-warn" id="reviewDupWarn">
+      <svg class="icon" width="14" height="14"><use href="#ic-alert"/></svg>
+      Possible duplicate payment — check similar transactions.
+    </div>
+    <div class="review-suggest-label">
+      <svg class="icon" width="11" height="11"><use href="#ic-sparkle"/></svg>
+      AI Suggests
+    </div>
     <div class="review-classification" id="reviewClassification">—</div>
     <div class="review-reasoning" id="reviewReasoning">—</div>
-
-    <!-- Duplicate warning if applicable -->
-    <div id="reviewDupWarn" style="display:none;margin-bottom:14px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--yellow);">
-      ⚠️ Possible duplicate payment detected — see similar transactions below.
-    </div>
-
-    <!-- Accept / Reject -->
     <div class="review-actions">
-      <button class="btn btn-success" onclick="reviewAccept()">✅ Accept <span style="font-size:0.75rem;opacity:0.7">(Enter)</span></button>
-      <button class="btn btn-danger" onclick="reviewReject()">❌ Reject</button>
-      <button class="btn btn-secondary" onclick="reviewSkip()">⏭ Skip</button>
+      <button class="btn btn-success" onclick="reviewAccept()">
+        <svg class="icon" width="13" height="13"><use href="#ic-check"/></svg>
+        Accept
+        <span style="font-size:0.7rem;opacity:0.7;font-family:var(--mono)">[Enter]</span>
+      </button>
+      <button class="btn btn-danger" onclick="reviewReject()">
+        <svg class="icon" width="13" height="13"><use href="#ic-x"/></svg>
+        Reject
+      </button>
+      <button class="btn btn-secondary" onclick="reviewSkip()">
+        <svg class="icon" width="13" height="13"><use href="#ic-skip"/></svg>
+        Skip
+      </button>
     </div>
-
-    <!-- Correction (shown on Reject) -->
     <div class="review-correction" id="reviewCorrection">
-      <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px;">Correct classification:</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px;">Correct classification:</div>
       <select class="review-cat-select" id="reviewCatSelect"></select>
-      <label class="learn-toggle" style="margin-bottom:10px;">
+      <label class="learn-toggle">
         <input type="checkbox" id="reviewLearnCheck" checked>
-        <span>Learn from this — apply to similar transactions automatically</span>
+        <span>Learn from this — auto-apply to similar transactions</span>
       </label>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="reviewSubmitCorrection()">💾 Save Correction</button>
+      <div style="display:flex;gap:7px">
+        <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="reviewSubmitCorrection()">
+          <svg class="icon" width="12" height="12"><use href="#ic-check"/></svg>
+          Save Correction
+        </button>
         <button class="btn btn-secondary" onclick="reviewCancelCorrection()">Cancel</button>
       </div>
     </div>
+    <div class="review-shortcuts">
+      <span class="key">Enter</span> Accept &nbsp;·&nbsp;
+      <span class="key">R</span> Reject &nbsp;·&nbsp;
+      <span class="key">S</span> Skip &nbsp;·&nbsp;
+      <span class="key">Esc</span> Close
+    </div>
+  </div>
+</div>
 
-    <div class="review-shortcut">Keyboard: Enter = Accept · R = Reject · S = Skip · Esc = Close</div>
+<!-- ===================== DRIVE MODAL ===================== -->
+<div class="overlay-bg" id="driveModalOverlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg class="icon" width="16" height="16"><use href="#ic-drive"/></svg>
+        Connect Google Drive
+      </div>
+      <button class="modal-close" onclick="closeDriveModal()">
+        <svg class="icon" width="16" height="16"><use href="#ic-x"/></svg>
+      </button>
+    </div>
+
+    <!-- Not connected -->
+    <div id="driveNotConnected">
+      <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.65">
+        Connect your Google account to browse and select any spreadsheet directly from Drive — no service account or manual Sheet ID needed.
+      </p>
+      <div class="modal-hint" id="oauthSetupHint" style="display:none">
+        OAuth not configured. Set <code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code> in your <code>docker-compose.yml</code>.
+        Create credentials at <code>console.cloud.google.com</code> → APIs → Credentials → OAuth 2.0 Client (Web App). Set redirect URI to <code>http://localhost:8080/api/gdrive/callback</code>.
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+        <button class="btn btn-primary" id="connectGoogleBtn" onclick="startOAuth()">
+          <svg class="icon" width="14" height="14"><use href="#ic-google"/></svg>
+          Sign in with Google
+        </button>
+        <span id="driveConnectStatus" style="font-size:0.8rem;color:var(--text-muted);display:flex;align-items:center;gap:6px"></span>
+      </div>
+    </div>
+
+    <!-- Connected -->
+    <div id="driveConnected" style="display:none;flex-direction:column;gap:12px;flex:1;min-height:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-dim)">
+          <div class="pill ok"><div class="dot"></div>Connected to Google Drive</div>
+        </div>
+        <div style="display:flex;gap:7px">
+          <button class="btn btn-secondary btn-sm" onclick="loadDriveSheets()">
+            <svg class="icon" width="11" height="11"><use href="#ic-refresh"/></svg> Refresh
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="disconnectDrive()">Disconnect</button>
+        </div>
+      </div>
+      <div class="drive-search-wrap">
+        <span class="icon"><svg width="13" height="13"><use href="#ic-search"/></svg></span>
+        <input class="drive-search" type="text" placeholder="Filter spreadsheets..." id="driveSearch" oninput="filterDriveSheets()">
+      </div>
+      <div class="drive-sheet-list" id="driveSheetList">
+        <div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading spreadsheets...</div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-muted)">Click a spreadsheet to select it as the active data source.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TAB PICKER MODAL ===================== -->
+<div class="overlay-bg" id="tabPickerOverlay">
+  <div class="picker-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="picker-title">
+        <svg class="icon" width="14" height="14" style="vertical-align:middle;margin-right:4px"><use href="#ic-sheet"/></svg>
+        Select Transaction Sheet
+      </div>
+      <button class="modal-close" onclick="closeTabPicker()"><svg class="icon" width="16" height="16"><use href="#ic-x"/></svg></button>
+    </div>
+    <div class="picker-sub">Select the worksheet tab that contains your transactions to classify. A <strong>"Classified"</strong> tab will be created for results.</div>
+    <div class="tab-list" id="tabPickerList"></div>
+    <div style="font-size:0.72rem;color:var(--text-muted)">Can't see the right tab? Make sure you picked the correct spreadsheet.</div>
+  </div>
+</div>
+
+<!-- ===================== CONTEXT PICKER MODAL ===================== -->
+<div class="overlay-bg" id="contextPickerOverlay">
+  <div class="picker-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="picker-title">
+        <svg class="icon" width="14" height="14" style="vertical-align:middle;margin-right:4px"><use href="#ic-context"/></svg>
+        Add Context Sheets
+      </div>
+      <button class="modal-close" onclick="closeContextPicker()"><svg class="icon" width="16" height="16"><use href="#ic-x"/></svg></button>
+    </div>
+    <div class="picker-sub">Select additional worksheet tabs the AI should use as reference when classifying transactions — for example, your sales invoice sheet, vendor list, or any other relevant data.</div>
+    <div class="tab-list" id="contextPickerList"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-secondary btn-sm" onclick="toggleSelectAllContext()">Toggle All</button>
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="confirmContextSelection()">
+        <svg class="icon" width="12" height="12"><use href="#ic-check"/></svg>
+        Confirm Selection
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="closeContextPicker()">Skip</button>
+    </div>
   </div>
 </div>
 
@@ -486,81 +966,113 @@
 const ALL_CATEGORIES = [
   "Exhibition/Conference Expense","Salary/Freelance Payment","Hotel Booking","Flight Booking",
   "Cab/Transport Booking","Bus Booking","Courier/Logistics","Sales Incentive Payment",
-  "Amazon Purchase","Office/Admin Expense","Tax Payment","Bank/Finance Transaction",
+  "Office/Admin Expense","Tax Payment","Bank/Finance Transaction",
   "Business Travel/Logistics","Sales Consultant Payment","Other Expense",
   "Device Payment Receipt","EMI/Installment Receipt","Card Settlement",
   "Payment Gateway Receipt","Other Income"
 ];
 
+function icon(id, size=13) {
+  return `<svg class="icon" width="${size}" height="${size}"><use href="#${id}"/></svg>`;
+}
+
 let allTransactions = [];
-let allSales = [];
-let classificationResults = {};   // idx -> result
-let reviewDecisions = {};         // idx -> 'accepted' | 'rejected'
+let classificationResults = {};
+let reviewDecisions = {};
 let selectedRows = new Set();
 let selectedTxnIndex = null;
-let duplicatesMap = {};           // str(idx) -> [idx, ...]
-
-// Quick Review state
+let duplicatesMap = {};
 let reviewQueue = [];
 let reviewPos = 0;
 
+// Drive state
+let driveSheets = [];
+let activeDriveSheetId = null;
+let pendingSheetId = null;
+let pendingSheetName = null;
+let pendingAllTabs = [];
+let selectedContextTabs = new Set();
+
+// ---- Init ----
 async function init() {
-  const statusRes = await fetch('/api/status');
+  const [statusRes, driveRes] = await Promise.all([
+    fetch('/api/status'),
+    fetch('/api/gdrive/status')
+  ]);
   const status = await statusRes.json();
+  const driveSt = await driveRes.json();
 
-  document.getElementById('apiDot').className = 'status-dot ' + (status.api_key_set ? 'ok' : 'err');
-  document.getElementById('apiStatus').textContent = status.api_key_set ? 'Gemini Connected' : 'No API Key';
-  document.getElementById('dataDot').className = 'status-dot ' + (status.excel_loaded ? 'ok' : 'err');
+  // API key
+  const apiPill = document.getElementById('apiPill');
+  apiPill.className = 'pill ' + (status.api_key_set ? 'ok' : 'err');
+  document.getElementById('apiStatus').textContent = status.api_key_set ? 'Gemini OK' : 'No API Key';
 
-  const rc = status.ref_counts || {};
+  // Data
+  const dataPill = document.getElementById('dataPill');
+  dataPill.className = 'pill ' + (status.excel_loaded ? 'ok' : 'err');
   document.getElementById('dataStatus').textContent = status.excel_loaded
-    ? `${status.transaction_count} txns · ${status.sale_count} invoices`
+    ? `${status.transaction_count} txns`
     : 'Load error';
 
-  const srcBadge = document.getElementById('dataSourceBadge');
-  if (status.google_sheets_connected) {
-    srcBadge.innerHTML = '<span class="sheets-badge">📊 Google Sheets</span>';
-  } else {
-    srcBadge.innerHTML = '<span class="excel-badge">📁 Excel File</span>';
-  }
-
+  // Rules
   if (status.learned_rules_count > 0) {
-    document.getElementById('rulesStatus').textContent = `🧠 ${status.learned_rules_count} learned rules`;
+    document.getElementById('rulesPill').style.display = '';
+    document.getElementById('rulesStatus').textContent = `${status.learned_rules_count} rules`;
   }
 
-  // Update Drive button to reflect current connection state on page load
-  try {
-    const driveRes = await fetch('/api/gdrive/status');
-    const driveSt = await driveRes.json();
-    activeDriveSheetId = driveSt.active_sheet_id || null;
-    const driveBtn = document.getElementById('driveConnectBtn');
-    if (driveSt.connected) {
-      driveBtn.innerHTML = '\u{1F4CA} Drive Connected';
-      driveBtn.style.borderColor = 'var(--green)';
-      driveBtn.style.color = 'var(--green)';
-      if (driveSt.active_sheet_name) {
-        document.getElementById('dataSourceBadge').innerHTML =
-          '<span class="sheets-badge">\u{1F4CA} ' + escHtml(driveSt.active_sheet_name) + '</span>';
-      }
-    } else if (!driveSt.oauth_configured) {
-      driveBtn.title = 'OAuth not configured — set GOOGLE_OAUTH_CLIENT_ID/SECRET in docker-compose.yml';
+  // Context tabs
+  if ((status.context_tab_count || 0) > 0) {
+    document.getElementById('ctxPill').style.display = '';
+    document.getElementById('ctxStatus').textContent = `${status.context_tab_count} context tabs`;
+  }
+
+  // Source badge
+  const srcPill = document.getElementById('sourcePill');
+  activeDriveSheetId = driveSt.active_sheet_id || null;
+  const driveBtn = document.getElementById('driveConnectBtn');
+  if (driveSt.connected) {
+    driveBtn.innerHTML = `${icon('ic-drive')} Drive Connected`;
+    driveBtn.style.borderColor = 'var(--green)';
+    driveBtn.style.color = 'var(--green)';
+    if (driveSt.active_sheet_name) {
+      srcPill.innerHTML = `${icon('ic-sheet')} ${escHtml(driveSt.active_sheet_name)}${driveSt.active_tab_name ? ' › ' + escHtml(driveSt.active_tab_name) : ''}`;
+      document.getElementById('saveToSheetBtn').style.display = '';
     }
-  } catch(e) { /* non-fatal */ }
+    if (!driveSt.oauth_configured) {
+      driveBtn.title = 'OAuth not configured — set GOOGLE_OAUTH_CLIENT_ID/SECRET';
+    }
+    // Render context chips
+    if (driveSt.context_tabs && driveSt.context_tabs.length > 0) {
+      selectedContextTabs = new Set(driveSt.context_tabs);
+      renderContextChips(driveSt.context_tabs);
+    }
+  } else {
+    srcPill.textContent = 'Excel File';
+  }
 
   const dataRes = await fetch('/api/data');
   const data = await dataRes.json();
   allTransactions = data.transactions || [];
-  allSales = data.sales || [];
   duplicatesMap = data.duplicates || {};
 
   renderTable();
-  renderSales();
   updateStats();
 }
 
-// ---- Tab switching ----
+function renderContextChips(tabs) {
+  const wrap = document.getElementById('ctxChipsWrap');
+  if (!tabs || tabs.length === 0) { wrap.className = 'context-chips-wrap'; return; }
+  wrap.className = 'context-chips-wrap visible';
+  wrap.innerHTML = `
+    <span style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;white-space:nowrap">Context:</span>
+    ${tabs.map(t => `<span class="context-chip">${icon('ic-sheet',11)} ${escHtml(t)}</span>`).join('')}
+    <button class="btn btn-ghost" style="padding:2px 7px;font-size:0.7rem;margin-left:4px" onclick="openContextPickerStandalone()">Edit</button>
+  `;
+}
+
+// ---- Tabs ----
 function switchTab(tab, el) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
@@ -572,7 +1084,6 @@ function getFilteredIndices() {
   const search = document.getElementById('searchBox').value.toLowerCase();
   const typeF = document.getElementById('typeFilter').value;
   const classF = document.getElementById('classFilter').value;
-
   return allTransactions.map((t, i) => ({ t, i })).filter(({ t, i }) => {
     if (search && !t.narration.toLowerCase().includes(search) &&
         !t.particulars.toLowerCase().includes(search)) return false;
@@ -585,103 +1096,87 @@ function getFilteredIndices() {
     return true;
   }).map(({ i }) => i);
 }
-
 function filterTable() { renderTable(); updateStats(); }
 
-// ---- Table Render ----
+// ---- Table render ----
 function renderTable() {
   const indices = getFilteredIndices();
   const tbody = document.getElementById('txnBody');
-
   if (indices.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-muted)">No transactions found</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">No transactions match</td></tr>`;
     return;
   }
-
   tbody.innerHTML = indices.map(i => {
     const t = allTransactions[i];
     const res = classificationResults[i];
     const isReceipt = t.voucher_type === 'Receipt';
-    const isSelected = selectedRows.has(i);
     const isDup = !!duplicatesMap[String(i)];
     const decision = reviewDecisions[i];
 
     const typeBadge = isReceipt
-      ? '<span class="badge badge-receipt">▲ Receipt</span>'
-      : '<span class="badge badge-payment">▼ Payment</span>';
+      ? `<span class="badge badge-receipt">${icon('ic-check',9)} Receipt</span>`
+      : `<span class="badge badge-payment">${icon('ic-x',9)} Payment</span>`;
 
     let classBadge;
     if (decision === 'accepted') {
-      classBadge = res ? `<span class="badge badge-accepted">✅ ${escHtml(res.classification)}</span>` : '<span class="badge badge-accepted">✅ Accepted</span>';
+      classBadge = res ? `<span class="badge badge-accepted">${icon('ic-check',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-accepted">${icon('ic-check',9)} Accepted</span>`;
     } else if (decision === 'rejected') {
-      classBadge = res ? `<span class="badge badge-rejected">❌ ${escHtml(res.classification)}</span>` : '<span class="badge badge-rejected">❌ Rejected</span>';
+      classBadge = res ? `<span class="badge badge-rejected">${icon('ic-x',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-rejected">${icon('ic-x',9)} Rejected</span>`;
     } else if (res) {
       const isLearned = res.matched_detail === 'Auto-classified from learned feedback';
       classBadge = isLearned
-        ? `<span class="badge badge-learned">🧠 ${escHtml(res.classification)}</span>`
-        : `<span class="badge badge-classified">${escHtml(res.classification)}</span>`;
+        ? `<span class="badge badge-learned">${icon('ic-brain',9)} ${escHtml(res.classification)}</span>`
+        : `<span class="badge badge-classified">${icon('ic-sparkle',9)} ${escHtml(res.classification)}</span>`;
     } else {
-      classBadge = '<span class="badge badge-pending">Pending</span>';
+      classBadge = `<span class="badge badge-pending">Pending</span>`;
     }
 
-    const invoiceBadge = res && res.reference_id
-      ? `<span class="badge badge-invoice">📄 ${escHtml(res.reference_id)}</span>`
-      : '<span style="color:var(--text-muted);font-size:0.75rem">—</span>';
+    const refBadge = res && res.reference_id
+      ? `<span class="badge badge-ref">${icon('ic-link',9)} ${escHtml(res.reference_id)}</span>`
+      : `<span style="color:var(--text-muted);font-size:0.72rem">—</span>`;
 
-    const dupBadge = isDup ? ' <span class="badge badge-dup">⚠️ DUP</span>' : '';
-
-    const confDot = res ? `<span class="confidence-dot conf-${res.confidence}"></span>${res.confidence}` : '—';
-    const amount = t.gross_total || '';
-    const amountClass = isReceipt ? 'amount-cell receipt' : 'amount-cell payment';
-    const date = t.date.split(' ')[0].replace('T', ' ');
-    const rowClass = [
-      isSelected ? 'selected' : '',
-      isDup ? 'duplicate-warn' : ''
+    const dupBadge = isDup ? ` <span class="badge badge-dup">${icon('ic-alert',9)} DUP</span>` : '';
+    const confDot = res ? `<span class="conf-dot conf-${res.confidence}" title="${res.confidence}"></span>` : '—';
+    const date = t.date.split(' ')[0];
+    const bank = t.particulars.replace('HDFC Bank','HDFC').replace('ICICI Bank - 0901 - Birac','ICICI Birac');
+    const rowCls = [
+      selectedRows.has(i) ? 'row-selected' : '',
+      isDup ? 'row-dup' : ''
     ].filter(Boolean).join(' ');
 
-    return `<tr onclick="selectRow(${i})" class="${rowClass}" id="row-${i}">
-      <td onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRowSelect(${i}, this)" ${isSelected ? 'checked' : ''}></td>
-      <td style="white-space:nowrap;font-size:0.8rem">${date}</td>
-      <td style="font-size:0.78rem;color:var(--text-muted)">${escHtml(t.particulars.replace('HDFC Bank','HDFC').replace('ICICI Bank - 0901 - Birac','ICICI Birac'))}</td>
+    return `<tr onclick="selectRow(${i})" class="${rowCls}" id="row-${i}">
+      <td onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRowSelect(${i},this)" ${selectedRows.has(i)?'checked':''}></td>
+      <td style="white-space:nowrap;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim)">${date}</td>
+      <td style="font-size:0.74rem;color:var(--text-muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(bank)}</td>
       <td>${typeBadge}</td>
-      <td class="narration-cell" title="${escHtml(t.narration)}">${escHtml(t.narration)}${dupBadge}</td>
-      <td class="${amountClass}">${escHtml(amount)}</td>
+      <td class="narr-cell" title="${escHtml(t.narration)}">${escHtml(t.narration)}${dupBadge}</td>
+      <td class="amount-cell ${isReceipt?'receipt':'payment'}">${escHtml(t.gross_total)}</td>
       <td>${classBadge}</td>
-      <td>${invoiceBadge}</td>
-      <td style="font-size:0.78rem">${confDot}</td>
+      <td>${refBadge}</td>
+      <td>${confDot}</td>
     </tr>`;
   }).join('');
 }
 
-function renderSales() {
-  document.getElementById('salesBody').innerHTML = allSales.map(s => `
-    <tr>
-      <td><span class="invoice-badge">${escHtml(s.invoice)}</span></td>
-      <td style="white-space:nowrap;font-size:0.8rem">${escHtml(s.date)}</td>
-      <td style="font-weight:500">${escHtml(s.doctor_hospital)}</td>
-      <td style="font-size:0.78rem;color:var(--text-muted);max-width:300px">${escHtml(s.address)}</td>
-    </tr>
-  `).join('');
-}
-
 async function loadRules() {
-  document.getElementById('rulesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)"><div class="spinner"></div></td></tr>';
+  document.getElementById('rulesBody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div></td></tr>`;
   const res = await fetch('/api/feedback/rules');
   const data = await res.json();
   const rules = data.rules || [];
   if (rules.length === 0) {
-    document.getElementById('rulesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">No learned rules yet. Accept or correct classifications to build rules.</td></tr>';
+    document.getElementById('rulesBody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-muted)">No learned rules yet. Correct classifications to build rules.</td></tr>`;
     return;
   }
   document.getElementById('rulesBody').innerHTML = rules.map(r => `
     <tr>
-      <td style="font-family:monospace;font-size:0.8rem;color:var(--text-muted)">${escHtml(r.pattern)}</td>
-      <td><span class="badge badge-learned">🧠 ${escHtml(r.classification)}</span></td>
-      <td style="font-size:0.75rem;color:var(--text-muted)">${r.created_at ? r.created_at.split('T')[0] : ''}</td>
-      <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;" onclick="deleteRule(${r.id})">🗑 Delete</button></td>
+      <td style="font-family:var(--mono);font-size:0.76rem;color:var(--text-muted)">${escHtml(r.pattern)}</td>
+      <td><span class="badge badge-learned">${icon('ic-brain',9)} ${escHtml(r.classification)}</span></td>
+      <td style="font-size:0.72rem;color:var(--text-muted)">${r.created_at ? r.created_at.split('T')[0] : ''}</td>
+      <td><button class="btn btn-danger btn-xs" onclick="deleteRule(${r.id})">${icon('ic-trash',11)}</button></td>
     </tr>
   `).join('');
-  document.getElementById('rulesStatus').textContent = `🧠 ${rules.length} learned rules`;
+  document.getElementById('rulesPill').style.display = '';
+  document.getElementById('rulesStatus').textContent = `${rules.length} rules`;
 }
 
 async function deleteRule(id) {
@@ -697,23 +1192,22 @@ function updateStats() {
   const classified = Object.keys(classificationResults).length;
   const accepted = Object.values(reviewDecisions).filter(d => d === 'accepted').length;
   const dups = Object.keys(duplicatesMap).length;
-
   document.getElementById('statsBar').innerHTML = `
-    <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total Entries</div></div>
-    <div class="stat-card"><div class="num" style="color:var(--green)">${receipts}</div><div class="lbl">Receipts</div></div>
-    <div class="stat-card"><div class="num" style="color:var(--red)">${payments}</div><div class="lbl">Payments</div></div>
-    <div class="stat-card"><div class="num" style="color:#a78bfa">${classified}</div><div class="lbl">AI Classified</div></div>
-    <div class="stat-card"><div class="num" style="color:var(--green)">${accepted}</div><div class="lbl">Accepted</div></div>
-    ${dups > 0 ? `<div class="stat-card"><div class="num" style="color:var(--yellow)">${dups}</div><div class="lbl">⚠️ Dup Flags</div></div>` : ''}
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${receipts}</div><div class="stat-lbl">Receipts</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--red)">${payments}</div><div class="stat-lbl">Payments</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:#93c5fd">${classified}</div><div class="stat-lbl">Classified</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${accepted}</div><div class="stat-lbl">Accepted</div></div>
+    ${dups > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${dups}</div><div class="stat-lbl">Dup Flags</div></div>` : ''}
   `;
 }
 
-// ---- Row selection + detail ----
+// ---- Row / Detail ----
 function selectRow(i) {
   selectedTxnIndex = i;
-  document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+  document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('row-selected'));
   const row = document.getElementById('row-' + i);
-  if (row) { row.classList.add('selected'); if (duplicatesMap[String(i)]) row.classList.add('duplicate-warn'); }
+  if (row) { row.classList.add('row-selected'); if (duplicatesMap[String(i)]) row.classList.add('row-dup'); }
   renderDetailPanel(i);
 }
 
@@ -728,22 +1222,21 @@ function renderDetailPanel(i) {
   let dupHtml = '';
   if (dups.length > 0) {
     const links = dups.map(di =>
-      `<span class="dup-link" onclick="selectRow(${di})">#${allTransactions[di]?.voucher_no || di} (${String(allTransactions[di]?.date || '').split(' ')[0]})</span>`
+      `<span class="dup-link" onclick="selectRow(${di})">#${allTransactions[di]?.voucher_no || di} (${String(allTransactions[di]?.date||'').split(' ')[0]})</span>`
     ).join(', ');
-    dupHtml = `
-      <div class="dup-warning">
-        <h3>⚠️ Possible Duplicate Payment</h3>
-        <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">Same vendor, similar amount found in:</div>
-        <div>${links}</div>
-        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;">Review narration and date before accepting.</div>
-      </div>`;
+    dupHtml = `<div class="dup-box">
+      <div class="dup-box-title">${icon('ic-alert',11)} Possible Duplicate Payment</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:5px">Same vendor, similar amount:</div>
+      <div>${links}</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Review narration and date before accepting.</div>
+    </div>`;
   }
 
   let reviewStatusHtml = '';
   if (decision === 'accepted') {
-    reviewStatusHtml = `<div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:10px 14px;font-size:0.85rem;color:var(--green);">✅ You accepted this classification</div>`;
+    reviewStatusHtml = `<div class="review-status-ok">${icon('ic-check',13)} Accepted</div>`;
   } else if (decision === 'rejected') {
-    reviewStatusHtml = `<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:10px 14px;font-size:0.85rem;color:var(--red);">❌ You rejected this classification</div>`;
+    reviewStatusHtml = `<div class="review-status-rej">${icon('ic-x',13)} Rejected</div>`;
   }
 
   const catOptions = ALL_CATEGORIES.map(c =>
@@ -751,84 +1244,89 @@ function renderDetailPanel(i) {
   ).join('');
 
   panel.innerHTML = `
-    <h2>Transaction #${escHtml(t.voucher_no)} <span style="font-size:0.8rem;color:var(--text-muted)">${t.date.split(' ')[0]}</span></h2>
+    <div class="detail-panel-title">
+      ${icon('ic-file',14)}
+      <span>#${escHtml(t.voucher_no)}</span>
+      <span style="font-size:0.75rem;color:var(--text-muted);font-weight:400;font-family:var(--mono)">${t.date.split(' ')[0]}</span>
+    </div>
 
     ${dupHtml}
 
     <div class="detail-section">
-      <h3>Details</h3>
-      <div class="detail-row"><div class="detail-label">Bank</div><div class="detail-value">${escHtml(t.particulars)}</div></div>
-      <div class="detail-row"><div class="detail-label">Type</div><div class="detail-value">${isReceipt ? '▲ Receipt (Incoming)' : '▼ Payment (Outgoing)'}</div></div>
-      <div class="detail-row"><div class="detail-label">Amount</div><div class="detail-value" style="color:${isReceipt ? 'var(--green)' : 'var(--red)'};font-size:1.1rem;font-weight:700">${escHtml(t.gross_total)}</div></div>
-      <div class="detail-row"><div class="detail-label">Narration</div><div class="narration-full">${escHtml(t.narration)}</div></div>
+      <div class="detail-section-title">Transaction Details</div>
+      <div class="detail-row">
+        <div class="detail-label">Bank</div>
+        <div class="detail-value">${escHtml(t.particulars)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Type</div>
+        <div class="detail-value">
+          ${isReceipt
+            ? `<span class="badge badge-receipt">${icon('ic-check',9)} Receipt (Incoming)</span>`
+            : `<span class="badge badge-payment">${icon('ic-x',9)} Payment (Outgoing)</span>`}
+        </div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Amount</div>
+        <div class="detail-value" style="color:${isReceipt?'var(--green)':'var(--red)'};font-family:var(--mono);font-size:1rem;font-weight:700">${escHtml(t.gross_total)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Narration</div>
+        <div class="narr-mono">${escHtml(t.narration)}</div>
+      </div>
     </div>
 
     ${res ? `
-    <div class="classify-result">
-      <h3>✨ AI Classification</h3>
-      <div class="category">${escHtml(res.classification)}</div>
-      ${res.reference_id ? `<div style="margin:6px 0"><span class="badge badge-invoice">📄 ${escHtml(res.reference_id)}</span></div>` : ''}
-      ${res.matched_detail ? `<div style="font-size:0.82rem;margin:4px 0;color:var(--accent2)">🔗 ${escHtml(res.matched_detail)}</div>` : ''}
-      <div style="margin:6px 0"><span class="confidence-dot conf-${res.confidence}"></span><span style="font-size:0.78rem;color:var(--text-muted)">${res.confidence} confidence</span></div>
-      <div class="reasoning">${escHtml(res.reasoning)}</div>
+    <div class="ai-result-box">
+      <div class="ai-result-title">${icon('ic-sparkle',11)} AI Classification</div>
+      <div class="ai-category">${escHtml(res.classification)}</div>
+      ${res.reference_id ? `<div style="margin:5px 0"><span class="badge badge-ref">${icon('ic-link',9)} ${escHtml(res.reference_id)}</span></div>` : ''}
+      ${res.matched_detail ? `<div style="font-size:0.76rem;margin:4px 0;color:var(--accent2);display:flex;align-items:center;gap:4px">${icon('ic-link',11)} ${escHtml(res.matched_detail)}</div>` : ''}
+      <div style="margin:5px 0;display:flex;align-items:center;gap:5px"><span class="conf-dot conf-${res.confidence}"></span><span style="font-size:0.72rem;color:var(--text-muted)">${res.confidence} confidence</span></div>
+      <div class="ai-reasoning">${escHtml(res.reasoning)}</div>
     </div>
 
     ${reviewStatusHtml}
 
     <div class="feedback-box">
-      <h3>💬 Give Feedback</h3>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;">Correct the classification if wrong:</div>
+      <div class="feedback-box-title">${icon('ic-comment',11)} Feedback</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:7px">Correct the classification if wrong:</div>
       <select class="cat-select" id="feedbackCat">${catOptions}</select>
       <label class="learn-toggle">
         <input type="checkbox" id="feedbackLearn" checked>
-        <span>Learn from this — auto-apply to similar transactions</span>
+        <span>Learn from this — apply to similar narrations automatically</span>
       </label>
       <div class="feedback-actions">
-        <button class="btn btn-success" onclick="acceptClassification(${i})">✅ Accept</button>
-        <button class="btn btn-primary" onclick="submitFeedback(${i})">💾 Save Correction</button>
+        <button class="btn btn-success" onclick="acceptClassification(${i})">${icon('ic-check',12)} Accept</button>
+        <button class="btn btn-primary" onclick="submitFeedback(${i})">${icon('ic-check',12)} Save Correction</button>
       </div>
     </div>
     ` : `
-    <button class="btn btn-primary" style="width:100%" onclick="classifySingle(${i})">
-      ✨ Classify This Entry
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="classifySingle(${i})">
+      ${icon('ic-sparkle',13)} Classify This Entry
     </button>
     `}
   `;
 }
 
-// ---- Accept classification (no correction) ----
 function acceptClassification(i) {
   reviewDecisions[i] = 'accepted';
-  renderTable();
-  renderDetailPanel(i);
-  updateStats();
+  renderTable(); renderDetailPanel(i); updateStats();
 }
 
-// ---- Submit feedback correction ----
 async function submitFeedback(i) {
   const t = allTransactions[i];
   const res = classificationResults[i];
   const corrected = document.getElementById('feedbackCat').value;
   const shouldLearn = document.getElementById('feedbackLearn').checked;
-
   if (!corrected) return;
-
   const resp = await fetch('/api/feedback', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      index: i,
-      original_classification: res ? res.classification : '',
-      corrected_classification: corrected,
-      should_learn: shouldLearn,
-      narration: t.narration,
-      date: t.date,
-      gross_total: t.gross_total
-    })
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index: i, original_classification: res ? res.classification : '',
+      corrected_classification: corrected, should_learn: shouldLearn,
+      narration: t.narration, date: t.date, gross_total: t.gross_total })
   });
   const data = await resp.json();
-
-  // Update the local classification
   if (classificationResults[i]) {
     classificationResults[i].classification = corrected;
     classificationResults[i].matched_detail = shouldLearn ? 'User corrected + learned' : 'User corrected';
@@ -836,33 +1334,21 @@ async function submitFeedback(i) {
     classificationResults[i].reasoning = `Manually corrected to "${corrected}" by user.`;
   }
   reviewDecisions[i] = 'accepted';
-
-  // If there are affected transactions, update them too
   if (shouldLearn && data.affected_indices && data.affected_indices.length > 0) {
     const count = data.affected_indices.length;
     data.affected_indices.forEach(ai => {
-      if (classificationResults[ai]) {
-        classificationResults[ai].classification = corrected;
-        classificationResults[ai].matched_detail = 'Auto-classified from learned feedback';
-        classificationResults[ai].confidence = 'high';
-        classificationResults[ai].reasoning = `Auto-applied from learned rule: "${corrected}".`;
-      } else {
-        classificationResults[ai] = {
-          idx: ai, classification: corrected, reference_id: '',
-          matched_detail: 'Auto-classified from learned feedback',
-          confidence: 'high',
-          reasoning: `Auto-applied from learned rule: "${corrected}".`
-        };
-      }
+      classificationResults[ai] = {
+        idx: ai, classification: corrected, reference_id: '',
+        matched_detail: 'Auto-classified from learned feedback',
+        confidence: 'high',
+        reasoning: `Auto-applied from learned rule: "${corrected}".`
+      };
     });
-    showToast(`✅ Correction saved. Rule learned and applied to ${count} similar transaction${count !== 1 ? 's' : ''}.`);
+    showToast(`Correction saved. Rule learned and applied to ${count} similar transaction${count !== 1 ? 's' : ''}.`);
   } else {
-    showToast('✅ Correction saved.');
+    showToast('Correction saved.');
   }
-
-  renderTable();
-  renderDetailPanel(i);
-  updateStats();
+  renderTable(); renderDetailPanel(i); updateStats();
 }
 
 // ---- Toast ----
@@ -871,8 +1357,7 @@ function showToast(msg, duration = 3500) {
   if (existing) existing.remove();
   const t = document.createElement('div');
   t.id = 'toast';
-  t.style.cssText = `position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 24px;font-size:0.88rem;color:var(--text);z-index:300;box-shadow:0 8px 24px rgba(0,0,0,0.4);transition:opacity 0.3s;`;
-  t.textContent = msg;
+  t.innerHTML = `<span class="conf-dot conf-high"></span>${msg}`;
   document.body.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, duration);
 }
@@ -885,57 +1370,39 @@ function buildCatOptions(select, current) {
 }
 
 function openQuickReview() {
-  // Build queue: classified, not yet accepted/rejected
-  reviewQueue = Object.keys(classificationResults)
-    .map(Number)
-    .filter(i => !reviewDecisions[i])
-    .sort((a, b) => a - b);
-
-  if (reviewQueue.length === 0) {
-    showToast('No unreviewed classified transactions. Run AI classification first.');
-    return;
-  }
+  reviewQueue = Object.keys(classificationResults).map(Number).filter(i => !reviewDecisions[i]).sort((a,b) => a-b);
+  if (reviewQueue.length === 0) { showToast('No unreviewed classified transactions. Run AI classification first.'); return; }
   reviewPos = 0;
   document.getElementById('reviewOverlay').classList.add('show');
   renderReviewCard();
-
   document.addEventListener('keydown', handleReviewKey);
 }
 
 function closeQuickReview() {
   document.getElementById('reviewOverlay').classList.remove('show');
   document.removeEventListener('keydown', handleReviewKey);
-  renderTable();
-  updateStats();
+  renderTable(); updateStats();
 }
 
 function renderReviewCard() {
-  if (reviewPos >= reviewQueue.length) {
-    closeQuickReview();
-    showToast(`✅ Review complete! ${Object.values(reviewDecisions).filter(d=>d==='accepted').length} accepted.`);
-    return;
-  }
+  if (reviewPos >= reviewQueue.length) { closeQuickReview(); showToast(`Review complete! ${Object.values(reviewDecisions).filter(d=>d==='accepted').length} accepted.`); return; }
   const i = reviewQueue[reviewPos];
   const t = allTransactions[i];
   const res = classificationResults[i];
   const isReceipt = t.voucher_type === 'Receipt';
-
   document.getElementById('reviewProgress').textContent = `${reviewPos + 1} of ${reviewQueue.length}`;
   document.getElementById('reviewNarration').textContent = t.narration;
   document.getElementById('reviewDate').textContent = t.date.split(' ')[0];
   document.getElementById('reviewTypeSpan').innerHTML = isReceipt
-    ? '<span class="badge badge-receipt" style="font-size:0.72rem">▲ Receipt</span>'
-    : '<span class="badge badge-payment" style="font-size:0.72rem">▼ Payment</span>';
+    ? `<span class="badge badge-receipt">${icon('ic-check',9)} Receipt</span>`
+    : `<span class="badge badge-payment">${icon('ic-x',9)} Payment</span>`;
   document.getElementById('reviewAmount').textContent = t.gross_total;
   document.getElementById('reviewAmount').style.color = isReceipt ? 'var(--green)' : 'var(--red)';
   document.getElementById('reviewClassification').textContent = res ? res.classification : '—';
   document.getElementById('reviewReasoning').textContent = res ? res.reasoning : '';
-
-  // Duplicate warning
   const isDup = !!duplicatesMap[String(i)];
-  document.getElementById('reviewDupWarn').style.display = isDup ? 'block' : 'none';
-
-  // Reset correction panel
+  const dupEl = document.getElementById('reviewDupWarn');
+  dupEl.className = 'review-dup-warn' + (isDup ? ' show' : '');
   document.getElementById('reviewCorrection').classList.remove('show');
   buildCatOptions(document.getElementById('reviewCatSelect'), res ? res.classification : '');
   document.getElementById('reviewLearnCheck').checked = true;
@@ -943,23 +1410,11 @@ function renderReviewCard() {
 
 function reviewAccept() {
   const i = reviewQueue[reviewPos];
-  reviewDecisions[i] = 'accepted';
-  reviewPos++;
-  renderReviewCard();
+  reviewDecisions[i] = 'accepted'; reviewPos++; renderReviewCard();
 }
-
-function reviewReject() {
-  document.getElementById('reviewCorrection').classList.add('show');
-}
-
-function reviewSkip() {
-  reviewPos++;
-  renderReviewCard();
-}
-
-function reviewCancelCorrection() {
-  document.getElementById('reviewCorrection').classList.remove('show');
-}
+function reviewReject() { document.getElementById('reviewCorrection').classList.add('show'); }
+function reviewSkip() { reviewPos++; renderReviewCard(); }
+function reviewCancelCorrection() { document.getElementById('reviewCorrection').classList.remove('show'); }
 
 async function reviewSubmitCorrection() {
   const i = reviewQueue[reviewPos];
@@ -967,47 +1422,30 @@ async function reviewSubmitCorrection() {
   const res = classificationResults[i];
   const corrected = document.getElementById('reviewCatSelect').value;
   const shouldLearn = document.getElementById('reviewLearnCheck').checked;
-
   const resp = await fetch('/api/feedback', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      index: i, original_classification: res ? res.classification : '',
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index: i, original_classification: res ? res.classification : '',
       corrected_classification: corrected, should_learn: shouldLearn,
-      narration: t.narration, date: t.date, gross_total: t.gross_total
-    })
+      narration: t.narration, date: t.date, gross_total: t.gross_total })
   });
   const data = await resp.json();
-
-  classificationResults[i] = {
-    ...(classificationResults[i] || {}),
-    classification: corrected,
+  classificationResults[i] = { ...(classificationResults[i]||{}), classification: corrected,
     matched_detail: shouldLearn ? 'User corrected + learned' : 'User corrected',
-    confidence: 'high',
-    reasoning: `Manually corrected to "${corrected}" by user.`
-  };
+    confidence: 'high', reasoning: `Manually corrected to "${corrected}" by user.` };
   reviewDecisions[i] = 'rejected';
-
   if (shouldLearn && data.affected_indices && data.affected_indices.length > 0) {
     data.affected_indices.forEach(ai => {
-      classificationResults[ai] = {
-        ...(classificationResults[ai] || { idx: ai, reference_id: '' }),
-        classification: corrected,
-        matched_detail: 'Auto-classified from learned feedback',
-        confidence: 'high',
-        reasoning: `Auto-applied from learned rule: "${corrected}".`
-      };
+      classificationResults[ai] = { ...(classificationResults[ai] || { idx: ai, reference_id: '' }),
+        classification: corrected, matched_detail: 'Auto-classified from learned feedback',
+        confidence: 'high', reasoning: `Auto-applied from learned rule: "${corrected}".` };
     });
   }
-
-  reviewPos++;
-  renderReviewCard();
+  reviewPos++; renderReviewCard();
 }
 
 function handleReviewKey(e) {
   if (!document.getElementById('reviewOverlay').classList.contains('show')) return;
-  const correctionShowing = document.getElementById('reviewCorrection').classList.contains('show');
-  if (correctionShowing) return; // Let user interact with the select
+  if (document.getElementById('reviewCorrection').classList.contains('show')) return;
   if (e.key === 'Enter') { e.preventDefault(); reviewAccept(); }
   else if (e.key === 'r' || e.key === 'R') reviewReject();
   else if (e.key === 's' || e.key === 'S') reviewSkip();
@@ -1018,32 +1456,23 @@ function handleReviewKey(e) {
 async function classifySingle(i) {
   const panel = document.getElementById('detailPanel');
   const btn = panel.querySelector('.btn-primary');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Classifying...'; }
-
+  if (btn) { btn.disabled = true; btn.innerHTML = `<div class="spinner"></div> Classifying...`; }
   const res = await fetch('/api/classify_single', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index: i })
   });
   const data = await res.json();
-  if (data.result) {
-    classificationResults[i] = data.result;
-    renderTable();
-    renderDetailPanel(i);
-    updateStats();
-  }
+  if (data.result) { classificationResults[i] = data.result; renderTable(); renderDetailPanel(i); updateStats(); }
 }
 
 async function classifyAll() {
   const indices = getFilteredIndices();
   if (indices.length === 0) return;
-
   document.getElementById('progressOverlay').classList.add('show');
   document.getElementById('progressFill').style.width = '0%';
-  document.getElementById('progressCount').textContent = `0 / ${indices.length} classified`;
+  document.getElementById('progressCount').textContent = `0 / ${indices.length}`;
   document.getElementById('classifyAllBtn').disabled = true;
-
   const batchSize = 50;
-  let done = 0;
   for (let s = 0; s < indices.length; s += batchSize) {
     const batch = indices.slice(s, s + batchSize);
     const res = await fetch('/api/classify', {
@@ -1051,162 +1480,111 @@ async function classifyAll() {
       body: JSON.stringify({ indices: batch })
     });
     const data = await res.json();
-    if (data.results) {
-      data.results.forEach((r, j) => { classificationResults[batch[j]] = r; });
-    }
-    done = Math.min(s + batchSize, indices.length);
-    const pct = Math.round((done / indices.length) * 100);
-    document.getElementById('progressFill').style.width = pct + '%';
-    document.getElementById('progressCount').textContent = `${done} / ${indices.length} classified`;
+    if (data.results) data.results.forEach((r, j) => { classificationResults[batch[j]] = r; });
+    const done = Math.min(s + batchSize, indices.length);
+    document.getElementById('progressFill').style.width = Math.round((done / indices.length) * 100) + '%';
+    document.getElementById('progressCount').textContent = `${done} / ${indices.length}`;
   }
-
   document.getElementById('progressOverlay').classList.remove('show');
   document.getElementById('classifyAllBtn').disabled = false;
-  renderTable();
-  updateStats();
+  renderTable(); updateStats();
 }
 
 async function classifySelected() {
   const indices = [...selectedRows];
   if (indices.length === 0) return;
-
   document.getElementById('progressOverlay').classList.add('show');
   document.getElementById('progressFill').style.width = '10%';
   document.getElementById('progressCount').textContent = `Classifying ${indices.length} entries...`;
-
   const res = await fetch('/api/classify', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ indices })
   });
   const data = await res.json();
-  if (data.results) {
-    data.results.forEach((r, j) => { classificationResults[indices[j]] = r; });
-  }
-
+  if (data.results) data.results.forEach((r, j) => { classificationResults[indices[j]] = r; });
   document.getElementById('progressOverlay').classList.remove('show');
-  renderTable();
-  updateStats();
+  renderTable(); updateStats();
 }
 
-// ---- Row checkbox ----
 function toggleRowSelect(i, cb) {
-  if (cb.checked) selectedRows.add(i);
-  else selectedRows.delete(i);
+  if (cb.checked) selectedRows.add(i); else selectedRows.delete(i);
   document.getElementById('classifySelBtn').disabled = selectedRows.size === 0;
 }
-
 function toggleSelectAll(cb) {
   const indices = getFilteredIndices();
-  if (cb.checked) indices.forEach(i => selectedRows.add(i));
-  else selectedRows.clear();
+  if (cb.checked) indices.forEach(i => selectedRows.add(i)); else selectedRows.clear();
   document.getElementById('classifySelBtn').disabled = selectedRows.size === 0;
   renderTable();
 }
 
-// ---- Export CSV ----
+// ---- Export ----
 function exportCSV() {
   const rows = [['Date','Particulars','Voucher Type','Voucher No','Narration','Gross Total',
     'AI Classification','Reference ID','Matched Detail','Confidence','Reasoning','Review Decision','Duplicate Flag']];
   allTransactions.forEach((t, i) => {
     const res = classificationResults[i] || {};
-    rows.push([
-      t.date, t.particulars, t.voucher_type, t.voucher_no,
-      t.narration, t.gross_total,
-      res.classification || '',
-      res.reference_id || '',
-      res.matched_detail || '',
-      res.confidence || '',
-      res.reasoning || '',
-      reviewDecisions[i] || '',
-      duplicatesMap[String(i)] ? 'YES' : ''
-    ]);
+    rows.push([t.date,t.particulars,t.voucher_type,t.voucher_no,t.narration,t.gross_total,
+      res.classification||'',res.reference_id||'',res.matched_detail||'',res.confidence||'',
+      res.reasoning||'',reviewDecisions[i]||'',duplicatesMap[String(i)]?'YES':'']);
   });
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'alfaleus_classified_transactions.csv';
+  a.download = 'alfaleus_classified.csv';
   a.click();
 }
 
 function escHtml(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-init();
-
-
-// ======== Google Drive Picker ========
-let driveSheets = [];
-let activeDriveSheetId = null;
-let driveActiveTabName = null;
-let pendingSheetId = null;
-let pendingSheetName = null;
-
+// ======== Google Drive ========
 async function openDriveModal() {
   document.getElementById('driveModalOverlay').classList.add('show');
   const res = await fetch('/api/gdrive/status');
   const st = await res.json();
   activeDriveSheetId = st.active_sheet_id || null;
-
   if (!st.oauth_configured) {
     document.getElementById('oauthSetupHint').style.display = 'block';
     document.getElementById('connectGoogleBtn').disabled = true;
   }
-
-  if (st.connected) {
-    showDriveConnected();
-    loadDriveSheets();
-    if (st.active_sheet_id) {
-      driveActiveTabName = st.active_tab_name || null;
-      document.getElementById('saveToSheetBtn').style.display = '';
-    }
-  } else {
-    showDriveNotConnected();
-  }
+  if (st.connected) { showDriveConnected(); loadDriveSheets(); }
+  else { showDriveNotConnected(); }
 }
 
-function closeDriveModal() {
-  document.getElementById('driveModalOverlay').classList.remove('show');
-}
-
+function closeDriveModal() { document.getElementById('driveModalOverlay').classList.remove('show'); }
 function showDriveConnected() {
   document.getElementById('driveNotConnected').style.display = 'none';
   document.getElementById('driveConnected').style.display = 'flex';
 }
-
 function showDriveNotConnected() {
   document.getElementById('driveNotConnected').style.display = 'block';
   document.getElementById('driveConnected').style.display = 'none';
 }
 
 function startOAuth() {
-  const popup = window.open('/api/gdrive/auth', 'gdrive_oauth',
-    'width=520,height=640,scrollbars=yes,resizable=yes');
-  document.getElementById('driveConnectStatus').innerHTML = '<div class="spinner"></div> Waiting for sign-in...';
-
+  window.open('/api/gdrive/auth', 'gdrive_oauth', 'width=520,height=640,scrollbars=yes,resizable=yes');
+  const el = document.getElementById('driveConnectStatus');
+  el.innerHTML = `<div class="spinner"></div> Waiting for sign-in...`;
   window.addEventListener('message', async function handler(e) {
     if (e.data && e.data.type === 'gdrive_connected') {
       window.removeEventListener('message', handler);
-      document.getElementById('driveConnectStatus').innerHTML = '✅ Connected!';
-      showDriveConnected();
-      loadDriveSheets();
+      el.innerHTML = `<span class="conf-dot conf-high"></span> Connected`;
+      showDriveConnected(); loadDriveSheets();
     } else if (e.data && e.data.type === 'gdrive_error') {
       window.removeEventListener('message', handler);
-      document.getElementById('driveConnectStatus').innerHTML = '❌ ' + (e.data.error || 'Auth failed');
+      el.innerHTML = `Error: ${e.data.error || 'Auth failed'}`;
     }
   });
 }
 
 async function loadDriveSheets() {
-  document.getElementById('driveSheetList').innerHTML =
-    '<div style="text-align:center;padding:30px;color:var(--text-muted);"><div class="spinner"></div><br>Loading...</div>';
-
+  document.getElementById('driveSheetList').innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading...</div>`;
   const res = await fetch('/api/gdrive/sheets');
   if (!res.ok) {
     const err = await res.json();
-    document.getElementById('driveSheetList').innerHTML =
-      `<div style="text-align:center;padding:30px;color:var(--red);">Error: ${escHtml(err.error || 'Unknown')}</div>`;
+    document.getElementById('driveSheetList').innerHTML = `<div style="text-align:center;padding:28px;color:var(--red)">Error: ${escHtml(err.error||'Unknown')}</div>`;
     return;
   }
   const data = await res.json();
@@ -1217,19 +1595,19 @@ async function loadDriveSheets() {
 function renderDriveSheets(sheets) {
   const list = document.getElementById('driveSheetList');
   if (sheets.length === 0) {
-    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);">No spreadsheets found in your Drive.</div>';
+    list.innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)">No spreadsheets found.</div>`;
     return;
   }
   list.innerHTML = sheets.map(s => {
     const isActive = s.id === activeDriveSheetId;
     const modified = s.modifiedTime ? new Date(s.modifiedTime).toLocaleDateString() : '';
     return `<div class="drive-sheet-item ${isActive ? 'active-sheet' : ''}" data-id="${escHtml(s.id)}" data-name="${escHtml(s.name)}" onclick="selectDriveSheet(this.dataset.id, this.dataset.name)">
-      <div class="drive-sheet-icon">📊</div>
-      <div class="drive-sheet-info">
+      <span class="drive-sheet-icon">${icon('ic-sheet',16)}</span>
+      <div style="flex:1;min-width:0">
         <div class="drive-sheet-name">${escHtml(s.name)}</div>
-        <div class="drive-sheet-meta">Modified ${modified} · ID: ${escHtml(s.id.slice(0,18))}…</div>
+        <div class="drive-sheet-meta">Modified ${modified}</div>
       </div>
-      ${isActive ? '<div class="drive-sheet-tick">✓ Active</div>' : ''}
+      ${isActive ? `<span class="drive-sheet-tick">${icon('ic-check',14)}</span>` : ''}
     </div>`;
   }).join('');
 }
@@ -1239,213 +1617,212 @@ function filterDriveSheets() {
   renderDriveSheets(driveSheets.filter(s => s.name.toLowerCase().includes(q)));
 }
 
+// Step 1: Sheet selected → show tab picker (transaction tab)
 async function selectDriveSheet(sheetId, sheetName) {
-  // Step 1: fetch worksheet tabs for this spreadsheet
-  pendingSheetId   = sheetId;
+  pendingSheetId = sheetId;
   pendingSheetName = sheetName;
   const overlay = document.getElementById('tabPickerOverlay');
   const tabList = document.getElementById('tabPickerList');
   overlay.classList.add('show');
-  tabList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);"><div class="spinner"></div><br>Loading tabs…</div>';
-
+  tabList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading tabs...</div>`;
   try {
     const res = await fetch('/api/gdrive/worksheets?sheet_id=' + encodeURIComponent(sheetId));
     const data = await res.json();
-    const tabs = data.tabs || [];
-    if (tabs.length === 0) {
-      tabList.innerHTML = '<div style="color:var(--red);font-size:0.85rem;">No sheets found in this spreadsheet.</div>';
+    pendingAllTabs = data.tabs || [];
+    if (pendingAllTabs.length === 0) {
+      tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem">No sheets found in this spreadsheet.</div>`;
       return;
     }
-    tabList.innerHTML = tabs.map(t => `
-      <div class="tab-item" onclick="confirmTabSelection('${escHtml(t).replace(/'/g,"\\'")}')">
-        <span>📄</span> ${escHtml(t)}
-      </div>`).join('');
+    tabList.innerHTML = pendingAllTabs.map(t =>
+      `<div class="tab-item" onclick="confirmTabSelection('${escHtml(t).replace(/'/g,"\\'")}')">
+        ${icon('ic-sheet',13)} ${escHtml(t)}
+       </div>`
+    ).join('');
   } catch(e) {
-    tabList.innerHTML = '<div style="color:var(--red);font-size:0.85rem;">Error loading tabs: ' + escHtml(String(e)) + '</div>';
+    tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem">Error: ${escHtml(String(e))}</div>`;
   }
 }
 
+// Step 2: Transaction tab confirmed → save, then show context picker
 async function confirmTabSelection(tabName) {
-  const sheetId   = pendingSheetId;
+  const sheetId = pendingSheetId;
   const sheetName = pendingSheetName;
   closeTabPicker();
-
-  // Highlight selected tab item briefly, then save & load
   const res = await fetch('/api/gdrive/select', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sheet_id: sheetId, sheet_name: sheetName, tab_name: tabName })
   });
   if (!res.ok) return;
-
   activeDriveSheetId = sheetId;
-  driveActiveTabName = tabName;
-  renderDriveSheets(driveSheets);
-  closeDriveModal();
 
+  // Now show context picker if there are other tabs
+  const otherTabs = pendingAllTabs.filter(t => t !== tabName);
+  if (otherTabs.length > 0) {
+    openContextPicker(otherTabs);
+  } else {
+    await finishSheetSetup(sheetName, tabName);
+  }
+}
+
+function openContextPicker(tabs) {
+  selectedContextTabs = new Set();
+  const list = document.getElementById('contextPickerList');
+  list.innerHTML = tabs.map(t =>
+    `<div class="tab-item" id="ctxitem-${escHtml(t)}" onclick="toggleContextTab('${escHtml(t).replace(/'/g,"\\'")}', this)">
+      ${icon('ic-sheet',13)} ${escHtml(t)}
+      <span class="tab-check">${icon('ic-check',13)}</span>
+    </div>`
+  ).join('');
+  document.getElementById('contextPickerOverlay').classList.add('show');
+  // Store tabs for toggle-all
+  document.getElementById('contextPickerList').dataset.tabs = JSON.stringify(tabs);
+}
+
+function toggleContextTab(tab, el) {
+  if (selectedContextTabs.has(tab)) {
+    selectedContextTabs.delete(tab);
+    el.classList.remove('selected');
+  } else {
+    selectedContextTabs.add(tab);
+    el.classList.add('selected');
+  }
+}
+
+function toggleSelectAllContext() {
+  const tabs = JSON.parse(document.getElementById('contextPickerList').dataset.tabs || '[]');
+  const allSelected = tabs.every(t => selectedContextTabs.has(t));
+  if (allSelected) {
+    selectedContextTabs.clear();
+    document.querySelectorAll('#contextPickerList .tab-item').forEach(el => el.classList.remove('selected'));
+  } else {
+    tabs.forEach(t => selectedContextTabs.add(t));
+    document.querySelectorAll('#contextPickerList .tab-item').forEach(el => el.classList.add('selected'));
+  }
+}
+
+async function confirmContextSelection() {
+  const tabs = [...selectedContextTabs];
+  closeContextPicker();
+  await fetch('/api/gdrive/set_context_tabs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tabs })
+  });
+  const driveRes = await fetch('/api/gdrive/status');
+  const st = await driveRes.json();
+  await finishSheetSetup(st.active_sheet_name, st.active_tab_name, tabs);
+}
+
+function closeContextPicker() {
+  document.getElementById('contextPickerOverlay').classList.remove('show');
+}
+
+async function openContextPickerStandalone() {
+  // For "Edit" button on chip bar — load existing tabs
+  const sheetRes = await fetch('/api/gdrive/status');
+  const st = await sheetRes.json();
+  if (!st.active_sheet_id) return;
+  const wsRes = await fetch('/api/gdrive/worksheets?sheet_id=' + encodeURIComponent(st.active_sheet_id));
+  const wsData = await wsRes.json();
+  const allTabs = wsData.tabs || [];
+  const baseTabs = st.active_tab_name ? [st.active_tab_name] : [];
+  const otherTabs = allTabs.filter(t => !baseTabs.includes(t));
+  selectedContextTabs = new Set(st.context_tabs || []);
+  openContextPicker(otherTabs);
+  // Pre-select existing
+  selectedContextTabs.forEach(t => {
+    const el = document.getElementById(`ctxitem-${escHtml(t)}`);
+    if (el) el.classList.add('selected');
+  });
+}
+
+async function finishSheetSetup(sheetName, tabName, contextTabs) {
+  closeDriveModal();
   document.getElementById('txnBody').innerHTML =
-    '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)"><div class="spinner"></div><br>Loading <b>' + escHtml(tabName) + '</b> from <b>' + escHtml(sheetName) + '</b>…</td></tr>';
+    `<tr><td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 10px"></div><br>Loading <strong>${escHtml(tabName)}</strong> from <strong>${escHtml(sheetName)}</strong>...</td></tr>`;
   allTransactions = [];
-  allSales = [];
   classificationResults = {};
   reviewDecisions = {};
 
   const dataRes = await fetch('/api/data');
   const data = await dataRes.json();
   allTransactions = data.transactions || [];
-  allSales = data.sales || [];
   duplicatesMap = data.duplicates || {};
 
-  document.getElementById('dataSourceBadge').innerHTML =
-    '<span class="sheets-badge">📊 ' + escHtml(sheetName) + ' › ' + escHtml(tabName) + '</span>';
-  document.getElementById('dataDot').className = 'status-dot ok';
-  document.getElementById('dataStatus').textContent =
-    allTransactions.length + ' txns · ' + allSales.length + ' invoices';
-
-  // Show "Save to Sheet" button now that a Drive sheet is active
+  const srcPill = document.getElementById('sourcePill');
+  srcPill.innerHTML = `${icon('ic-sheet')} ${escHtml(sheetName)} › ${escHtml(tabName)}`;
+  document.getElementById('dataPill').className = 'pill ok';
+  document.getElementById('dataStatus').textContent = `${allTransactions.length} txns`;
   document.getElementById('saveToSheetBtn').style.display = '';
 
-  renderTable();
-  renderSales();
-  updateStats();
-}
+  const driveBtn = document.getElementById('driveConnectBtn');
+  driveBtn.innerHTML = `${icon('ic-drive')} Drive Connected`;
+  driveBtn.style.borderColor = 'var(--green)';
+  driveBtn.style.color = 'var(--green)';
 
-function closeTabPicker() {
-  document.getElementById('tabPickerOverlay').classList.remove('show');
-  pendingSheetId = null;
-  pendingSheetName = null;
+  // Refresh context chips
+  const contextRes = await fetch('/api/gdrive/status');
+  const ctx = await contextRes.json();
+  if (ctx.context_tabs && ctx.context_tabs.length > 0) {
+    document.getElementById('ctxPill').style.display = '';
+    document.getElementById('ctxStatus').textContent = `${ctx.context_tabs.length} context tabs`;
+    renderContextChips(ctx.context_tabs);
+  }
+
+  renderTable(); updateStats();
+  showToast(`Loaded ${allTransactions.length} transactions from "${tabName}".`);
 }
 
 async function saveToSheet() {
   const btn = document.getElementById('saveToSheetBtn');
   const classified = Object.keys(classificationResults);
-  if (classified.length === 0) {
-    alert('No classified transactions yet — run AI classification first.');
-    return;
-  }
-
-  const results = allTransactions
-    .map((t, i) => {
-      const res = classificationResults[i];
-      if (!res) return null;
-      return {
-        date:           t.date,
-        narration:      t.narration,
-        voucher_type:   t.voucher_type,
-        gross_total:    t.gross_total,
-        classification: res.classification || '',
-        reference_id:   res.reference_id  || '',
-        confidence:     res.confidence    || '',
-        reasoning:      res.reasoning     || '',
-      };
-    })
-    .filter(Boolean);
-
+  if (classified.length === 0) { showToast('No classified transactions yet.'); return; }
+  const results = allTransactions.map((t, i) => {
+    const res = classificationResults[i];
+    if (!res) return null;
+    return { date: t.date, narration: t.narration, voucher_type: t.voucher_type,
+             gross_total: t.gross_total, classification: res.classification||'',
+             reference_id: res.reference_id||'', confidence: res.confidence||'', reasoning: res.reasoning||'' };
+  }).filter(Boolean);
   btn.disabled = true;
-  btn.textContent = '⏳ Saving…';
+  btn.innerHTML = `<div class="spinner"></div> Saving...`;
   try {
     const res = await fetch('/api/gdrive/write_results', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ results })
     });
     const data = await res.json();
     if (data.ok) {
-      btn.textContent = '✅ Saved ' + data.rows_written + ' rows → "' + data.tab + '"';
-      setTimeout(() => { btn.textContent = '☁️ Save to Sheet'; btn.disabled = false; }, 4000);
+      btn.innerHTML = `${icon('ic-check',13)} Saved ${data.rows_written} rows`;
+      setTimeout(() => { btn.innerHTML = `${icon('ic-cloud',13)} Save to Sheet`; btn.disabled = false; }, 4000);
     } else {
-      alert('Save failed: ' + (data.error || 'Unknown error'));
-      btn.textContent = '☁️ Save to Sheet';
-      btn.disabled = false;
+      showToast('Save failed: ' + (data.error || 'Unknown'));
+      btn.innerHTML = `${icon('ic-cloud',13)} Save to Sheet`; btn.disabled = false;
     }
   } catch(e) {
-    alert('Save error: ' + e);
-    btn.textContent = '☁️ Save to Sheet';
-    btn.disabled = false;
+    showToast('Save error: ' + e);
+    btn.innerHTML = `${icon('ic-cloud',13)} Save to Sheet`; btn.disabled = false;
   }
 }
 
 async function disconnectDrive() {
   await fetch('/api/gdrive/disconnect', { method: 'POST' });
-  activeDriveSheetId = null;
-  driveSheets = [];
+  activeDriveSheetId = null; driveSheets = [];
   showDriveNotConnected();
   document.getElementById('driveConnectStatus').innerHTML = '';
+  document.getElementById('ctxChipsWrap').className = 'context-chips-wrap';
+  document.getElementById('ctxPill').style.display = 'none';
 }
 
-// Close modal on overlay click
-document.getElementById('driveModalOverlay').addEventListener('click', function(e) {
-  if (e.target === this) closeDriveModal();
-});
-document.getElementById('tabPickerOverlay').addEventListener('click', function(e) {
-  if (e.target === this) closeTabPicker();
-});
+document.getElementById('driveModalOverlay').addEventListener('click', function(e) { if (e.target === this) closeDriveModal(); });
+document.getElementById('tabPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeTabPicker(); });
+document.getElementById('contextPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeContextPicker(); });
 
+function closeTabPicker() {
+  document.getElementById('tabPickerOverlay').classList.remove('show');
+  pendingSheetId = null; pendingSheetName = null;
+}
+
+init();
 </script>
-
-<!-- Google Drive Picker Modal -->
-<div class="drive-modal-overlay" id="driveModalOverlay">
-  <div class="drive-modal">
-    <div class="drive-modal-header">
-      <h2>📊 Connect Google Drive</h2>
-      <button class="drive-modal-close" onclick="closeDriveModal()">✕</button>
-    </div>
-
-    <!-- Not-connected view -->
-    <div id="driveNotConnected">
-      <div class="drive-connect-section">
-        <div style="font-size:0.88rem;color:var(--text-muted);line-height:1.6;">
-          Connect your Google account to browse and select any spreadsheet directly from Drive — no service account or manual Sheet ID needed.
-        </div>
-        <div class="oauth-setup-hint" id="oauthSetupHint" style="display:none;">
-          ⚠️ OAuth not configured yet. Set these env vars in your <code>docker-compose.yml</code>:<br>
-          <code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code>
-          <br><br>
-          Create credentials at <code>console.cloud.google.com</code> → APIs → Credentials → OAuth 2.0 Client (Web Application). Set redirect URI to <code>http://localhost:8080/api/gdrive/callback</code>.
-        </div>
-        <div class="drive-btn-row">
-          <button class="btn btn-primary" id="connectGoogleBtn" onclick="startOAuth()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-            Sign in with Google
-          </button>
-          <span id="driveConnectStatus" class="drive-status"></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Connected view: sheet list -->
-    <div id="driveConnected" style="display:none; flex-direction:column; gap:14px; flex:1; min-height:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <div class="drive-status" id="driveConnectedAs">
-          <span class="status-dot ok"></span> Connected to Google Drive
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-secondary" style="font-size:0.78rem;padding:5px 11px;" onclick="loadDriveSheets()">🔄 Refresh</button>
-          <button class="btn btn-danger" style="font-size:0.78rem;padding:5px 11px;" onclick="disconnectDrive()">Disconnect</button>
-        </div>
-      </div>
-      <input class="drive-search" type="text" placeholder="🔍 Filter spreadsheets..." id="driveSearch" oninput="filterDriveSheets()">
-      <div class="drive-sheet-list" id="driveSheetList">
-        <div style="text-align:center;padding:30px;color:var(--text-muted);"><div class="spinner"></div><br>Loading your spreadsheets...</div>
-      </div>
-      <div style="font-size:0.75rem;color:var(--text-muted);">Click a spreadsheet to load it as the active data source. The app will read your transactions and sales from that sheet.</div>
-    </div>
-  </div>
-</div>
-
-<!-- Tab Picker Modal -->
-<div class="tab-picker-overlay" id="tabPickerOverlay">
-  <div class="tab-picker-modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <h2>📄 Choose the transaction sheet</h2>
-      <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2rem;" onclick="closeTabPicker()">✕</button>
-    </div>
-    <p>This spreadsheet has multiple tabs. Select the one that contains the transactions to classify.<br>
-    A new tab called <strong>"Classified"</strong> will be created for the results.</p>
-    <div class="tab-list" id="tabPickerList"></div>
-    <div style="font-size:0.75rem;color:var(--text-muted);">Can't see the right tab? Make sure you're picking the correct spreadsheet.</div>
-  </div>
-</div>
-
 </body>
 </html>

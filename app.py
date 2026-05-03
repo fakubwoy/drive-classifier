@@ -10,21 +10,20 @@ import google.generativeai as genai
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 
-# OAuth2 config — set these env vars or fill in directly
 OAUTH_CLIENT_ID     = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 OAUTH_REDIRECT_URI  = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8080/api/gdrive/callback")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 EXCEL_PATH = os.environ.get("EXCEL_PATH", "Query_sheet_alfaleus.xlsx")
-GOOGLE_SHEETS_ID = os.environ.get("GOOGLE_SHEETS_ID", "")       # Sheet ID from URL
+GOOGLE_SHEETS_ID = os.environ.get("GOOGLE_SHEETS_ID", "")
 GOOGLE_SHEETS_CREDS = os.environ.get("GOOGLE_CREDENTIALS_FILE", "credentials.json")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "feedback.db")
 
-# ---------- Database (feedback + learned rules) ----------
+# ---------- Database ----------
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -104,10 +103,6 @@ def save_feedback(txn_key, original, corrected, should_learn, narration=""):
     conn.close()
 
 
-def txn_fingerprint(t):
-    return f"{str(t.get('date',''))[:10]}|{str(t.get('narration',''))[:80]}|{str(t.get('gross_total',''))}"
-
-
 # ---------- Google Sheets ----------
 
 def gsheets_available():
@@ -122,7 +117,6 @@ def gsheets_available():
 def load_from_gsheets(sheet_id, sheet_name="query_sk"):
     import gspread
     from google.oauth2 import service_account
-
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets.readonly",
         "https://www.googleapis.com/auth/drive.readonly"
@@ -135,13 +129,11 @@ def load_from_gsheets(sheet_id, sheet_name="query_sk"):
     rows = ws.get_all_values()
     if not rows:
         return pd.DataFrame()
-
     header_row = 0
     for i, row in enumerate(rows):
         if row and str(row[0]).strip() == "Date":
             header_row = i
             break
-
     df = pd.DataFrame(rows[header_row + 1:], columns=rows[header_row])
     df.columns = [str(c).strip() for c in df.columns]
     df = df[df["Date"].notna()]
@@ -150,30 +142,9 @@ def load_from_gsheets(sheet_id, sheet_name="query_sk"):
     return df
 
 
-def load_sales_from_gsheets(sheet_id):
-    import gspread
-    from google.oauth2 import service_account
-
-    scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_path = os.path.join(BASE_DIR, GOOGLE_SHEETS_CREDS)
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=scopes)
-    client = gspread.authorize(creds)
-    sh = client.open_by_key(sheet_id)
-    ws = sh.worksheet("sale")
-    rows = ws.get_all_values()
-    if len(rows) < 2:
-        return pd.DataFrame(columns=["Date", "Invoice", "DoctorHospital", "Address"])
-    df = pd.DataFrame(rows[1:], columns=rows[0])
-    df = df.iloc[:, :4].copy()
-    df.columns = ["Date", "Invoice", "DoctorHospital", "Address"]
-    return df[df["Invoice"].astype(str).str.startswith("ALF/")]
-
-
-
 # ---------- OAuth2 Google Sheets helpers ----------
 
 def _oauth_creds(tokens: dict):
-    """Build google.oauth2.credentials.Credentials from stored token dict."""
     from google.oauth2.credentials import Credentials
     return Credentials(
         token=tokens.get("access_token"),
@@ -187,7 +158,6 @@ def _oauth_creds(tokens: dict):
 
 
 def _refresh_oauth_creds(tokens: dict):
-    """Return up-to-date Credentials, refreshing and persisting if needed."""
     from google.auth.transport.requests import Request as GRequest
     creds = _oauth_creds(tokens)
     if not creds.valid:
@@ -222,30 +192,27 @@ def load_from_gsheets_oauth(sheet_id, sheet_name, tokens):
     return df
 
 
-def load_sales_from_gsheets_oauth(sheet_id, tokens):
+def load_sheet_as_context_oauth(sheet_id, tab_name, tokens):
+    """Load any worksheet tab as a generic context DataFrame (first-row headers)."""
     import gspread
     creds = _refresh_oauth_creds(tokens)
     client = gspread.authorize(creds)
     sh = client.open_by_key(sheet_id)
-    ws = sh.worksheet("sale")
+    ws = sh.worksheet(tab_name)
     rows = ws.get_all_values()
     if len(rows) < 2:
-        return pd.DataFrame(columns=["Date", "Invoice", "DoctorHospital", "Address"])
+        return pd.DataFrame()
     df = pd.DataFrame(rows[1:], columns=rows[0])
-    df = df.iloc[:, :4].copy()
-    df.columns = ["Date", "Invoice", "DoctorHospital", "Address"]
-    return df[df["Invoice"].astype(str).str.startswith("ALF/")]
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
 
 
 def list_drive_sheets(tokens):
-    """Return list of Google Sheets the user can access. Persists refreshed tokens."""
     import requests as req_lib
     from google.auth.transport.requests import Request as GRequest
     creds = _oauth_creds(tokens)
-    # Refresh if expired (access tokens last ~1 hour)
     if not creds.valid:
         creds.refresh(GRequest())
-        # Persist the new access_token so subsequent calls don't 401
         updated = dict(tokens)
         updated["access_token"] = creds.token
         if creds.refresh_token:
@@ -264,9 +231,9 @@ def list_drive_sheets(tokens):
 # ---------- Data Loading ----------
 
 def load_transactions():
-    active_sheet_id  = get_setting("active_sheet_id") or GOOGLE_SHEETS_ID
-    active_tab_name  = get_setting("active_tab_name") or "query_sk"
-    active_creds     = get_setting("oauth_tokens")
+    active_sheet_id = get_setting("active_sheet_id") or GOOGLE_SHEETS_ID
+    active_tab_name = get_setting("active_tab_name") or "query_sk"
+    active_creds    = get_setting("oauth_tokens")
     if active_sheet_id:
         try:
             if active_creds:
@@ -286,61 +253,37 @@ def load_transactions():
     return transactions
 
 
-def load_sales():
+def load_context_sheets():
+    """
+    Load all user-selected context sheets (additional tabs chosen after base sheet selection).
+    Returns list of { tab_name, df } dicts.
+    """
     active_sheet_id = get_setting("active_sheet_id") or GOOGLE_SHEETS_ID
     active_creds    = get_setting("oauth_tokens")
-    if active_sheet_id:
+    context_tabs_json = get_setting("context_tab_names", "[]")
+    try:
+        context_tabs = json.loads(context_tabs_json)
+    except Exception:
+        context_tabs = []
+
+    if not active_sheet_id or not active_creds or not context_tabs:
+        return []
+
+    results = []
+    tokens = json.loads(active_creds)
+    for tab in context_tabs:
         try:
-            if active_creds:
-                return load_sales_from_gsheets_oauth(active_sheet_id, json.loads(active_creds))
-            elif gsheets_available():
-                return load_sales_from_gsheets(active_sheet_id)
+            df = load_sheet_as_context_oauth(active_sheet_id, tab, tokens)
+            results.append({"tab_name": tab, "df": df})
         except Exception as e:
-            print(f"GSheets sales failed, falling back to Excel: {e}")
-
-    sales = pd.read_excel(EXCEL_PATH, sheet_name="sale", header=0)
-    sales = sales.iloc[:, :4].copy()
-    sales.columns = ["Date", "Invoice", "DoctorHospital", "Address"]
-    return sales[sales["Invoice"].astype(str).str.startswith("ALF/")]
-
-
-def load_reference_data():
-    refs = {}
-    for name, fname, cols in [
-        ("hotel", "hotel_report.csv",
-         ["Booking ID","Checkin Date","Checkout Date","Hotel Name","Hotel City",
-          "Net amount charged ","Advance Receipt Number","MMT Invoice No","Booker Name","Payment Source "]),
-        ("flight", "flight_report.csv",
-         ["Booking ID","PNR No(s)","Departure Date","From City","To City",
-          "Net amount charged","MMT Invoice No","Airline Name(s)","Booker Name","Booking Action","Payment Source "]),
-        ("cab", "cab_report.csv",
-         ["Booking ID","Travel Date","Departure City","Arrival City","Cab Vendor Name",
-          "Cab Name","Net Booking Amount","MMT Invoice No.","Booker Name","Payment Source"]),
-        ("bus", "bus_report.csv",
-         ["Booking ID","PNR No","Journey Date","Departure City","Arrival City","Bus Operator",
-          "Net amount charged","MMT Invoice No","Booker Name","Booking Action","Payment Source "]),
-        ("amazon", "amazon_orders.csv",
-         ["Order Date","Order ID","Title","Order Net Total","Payment Date",
-          "Payment Amount","Order Status","Account User Email"]),
-    ]:
-        try:
-            df = pd.read_csv(os.path.join(BASE_DIR, fname), encoding="utf-8-sig")
-            refs[name] = df[[c for c in cols if c in df.columns]].copy()
-        except Exception:
-            refs[name] = pd.DataFrame()
-    return refs
+            print(f"Failed to load context tab '{tab}': {e}")
+    return results
 
 
 # ---------- Duplicate Detection ----------
 
 def detect_duplicates(transactions_df):
-    """
-    Returns dict: str(index) -> list of suspected duplicate indices.
-    Heuristic: same Payment type, same first-word vendor from narration,
-    amount within 1%, within 90-day window.
-    """
     from datetime import datetime
-
     payments = []
     for i, (_, row) in enumerate(transactions_df.iterrows()):
         if str(row.get("Voucher Type", "")).strip() == "Payment":
@@ -353,7 +296,6 @@ def detect_duplicates(transactions_df):
             vendor = narration.split()[0] if narration else ""
             payments.append({"idx": i, "amt": amt, "date": date_str,
                              "narration": narration, "vendor": vendor})
-
     duplicates = {}
     for j, p in enumerate(payments):
         for k, q in enumerate(payments):
@@ -374,63 +316,27 @@ def detect_duplicates(transactions_df):
                 pass
             duplicates.setdefault(str(p["idx"]), []).append(q["idx"])
             duplicates.setdefault(str(q["idx"]), []).append(p["idx"])
-
     return duplicates
 
 
 # ---------- Classification ----------
 
-def build_sales_context(sales_df):
-    lines = []
-    for _, row in sales_df.iterrows():
-        inv = str(row["Invoice"]).strip()
-        dh = str(row["DoctorHospital"]).strip() if pd.notna(row["DoctorHospital"]) else ""
-        date = str(row["Date"]).strip() if pd.notna(row["Date"]) else ""
-        addr = str(row["Address"]).strip() if pd.notna(row["Address"]) else ""
-        lines.append(f"  {inv}: {dh} | Date: {date} | {addr[:80]}")
-    return "\n".join(lines)
-
-
-def build_reference_context(refs):
+def build_context_sheet_summary(context_sheets):
+    """Build a text summary of all user-selected context sheets to include in the AI prompt."""
+    if not context_sheets:
+        return ""
     parts = []
-    if not refs["hotel"].empty:
-        parts.append("HOTEL BOOKINGS (MakeMyTrip):")
-        for _, r in refs["hotel"].iterrows():
-            amt = str(r.get("Net amount charged ", "")).strip()
-            parts.append(f"  [{r['Booking ID']}] {r['Hotel Name']}, {r['Hotel City']} | "
-                         f"Checkin: {str(r['Checkin Date'])[:10]} | Rs.{amt} | "
-                         f"Receipt: {r.get('Advance Receipt Number','')} | Invoice: {r.get('MMT Invoice No','')}")
-    if not refs["flight"].empty:
-        parts.append("\nFLIGHT BOOKINGS (MakeMyTrip):")
-        for _, r in refs["flight"].iterrows():
-            action = str(r.get("Booking Action", "")).strip()
-            amt = str(r.get("Net amount charged", "")).strip()
-            parts.append(f"  [{r['Booking ID']}] {r['Airline Name(s)']} PNR:{r['PNR No(s)']} | "
-                         f"{r['From City']}-->{r['To City']} | "
-                         f"Dep: {str(r['Departure Date'])[:10]} | Rs.{amt} ({action}) | Invoice: {r.get('MMT Invoice No','')}")
-    if not refs["cab"].empty:
-        parts.append("\nCAB BOOKINGS (MakeMyTrip):")
-        for _, r in refs["cab"].iterrows():
-            parts.append(f"  [{r['Booking ID']}] {r.get('Cab Vendor Name','')} {r.get('Cab Name','')} | "
-                         f"{r.get('Departure City','')}-->{r.get('Arrival City','')} | "
-                         f"Date: {str(r.get('Travel Date',''))[:10]} | Rs.{r.get('Net Booking Amount','')} | "
-                         f"Invoice: {r.get('MMT Invoice No.','')}")
-    if not refs["bus"].empty:
-        parts.append("\nBUS BOOKINGS (MakeMyTrip):")
-        for _, r in refs["bus"].iterrows():
-            action = str(r.get("Booking Action", "")).strip()
-            amt = str(r.get("Net amount charged", "")).strip()
-            parts.append(f"  [{r['Booking ID']}] {r.get('Bus Operator','')} PNR:{r.get('PNR No','')} | "
-                         f"{r.get('Departure City','')}-->{r.get('Arrival City','')} | "
-                         f"Date: {str(r.get('Journey Date',''))[:10]} | Rs.{amt} ({action}) | Invoice: {r.get('MMT Invoice No','')}")
-    if not refs["amazon"].empty:
-        parts.append("\nAMAZON ORDERS:")
-        for _, r in refs["amazon"].iterrows():
-            title = str(r.get("Title", ""))[:70]
-            parts.append(f"  [Order {r['Order ID']}] {title} | "
-                         f"Rs.{r.get('Order Net Total','')} | "
-                         f"Order: {r.get('Order Date','')} | Pay: {r.get('Payment Date','')} | "
-                         f"Status: {r.get('Order Status','')}")
+    for ctx in context_sheets:
+        tab = ctx["tab_name"]
+        df = ctx["df"]
+        if df.empty:
+            continue
+        parts.append(f"\n=== CONTEXT SHEET: {tab} ===")
+        # Serialize up to 300 rows as compact text
+        for _, row in df.head(300).iterrows():
+            row_str = " | ".join(f"{k}: {str(v).strip()}" for k, v in row.items() if str(v).strip() and str(v).strip().lower() not in ("nan", "none", ""))
+            if row_str:
+                parts.append(f"  {row_str}")
     return "\n".join(parts)
 
 
@@ -442,7 +348,7 @@ def apply_learned_rules(item, learned_rules):
     return None
 
 
-def classify_transactions_batch(transactions_df, sales_df, refs):
+def classify_transactions_batch(transactions_df, context_sheets):
     if not GEMINI_API_KEY:
         return [{"classification": "API key missing", "reference_id": "", "matched_detail": "",
                  "confidence": "low", "reasoning": "No Gemini API key set."}
@@ -451,8 +357,7 @@ def classify_transactions_batch(transactions_df, sales_df, refs):
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
-    sales_context = build_sales_context(sales_df)
-    reference_context = build_reference_context(refs)
+    context_section = build_context_sheet_summary(context_sheets)
     learned_rules = get_learned_rules()
 
     txn_list = []
@@ -469,7 +374,6 @@ def classify_transactions_batch(transactions_df, sales_df, refs):
 
     results = [None] * len(txn_list)
 
-    # Apply learned rules first
     needs_ai = []
     for item in txn_list:
         learned = apply_learned_rules(item, learned_rules)
@@ -491,43 +395,41 @@ def classify_transactions_batch(transactions_df, sales_df, refs):
         for r in learned_rules:
             learned_rules_text += f'  If narration contains "{r["pattern"]}" → classify as "{r["classification"]}"\n'
 
+    context_block = ""
+    if context_section:
+        context_block = f"\n=== ADDITIONAL CONTEXT SHEETS (use to match transactions) ===\n{context_section}\n"
+
     batch_size = 50
     for start in range(0, len(needs_ai), batch_size):
         batch = needs_ai[start:start + batch_size]
         batch_json = json.dumps(batch, indent=2)
 
         prompt = f"""You are an AI assistant classifying bank transactions for Alfaleus Technology Pvt Ltd, a medical device company selling ophthalmic (eye care) devices.
-
-=== DEVICE SALES RECORDS (Invoice → Doctor/Hospital name mapping) ===
-{sales_context}
-
-=== TRAVEL & EXPENSE REFERENCE DATA ===
-{reference_context}
+{context_block}
 {learned_rules_text}
 
 === YOUR TASK ===
-Classify each transaction below. Match it to a known reference record wherever possible.
+Classify each transaction below. Use the context sheets above to match transactions to known records wherever possible.
 "Other Expense" and "Other Income" are LAST RESORTS — use specific categories first.
 
 PAYMENTS (outgoing) — pick the MOST SPECIFIC matching category:
 - "Exhibition/Conference Expense" — AIOC, stall, fabrication, passes, AIOYV, GENERAL FUND, AIOC PROMOTION, AIOC EXPENSE, any AIOC-related spend
-- "Salary/Freelance Payment" — FREELANCING, FREELANCE, WEBDEV CONSULTANCY, SIRISHA, KARUNA SINGH, or any payment clearly to an individual for services/work
-- "Hotel Booking" — hotel name in narration, or match amount+date to hotel records above
-- "Flight Booking" — airline name or PNR in narration, or match amount+date to flight records above
-- "Cab/Transport Booking" — QUICKRIDE, SAVAARI, cab, taxi, or match to cab records above
-- "Bus Booking" — bus operator name or PNR, or match to bus records above
+- "Salary/Freelance Payment" — FREELANCING, FREELANCE, WEBDEV CONSULTANCY, or any payment clearly to an individual for services/work
+- "Hotel Booking" — hotel name in narration, or match amount+date to any hotel records in context sheets
+- "Flight Booking" — airline name or PNR in narration, or match amount+date to flight records in context sheets
+- "Cab/Transport Booking" — QUICKRIDE, SAVAARI, cab, taxi, or match to cab/transport records in context sheets
+- "Bus Booking" — bus operator name or PNR, or match to bus records in context sheets
 - "Courier/Logistics" — BLUE DART, BLUEDART, GENERATING DYNAMIC (Blue Dart code), courier, shipping
-- "Sales Incentive Payment" — Incentive in narration, PIUSVARGHE, ABDULBAQEE, MADHUJYADA, MMT/IMPS to field agents
-- "Amazon Purchase" — AMAZON, amazonupi, or match amount+date to Amazon order records above
+- "Sales Incentive Payment" — Incentive in narration, MMT/IMPS to field agents
 - "Office/Admin Expense" — car wash, PAYTM jio/utility, AWFIS coworking, ROBSOAP, DAZZLE ROBOTICS, IOCL fuel/petrol, small tools/supplies
 - "Tax Payment" — CBDT, GST, TDS, income tax
 - "Bank/Finance Transaction" — LITE (UPI Lite add money), ADD MONEY, wallet top-up, UPIRET refund, PHONEPE REVERSE
-- "Business Travel/Logistics" — DELHI EXPENSES, city name + EXPENSES, travel reimbursement, petrol/toll not via MMT, any travel cost without a specific booking match
+- "Business Travel/Logistics" — DELHI EXPENSES, city name + EXPENSES, travel reimbursement, petrol/toll, any travel cost without a specific booking match
 - "Sales Consultant Payment" — SALES CONSULTANT, commission payment
 - "Other Expense" — ONLY if truly none of the above fit
 
 RECEIPTS (incoming) — pick the MOST SPECIFIC matching category:
-- "Device Payment Receipt" — incoming UPI/NEFT/IMPS from any doctor, hospital, or person whose name appears in the sales records
+- "Device Payment Receipt" — incoming UPI/NEFT/IMPS from any doctor, hospital, or person whose name appears in context sheets
 - "EMI/Installment Receipt" — same sender appearing more than once, or narration says EMI
 - "Card Settlement" — TERMINAL CARDS SETTL, CARDS SETTL (daily POS batch)
 - "Payment Gateway Receipt" — PAYUFLI, REF-PAYUFLI (online payment gateway)
@@ -535,11 +437,11 @@ RECEIPTS (incoming) — pick the MOST SPECIFIC matching category:
 
 CRITICAL RULES:
 1. NEVER use "Other Expense" if ANY keyword above matches the narration
-2. NEVER use "Other Income" if the sender name appears anywhere in the sales records
+2. NEVER use "Other Income" if the sender name appears anywhere in the context sheets
 3. Payments to named individuals for city/travel costs = "Business Travel/Logistics"
 4. Payments to named individuals for work/services = "Salary/Freelance Payment"
 5. Any narration containing AIOC = "Exhibition/Conference Expense" always
-6. Match hotel/flight/bus/cab by amount AND approximate date
+6. Match hotel/flight/bus/cab by amount AND approximate date using context sheets if provided
 
 TRANSACTIONS:
 {batch_json}
@@ -549,7 +451,7 @@ Return a JSON array (same length, same order):
   {{
     "idx": <same idx>,
     "classification": "<category>",
-    "reference_id": "<MMT Invoice No / ALF Invoice / Amazon Order ID / empty string>",
+    "reference_id": "<reference ID from context sheet or empty string>",
     "matched_detail": "<what was matched>",
     "confidence": "high|medium|low",
     "reasoning": "<1-2 sentence explanation>"
@@ -591,8 +493,7 @@ def index():
 def get_data():
     try:
         transactions = load_transactions()
-        sales = load_sales()
-        refs = load_reference_data()
+        context_sheets = load_context_sheets()
 
         txns = [{"date": str(row.get("Date", "")).strip(),
                  "particulars": str(row.get("Particulars", "")).strip(),
@@ -602,19 +503,20 @@ def get_data():
                  "gross_total": str(row.get("Gross Total", "")).strip()}
                 for _, row in transactions.iterrows()]
 
-        sales_list = [{"invoice": str(r["Invoice"]).strip(),
-                       "doctor_hospital": str(r["DoctorHospital"]).strip() if pd.notna(r["DoctorHospital"]) else "",
-                       "date": str(r["Date"]).strip() if pd.notna(r["Date"]) else "",
-                       "address": str(r["Address"]).strip() if pd.notna(r["Address"]) else ""}
-                      for _, r in sales.iterrows()]
-
         duplicates = detect_duplicates(transactions)
-        ref_counts = {k: len(v) for k, v in refs.items()}
         data_source = "google_sheets" if GOOGLE_SHEETS_ID and gsheets_available() else "excel"
 
-        return jsonify({"transactions": txns, "sales": sales_list,
-                        "total": len(txns), "ref_counts": ref_counts,
-                        "duplicates": duplicates, "data_source": data_source})
+        context_tab_names = []
+        try:
+            context_tab_names = json.loads(get_setting("context_tab_names", "[]"))
+        except Exception:
+            pass
+
+        return jsonify({"transactions": txns,
+                        "total": len(txns),
+                        "duplicates": duplicates,
+                        "data_source": data_source,
+                        "context_tabs": context_tab_names})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -625,8 +527,7 @@ def classify():
         data = request.json
         indices = data.get("indices", None)
         transactions = load_transactions()
-        sales = load_sales()
-        refs = load_reference_data()
+        context_sheets = load_context_sheets()
 
         if indices is not None:
             subset = transactions.iloc[indices].copy()
@@ -634,7 +535,7 @@ def classify():
             subset = transactions.copy()
             indices = list(range(len(transactions)))
 
-        results = classify_transactions_batch(subset, sales, refs)
+        results = classify_transactions_batch(subset, context_sheets)
         output = [{"original_index": indices[i], **res} for i, res in enumerate(results) if res]
         return jsonify({"results": output})
     except Exception as e:
@@ -647,10 +548,9 @@ def classify_single():
         data = request.json
         idx = data.get("index", 0)
         transactions = load_transactions()
-        sales = load_sales()
-        refs = load_reference_data()
+        context_sheets = load_context_sheets()
         subset = transactions.iloc[[idx]]
-        results = classify_transactions_batch(subset, sales, refs)
+        results = classify_transactions_batch(subset, context_sheets)
         return jsonify({"result": results[0] if results else None})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -658,11 +558,6 @@ def classify_single():
 
 @app.route("/api/feedback", methods=["POST"])
 def submit_feedback():
-    """
-    Body: { index, original_classification, corrected_classification,
-            should_learn, narration, date, gross_total }
-    Returns: { affected_indices: [...] } — other transactions matching the learned rule
-    """
     try:
         data = request.json
         idx = data.get("index")
@@ -719,23 +614,20 @@ def status():
     sheets_lib = gsheets_available()
     try:
         transactions = load_transactions()
-        sales = load_sales()
-        refs = load_reference_data()
         rules = get_learned_rules()
+        context_tabs = json.loads(get_setting("context_tab_names", "[]"))
         return jsonify({
             "api_key_set": has_key,
             "excel_loaded": True,
             "transaction_count": len(transactions),
-            "sale_count": len(sales),
-            "ref_counts": {k: len(v) for k, v in refs.items()},
             "google_sheets_id": GOOGLE_SHEETS_ID,
             "google_sheets_connected": has_sheets and sheets_lib,
             "learned_rules_count": len(rules),
+            "context_tab_count": len(context_tabs),
             "data_source": "google_sheets" if has_sheets and sheets_lib else "excel",
         })
     except Exception as e:
         return jsonify({"api_key_set": has_key, "excel_loaded": False, "error": str(e)})
-
 
 
 # ---------- Google Drive OAuth2 routes ----------
@@ -794,7 +686,6 @@ def gdrive_sheets():
         return jsonify({"error": "not_connected"}), 401
     try:
         sheets = list_drive_sheets(json.loads(tokens_str))
-        # Update stored tokens (refresh may have updated access_token)
         return jsonify({"sheets": sheets})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -805,19 +696,31 @@ def gdrive_select():
     data = request.json or {}
     sheet_id   = data.get("sheet_id", "").strip()
     sheet_name = data.get("sheet_name", "").strip()
-    tab_name   = data.get("tab_name", "").strip()   # worksheet tab chosen by user
+    tab_name   = data.get("tab_name", "").strip()
     if not sheet_id:
         return jsonify({"error": "sheet_id required"}), 400
     set_setting("active_sheet_id", sheet_id)
     set_setting("active_sheet_name", sheet_name)
     if tab_name:
         set_setting("active_tab_name", tab_name)
+    # Clear context tabs whenever base sheet/tab changes
+    set_setting("context_tab_names", "[]")
     return jsonify({"ok": True, "sheet_id": sheet_id, "sheet_name": sheet_name, "tab_name": tab_name})
+
+
+@app.route("/api/gdrive/set_context_tabs", methods=["POST"])
+def set_context_tabs():
+    """Save list of worksheet tab names to use as classification context."""
+    data = request.json or {}
+    tabs = data.get("tabs", [])
+    if not isinstance(tabs, list):
+        return jsonify({"error": "tabs must be an array"}), 400
+    set_setting("context_tab_names", json.dumps(tabs))
+    return jsonify({"ok": True, "tabs": tabs})
 
 
 @app.route("/api/gdrive/worksheets")
 def gdrive_worksheets():
-    """Return all worksheet tab names for a given spreadsheet."""
     sheet_id = request.args.get("sheet_id", "").strip()
     if not sheet_id:
         return jsonify({"error": "sheet_id required"}), 400
@@ -837,11 +740,6 @@ def gdrive_worksheets():
 
 @app.route("/api/gdrive/write_results", methods=["POST"])
 def gdrive_write_results():
-    """
-    Write classified results back to the Google Sheet as a new tab called 'Classified'.
-    Body: { results: [ {date, narration, voucher_type, gross_total,
-                         classification, reference_id, confidence, reasoning}, ... ] }
-    """
     tokens_str = get_setting("oauth_tokens")
     sheet_id   = get_setting("active_sheet_id")
     if not tokens_str or not sheet_id:
@@ -852,33 +750,23 @@ def gdrive_write_results():
         rows    = data.get("results", [])
         if not rows:
             return jsonify({"error": "No results provided"}), 400
-
         creds  = _refresh_oauth_creds(json.loads(tokens_str))
         client = gspread.authorize(creds)
         sh     = client.open_by_key(sheet_id)
-
         OUTPUT_TAB = "Classified"
         try:
             ws = sh.worksheet(OUTPUT_TAB)
             ws.clear()
         except gspread.exceptions.WorksheetNotFound:
             ws = sh.add_worksheet(title=OUTPUT_TAB, rows=len(rows) + 10, cols=10)
-
         header = ["Date", "Narration", "Voucher Type", "Gross Total",
                   "Classification", "Reference ID", "Confidence", "Reasoning"]
         body   = [[
-            r.get("date", ""),
-            r.get("narration", ""),
-            r.get("voucher_type", ""),
-            r.get("gross_total", ""),
-            r.get("classification", ""),
-            r.get("reference_id", ""),
-            r.get("confidence", ""),
-            r.get("reasoning", ""),
+            r.get("date", ""), r.get("narration", ""), r.get("voucher_type", ""),
+            r.get("gross_total", ""), r.get("classification", ""),
+            r.get("reference_id", ""), r.get("confidence", ""), r.get("reasoning", ""),
         ] for r in rows]
-
         ws.update([header] + body)
-        # Basic header formatting
         ws.format("A1:H1", {"textFormat": {"bold": True},
                              "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.5}})
         return jsonify({"ok": True, "tab": OUTPUT_TAB, "rows_written": len(body)})
@@ -892,11 +780,17 @@ def gdrive_status():
     sheet_id   = get_setting("active_sheet_id") or GOOGLE_SHEETS_ID
     sheet_name = get_setting("active_sheet_name", "")
     tab_name   = get_setting("active_tab_name", "")
+    context_tabs = []
+    try:
+        context_tabs = json.loads(get_setting("context_tab_names", "[]"))
+    except Exception:
+        pass
     return jsonify({
         "connected": bool(tokens_str),
         "active_sheet_id": sheet_id,
         "active_sheet_name": sheet_name,
         "active_tab_name": tab_name,
+        "context_tabs": context_tabs,
         "oauth_configured": bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET),
     })
 
@@ -906,6 +800,7 @@ def gdrive_disconnect():
     set_setting("oauth_tokens", "")
     set_setting("active_sheet_id", "")
     set_setting("active_sheet_name", "")
+    set_setting("context_tab_names", "[]")
     return jsonify({"ok": True})
 
 
