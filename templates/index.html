@@ -234,6 +234,32 @@
   .amount-cell.receipt { color: var(--green); }
   .amount-cell.payment { color: var(--red); }
 
+  /* ===================== PAGINATION ===================== */
+  .pagination-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem; color: var(--text-muted);
+    flex-wrap: wrap; gap: 8px;
+  }
+  .pagination-controls { display: flex; align-items: center; gap: 4px; }
+  .page-btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-dim); border-radius: 6px;
+    padding: 4px 10px; cursor: pointer; font-size: 0.78rem;
+    font-family: var(--sans); transition: all 0.12s; line-height: 1.4;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+  .page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .page-size-select {
+    padding: 4px 8px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-dim); font-size: 0.78rem;
+    outline: none; cursor: pointer; font-family: var(--sans);
+  }
+  .page-size-select:focus { border-color: var(--accent); }
+
   /* ===================== BADGES ===================== */
   .badge {
     display: inline-flex; align-items: center; gap: 4px;
@@ -744,6 +770,19 @@
           </td></tr>
         </tbody>
       </table>
+      <!-- Pagination bar -->
+      <div class="pagination-bar" id="paginationBar">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="pageInfo">—</span>
+          <select class="page-size-select" id="pageSizeSelect" onchange="changePageSize(this.value)">
+            <option value="25">25 / page</option>
+            <option value="50" selected>50 / page</option>
+            <option value="100">100 / page</option>
+            <option value="200">200 / page</option>
+          </select>
+        </div>
+        <div class="pagination-controls" id="pageControls"></div>
+      </div>
     </div>
 
     <!-- Detail panel -->
@@ -985,6 +1024,11 @@ let duplicatesMap = {};
 let reviewQueue = [];
 let reviewPos = 0;
 
+// Pagination state
+let currentPage = 1;
+let pageSize = 50;
+let filteredIndexCache = [];
+
 // Drive state
 let driveSheets = [];
 let activeDriveSheetId = null;
@@ -1096,17 +1140,67 @@ function getFilteredIndices() {
     return true;
   }).map(({ i }) => i);
 }
-function filterTable() { renderTable(); updateStats(); }
+function filterTable() { currentPage = 1; renderTable(); updateStats(); }
+
+function changePageSize(val) {
+  pageSize = parseInt(val, 10);
+  currentPage = 1;
+  renderTable();
+}
+
+function goToPage(p) {
+  currentPage = p;
+  renderTable();
+  // Scroll table back to top
+  const panel = document.querySelector('.table-panel');
+  if (panel) panel.scrollTop = 0;
+}
+
+function renderPagination(total) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const info = document.getElementById('pageInfo');
+  const start = Math.min((currentPage - 1) * pageSize + 1, total);
+  const end = Math.min(currentPage * pageSize, total);
+  info.textContent = total === 0 ? 'No results' : `${start}–${end} of ${total}`;
+
+  const ctrl = document.getElementById('pageControls');
+  if (totalPages <= 1) { ctrl.innerHTML = ''; return; }
+
+  let html = `<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹ Prev</button>`;
+
+  // Smart page number window
+  const window_size = 5;
+  let startP = Math.max(1, currentPage - Math.floor(window_size / 2));
+  let endP = Math.min(totalPages, startP + window_size - 1);
+  if (endP - startP < window_size - 1) startP = Math.max(1, endP - window_size + 1);
+
+  if (startP > 1) html += `<button class="page-btn" onclick="goToPage(1)">1</button>${startP > 2 ? '<span style="padding:0 4px;color:var(--text-muted)">…</span>' : ''}`;
+  for (let p = startP; p <= endP; p++) {
+    html += `<button class="page-btn${p === currentPage ? ' active' : ''}" onclick="goToPage(${p})">${p}</button>`;
+  }
+  if (endP < totalPages) html += `${endP < totalPages - 1 ? '<span style="padding:0 4px;color:var(--text-muted)">…</span>' : ''}<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+
+  html += `<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next ›</button>`;
+  ctrl.innerHTML = html;
+}
 
 // ---- Table render ----
 function renderTable() {
-  const indices = getFilteredIndices();
+  filteredIndexCache = getFilteredIndices();
+  const indices = filteredIndexCache;
+  const total = indices.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const pageIndices = indices.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  renderPagination(total);
+
   const tbody = document.getElementById('txnBody');
-  if (indices.length === 0) {
+  if (pageIndices.length === 0) {
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">No transactions match</td></tr>`;
     return;
   }
-  tbody.innerHTML = indices.map(i => {
+  tbody.innerHTML = pageIndices.map(i => {
     const t = allTransactions[i];
     const res = classificationResults[i];
     const isReceipt = t.voucher_type === 'Receipt';
@@ -1300,6 +1394,11 @@ function renderDetailPanel(i) {
         <button class="btn btn-success" onclick="acceptClassification(${i})">${icon('ic-check',12)} Accept</button>
         <button class="btn btn-primary" onclick="submitFeedback(${i})">${icon('ic-check',12)} Save Correction</button>
       </div>
+      <div style="margin-top:9px;font-size:0.7rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:8px">
+        <span class="key">Enter</span> Accept &nbsp;·&nbsp;
+        <span class="key">R</span> Focus correct &nbsp;·&nbsp;
+        <span class="key">↑↓</span> Navigate rows
+      </div>
     </div>
     ` : `
     <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="classifySingle(${i})">
@@ -1450,6 +1549,42 @@ function handleReviewKey(e) {
   else if (e.key === 'r' || e.key === 'R') reviewReject();
   else if (e.key === 's' || e.key === 'S') reviewSkip();
   else if (e.key === 'Escape') closeQuickReview();
+}
+
+// Global shortcuts for detail panel (when quick review is NOT open)
+document.addEventListener('keydown', function(e) {
+  if (document.getElementById('reviewOverlay').classList.contains('show')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (selectedTxnIndex === null || !classificationResults[selectedTxnIndex]) return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    acceptClassification(selectedTxnIndex);
+    showToast('Accepted ✓ — use ↑↓ arrows to navigate rows');
+  } else if (e.key === 'r' || e.key === 'R') {
+    e.preventDefault();
+    // Focus the feedback category select in detail panel
+    const cat = document.getElementById('feedbackCat');
+    if (cat) { cat.focus(); showToast('Select correct category, then Save Correction'); }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault(); navigateRow(1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault(); navigateRow(-1);
+  }
+});
+
+function navigateRow(dir) {
+  const visibleIndices = filteredIndexCache.length ? filteredIndexCache : getFilteredIndices();
+  const pos = visibleIndices.indexOf(selectedTxnIndex);
+  if (pos === -1) return;
+  const nextPos = pos + dir;
+  if (nextPos < 0 || nextPos >= visibleIndices.length) return;
+  const nextIdx = visibleIndices[nextPos];
+  // Switch page if necessary
+  const newPage = Math.floor(nextPos / pageSize) + 1;
+  if (newPage !== currentPage) { currentPage = newPage; renderTable(); }
+  selectRow(nextIdx);
+  // Scroll row into view
+  setTimeout(() => { const r = document.getElementById('row-' + nextIdx); if (r) r.scrollIntoView({ block: 'nearest' }); }, 50);
 }
 
 // ---- Classify ----
