@@ -12,4 +12,4 @@ EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 ENV EXCEL_PATH=/app/Query_sheet_alfaleus.xlsx
 
-CMD gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120
+CMD gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 120
