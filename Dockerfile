@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 COPY . .
 
@@ -12,4 +12,4 @@ EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 ENV EXCEL_PATH=/app/Query_sheet_alfaleus.xlsx
 
-CMD ["python", "app.py"]
+CMD gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120
