@@ -1,0 +1,6 @@
+[deploy]
+healthcheckPath = "/api/status"
+healthcheckTimeout = 30
+
+[[volumes]]
+mountPath = "/app/data"
