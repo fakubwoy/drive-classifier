@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alfaleus — Transaction Classifier</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --surface2: #252840;
+    --border: #2e3158;
+    --accent: #6c63ff;
+    --accent2: #4ecdc4;
+    --text: #e2e8f0;
+    --text-muted: #8892a4;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --orange: #f97316;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  .header {
+    background: linear-gradient(135deg, #1a1d2e 0%, #252840 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 28px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo { width: 42px; height: 42px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .header h1 { font-size: 1.3rem; font-weight: 700; }
+  .header h1 span { color: var(--accent2); }
+  .status-bar { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-muted); flex-wrap: wrap; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+  .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.warn { background: var(--yellow); }
+  .status-dot.err { background: var(--red); }
+  .sheets-badge { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid rgba(78,205,196,0.3); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }
+  .excel-badge { background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.25); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }
+
+  .toolbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 28px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 0.88rem; font-weight: 600; transition: all 0.18s;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #5a52e0; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-success { background: var(--green); color: #fff; }
+  .btn-success:hover { background: #059669; }
+  .btn-warning { background: var(--yellow); color: #000; }
+  .btn-warning:hover { background: #d97706; }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .search-box {
+    flex: 1; max-width: 320px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 0.88rem; outline: none;
+  }
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--text-muted); }
+
+  .filter-select {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; color: var(--text); font-size: 0.85rem; outline: none; cursor: pointer;
+  }
+  .filter-select:focus { border-color: var(--accent); }
+
+  .stats-bar { padding: 14px 28px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 20px; min-width: 130px; text-align: center;
+  }
+  .stat-card .num { font-size: 1.5rem; font-weight: 700; color: var(--accent2); }
+  .stat-card .lbl { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+  .main-grid { display: grid; grid-template-columns: 1fr 360px; gap: 0; min-height: calc(100vh - 200px); }
+
+  .table-panel { overflow: auto; padding: 0 0 40px 28px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  thead th {
+    background: var(--surface); color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em;
+    padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 2; white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.12s; }
+  tbody tr:hover { background: var(--surface); }
+  tbody tr.selected { background: rgba(108, 99, 255, 0.12); border-left: 3px solid var(--accent); }
+  tbody tr.classifying { background: rgba(245, 158, 11, 0.07); }
+  tbody tr.duplicate-warn { border-left: 3px solid var(--yellow) !important; }
+  td { padding: 10px 14px; vertical-align: middle; }
+
+  .narration-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 0.8rem; }
+  .amount-cell { font-weight: 600; white-space: nowrap; }
+  .amount-cell.receipt { color: var(--green); }
+  .amount-cell.payment { color: var(--red); }
+
+  .badge {
+    display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px;
+    font-size: 0.72rem; font-weight: 600; white-space: nowrap;
+  }
+  .badge-receipt { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+  .badge-payment { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+  .badge-classified { background: rgba(108,99,255,0.15); color: #a78bfa; border: 1px solid rgba(108,99,255,0.3); }
+  .badge-learned { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid rgba(78,205,196,0.3); }
+  .badge-pending { background: rgba(136,146,164,0.12); color: var(--text-muted); border: 1px solid var(--border); }
+  .badge-invoice { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid rgba(78,205,196,0.3); }
+  .badge-dup { background: rgba(245,158,11,0.18); color: var(--yellow); border: 1px solid rgba(245,158,11,0.4); }
+  .badge-accepted { background: rgba(16,185,129,0.18); color: var(--green); border: 1px solid rgba(16,185,129,0.35); }
+  .badge-rejected { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+
+  .confidence-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  .conf-high { background: var(--green); }
+  .conf-medium { background: var(--yellow); }
+  .conf-low { background: var(--red); }
+
+  /* Detail Panel */
+  .detail-panel {
+    background: var(--surface); border-left: 1px solid var(--border); padding: 20px;
+    position: sticky; top: 0; height: calc(100vh - 180px); overflow-y: auto;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .detail-panel h2 { font-size: 1rem; font-weight: 700; color: var(--text); }
+  .detail-empty { color: var(--text-muted); font-size: 0.88rem; text-align: center; margin-top: 40px; }
+  .detail-section { background: var(--surface2); border-radius: 10px; padding: 14px; border: 1px solid var(--border); }
+  .detail-section h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 10px; }
+  .detail-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+  .detail-row:last-child { margin-bottom: 0; }
+  .detail-label { font-size: 0.72rem; color: var(--text-muted); }
+  .detail-value { font-size: 0.88rem; font-weight: 500; word-break: break-word; }
+  .narration-full { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; background: var(--bg); padding: 10px; border-radius: 7px; font-family: monospace; word-break: break-all; }
+
+  .classify-result { border: 1px solid var(--accent); border-radius: 10px; padding: 14px; background: rgba(108,99,255,0.07); }
+  .classify-result h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--accent); margin-bottom: 10px; }
+  .classify-result .category { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .classify-result .reasoning { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; }
+
+  /* Duplicate warning */
+  .dup-warning { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.4); border-radius: 10px; padding: 12px 14px; }
+  .dup-warning h3 { color: var(--yellow); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+  .dup-link { color: var(--yellow); cursor: pointer; text-decoration: underline; font-size: 0.82rem; }
+
+  /* Feedback box */
+  .feedback-box { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--surface2); }
+  .feedback-box h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 10px; }
+  .cat-select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 10px; color: var(--text); font-size: 0.85rem; outline: none; margin-bottom: 10px;
+  }
+  .cat-select:focus { border-color: var(--accent); }
+  .learn-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 0.82rem; color: var(--text-muted); cursor: pointer; }
+  .learn-toggle input { accent-color: var(--accent2); cursor: pointer; }
+  .feedback-actions { display: flex; gap: 8px; }
+  .feedback-actions .btn { flex: 1; justify-content: center; padding: 7px 12px; font-size: 0.82rem; }
+
+  /* Quick Review mode */
+  .review-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px); z-index: 200; align-items: center; justify-content: center;
+  }
+  .review-overlay.show { display: flex; }
+  .review-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+    padding: 32px 36px; max-width: 580px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .review-progress { font-size: 0.82rem; color: var(--text-muted); }
+  .review-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; }
+  .review-narration { font-family: monospace; font-size: 0.82rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px; word-break: break-all; }
+  .review-meta { display: flex; gap: 16px; margin-bottom: 16px; font-size: 0.82rem; color: var(--text-muted); flex-wrap: wrap; }
+  .review-meta span { display: flex; align-items: center; gap: 5px; }
+  .review-classification { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .review-reasoning { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 18px; }
+  .review-actions { display: flex; gap: 10px; margin-bottom: 14px; }
+  .review-actions .btn { flex: 1; justify-content: center; font-size: 0.92rem; padding: 10px; }
+  .review-correction { display: none; }
+  .review-correction.show { display: block; }
+  .review-cat-select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 10px; color: var(--text); font-size: 0.85rem; outline: none; margin-bottom: 8px;
+  }
+  .review-shortcut { font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 8px; }
+
+  /* Progress Overlay */
+  .progress-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center;
+  }
+  .progress-overlay.show { display: flex; }
+  .progress-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 32px 40px; text-align: center; min-width: 320px; }
+  .progress-box h3 { font-size: 1.1rem; margin-bottom: 8px; }
+  .progress-box p { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px; }
+  .progress-bar-wrap { background: var(--surface2); border-radius: 20px; height: 8px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 20px; transition: width 0.3s; }
+  .progress-count { font-size: 0.82rem; color: var(--text-muted); margin-top: 10px; }
+
+  /* Tabs */
+  .tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding: 0 28px; background: var(--surface); }
+  .tab { padding: 10px 18px; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Sales table */
+  .sales-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
+  .sales-table th { background: var(--surface); color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  .sales-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .sales-table tr:hover td { background: var(--surface); }
+  .invoice-badge { font-family: monospace; font-weight: 600; color: var(--accent2); }
+
+  /* Rules table */
+  .rules-table { width: 100%; font-size: 0.82rem; border-collapse: collapse; }
+  .rules-table th { background: var(--surface); color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  .rules-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .rules-table tr:hover td { background: var(--surface); }
+
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Google Drive picker modal */
+  .drive-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(6px); z-index: 300; align-items: center; justify-content: center;
+  }
+  .drive-modal-overlay.show { display: flex; }
+  .drive-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+    padding: 28px 32px; width: 540px; max-width: 94vw; max-height: 80vh;
+    display: flex; flex-direction: column; gap: 18px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  }
+  .drive-modal-header { display: flex; align-items: center; justify-content: space-between; }
+  .drive-modal-header h2 { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .drive-modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; }
+  .drive-search { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; color: var(--text); font-size: 0.88rem; outline: none; }
+  .drive-search:focus { border-color: var(--accent); }
+  .drive-sheet-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; max-height: 360px; }
+  .drive-sheet-item {
+    display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+    cursor: pointer; transition: all 0.14s;
+  }
+  .drive-sheet-item:hover { border-color: var(--accent); background: rgba(108,99,255,0.1); }
+  .drive-sheet-item.active-sheet { border-color: var(--accent2); background: rgba(78,205,196,0.1); }
+  .drive-sheet-icon { font-size: 1.3rem; flex-shrink: 0; }
+  .drive-sheet-info { flex: 1; min-width: 0; }
+  .drive-sheet-name { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drive-sheet-meta { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
+  .drive-sheet-tick { color: var(--accent2); font-size: 1.1rem; flex-shrink: 0; }
+  .drive-status { font-size: 0.82rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+  .drive-connect-section { display: flex; flex-direction: column; gap: 12px; }
+  .oauth-setup-hint { font-size: 0.78rem; color: var(--text-muted); background: var(--surface2); border-radius: 8px; padding: 10px 12px; line-height: 1.5; }
+  .oauth-setup-hint code { color: var(--accent2); font-family: monospace; }
+  .drive-btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* Tab picker modal */
+  .tab-picker-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(6px); z-index: 400; align-items: center; justify-content: center;
+  }
+  .tab-picker-overlay.show { display: flex; }
+  .tab-picker-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+    padding: 28px 32px; width: 460px; max-width: 94vw;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  }
+  .tab-picker-modal h2 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+  .tab-picker-modal p { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 18px; line-height: 1.5; }
+  .tab-list { display: flex; flex-direction: column; gap: 7px; max-height: 300px; overflow-y: auto; margin-bottom: 18px; }
+  .tab-item {
+    display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+    cursor: pointer; transition: all 0.14s; font-size: 0.88rem;
+  }
+  .tab-item:hover { border-color: var(--accent); background: rgba(108,99,255,0.1); }
+  .tab-item.selected { border-color: var(--accent2); background: rgba(78,205,196,0.1); }
+
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">💊</div>
+    <div>
+      <h1>Alfaleus <span>Transaction Classifier</span></h1>
+      <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">Powered by Gemini 2.5 Flash · Suspense Account Ledger</div>
+    </div>
+  </div>
+  <div class="status-bar">
+    <div class="status-dot" id="apiDot"></div>
+    <span id="apiStatus">Checking...</span>
+    &nbsp;|&nbsp;
+    <div class="status-dot" id="dataDot"></div>
+    <span id="dataStatus">Loading...</span>
+    &nbsp;|&nbsp;
+    <span id="dataSourceBadge"></span>
+    &nbsp;|&nbsp;
+    <span id="rulesStatus" style="color:var(--accent2)"></span>
+    &nbsp;|&nbsp;
+    <button class="btn btn-secondary" id="driveConnectBtn" onclick="openDriveModal()" style="padding:4px 12px;font-size:0.78rem;">
+      📊 Connect Drive
+    </button>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('transactions', this)">📋 Transactions</div>
+  <div class="tab" onclick="switchTab('sales', this)">📦 Sales Records</div>
+  <div class="tab" onclick="switchTab('rules', this)">🧠 Learned Rules</div>
+</div>
+
+<!-- Transactions Tab -->
+<div class="tab-content active" id="tab-transactions">
+  <div class="toolbar">
+    <button class="btn btn-primary" id="classifyAllBtn" onclick="classifyAll()">✨ Classify All with AI</button>
+    <button class="btn btn-secondary" id="classifySelBtn" onclick="classifySelected()" disabled>🎯 Classify Selected</button>
+    <button class="btn btn-warning" onclick="openQuickReview()">⚡ Quick Review</button>
+    <button class="btn btn-secondary" onclick="exportCSV()">⬇️ Export CSV</button>
+    <button class="btn btn-success" id="saveToSheetBtn" onclick="saveToSheet()" style="display:none;">☁️ Save to Sheet</button>
+    <input class="search-box" type="text" id="searchBox" placeholder="🔍 Search narration, name..." oninput="filterTable()">
+    <select class="filter-select" id="typeFilter" onchange="filterTable()">
+      <option value="">All Types</option>
+      <option value="Receipt">Receipts</option>
+      <option value="Payment">Payments</option>
+    </select>
+    <select class="filter-select" id="classFilter" onchange="filterTable()">
+      <option value="">All Status</option>
+      <option value="classified">Classified</option>
+      <option value="unclassified">Unclassified</option>
+      <option value="duplicate">⚠️ Duplicates</option>
+      <option value="accepted">✅ Accepted</option>
+      <option value="rejected">❌ Rejected</option>
+    </select>
+  </div>
+
+  <div class="stats-bar" id="statsBar"></div>
+
+  <div class="main-grid">
+    <div class="table-panel">
+      <table id="txnTable">
+        <thead>
+          <tr>
+            <th style="width:30px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+            <th>Date</th>
+            <th>Bank</th>
+            <th>Type</th>
+            <th>Narration</th>
+            <th>Amount</th>
+            <th>Classification</th>
+            <th>Invoice</th>
+            <th>Conf</th>
+          </tr>
+        </thead>
+        <tbody id="txnBody">
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)"><div class="spinner"></div><br>Loading transactions...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detailPanel">
+      <h2>Transaction Detail</h2>
+      <div class="detail-empty">👆 Select a transaction to view details, classify, and give feedback</div>
+    </div>
+  </div>
+</div>
+
+<!-- Sales Tab -->
+<div class="tab-content" id="tab-sales">
+  <div style="padding: 20px 28px; overflow: auto;">
+    <table class="sales-table" id="salesTable">
+      <thead>
+        <tr>
+          <th>Invoice No.</th><th>Date</th><th>Customer / Hospital</th><th>Address</th>
+        </tr>
+      </thead>
+      <tbody id="salesBody">
+        <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted)"><div class="spinner"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Rules Tab -->
+<div class="tab-content" id="tab-rules">
+  <div style="padding: 24px 28px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div>
+        <h2 style="font-size:1rem;font-weight:700;">🧠 Learned Rules</h2>
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-top:4px;">Rules created from your feedback. These override AI classification for matching transactions.</div>
+      </div>
+      <button class="btn btn-secondary" onclick="loadRules()">🔄 Refresh</button>
+    </div>
+    <table class="rules-table" id="rulesTable">
+      <thead>
+        <tr><th style="width:40%">Narration Pattern</th><th>Classifies As</th><th>Created</th><th style="width:80px">Action</th></tr>
+      </thead>
+      <tbody id="rulesBody">
+        <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted)"><div class="spinner"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Progress Overlay -->
+<div class="progress-overlay" id="progressOverlay">
+  <div class="progress-box">
+    <h3>🤖 AI Classification in Progress</h3>
+    <p>Sending transactions to Gemini 2.5 Flash...</p>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-count" id="progressCount">0 / 0 classified</div>
+  </div>
+</div>
+
+<!-- Quick Review Overlay -->
+<div class="review-overlay" id="reviewOverlay">
+  <div class="review-card">
+    <div class="review-header">
+      <div>
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:4px;">⚡ Quick Review Mode</div>
+        <div class="review-progress" id="reviewProgress">1 of 0</div>
+      </div>
+      <button class="review-close" onclick="closeQuickReview()">✕</button>
+    </div>
+
+    <!-- Narration + meta — scan this quickly -->
+    <div class="review-narration" id="reviewNarration">—</div>
+    <div class="review-meta">
+      <span>📅 <strong id="reviewDate">—</strong></span>
+      <span id="reviewTypeSpan">—</span>
+      <span>💰 <strong id="reviewAmount" style="color:var(--green)">—</strong></span>
+    </div>
+
+    <!-- AI suggestion -->
+    <div style="margin-bottom:6px;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--accent);">✨ AI Suggests</div>
+    <div class="review-classification" id="reviewClassification">—</div>
+    <div class="review-reasoning" id="reviewReasoning">—</div>
+
+    <!-- Duplicate warning if applicable -->
+    <div id="reviewDupWarn" style="display:none;margin-bottom:14px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--yellow);">
+      ⚠️ Possible duplicate payment detected — see similar transactions below.
+    </div>
+
+    <!-- Accept / Reject -->
+    <div class="review-actions">
+      <button class="btn btn-success" onclick="reviewAccept()">✅ Accept <span style="font-size:0.75rem;opacity:0.7">(Enter)</span></button>
+      <button class="btn btn-danger" onclick="reviewReject()">❌ Reject</button>
+      <button class="btn btn-secondary" onclick="reviewSkip()">⏭ Skip</button>
+    </div>
+
+    <!-- Correction (shown on Reject) -->
+    <div class="review-correction" id="reviewCorrection">
+      <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px;">Correct classification:</div>
+      <select class="review-cat-select" id="reviewCatSelect"></select>
+      <label class="learn-toggle" style="margin-bottom:10px;">
+        <input type="checkbox" id="reviewLearnCheck" checked>
+        <span>Learn from this — apply to similar transactions automatically</span>
+      </label>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="reviewSubmitCorrection()">💾 Save Correction</button>
+        <button class="btn btn-secondary" onclick="reviewCancelCorrection()">Cancel</button>
+      </div>
+    </div>
+
+    <div class="review-shortcut">Keyboard: Enter = Accept · R = Reject · S = Skip · Esc = Close</div>
+  </div>
+</div>
+
+<script>
+const ALL_CATEGORIES = [
+  "Exhibition/Conference Expense","Salary/Freelance Payment","Hotel Booking","Flight Booking",
+  "Cab/Transport Booking","Bus Booking","Courier/Logistics","Sales Incentive Payment",
+  "Amazon Purchase","Office/Admin Expense","Tax Payment","Bank/Finance Transaction",
+  "Business Travel/Logistics","Sales Consultant Payment","Other Expense",
+  "Device Payment Receipt","EMI/Installment Receipt","Card Settlement",
+  "Payment Gateway Receipt","Other Income"
+];
+
+let allTransactions = [];
+let allSales = [];
+let classificationResults = {};   // idx -> result
+let reviewDecisions = {};         // idx -> 'accepted' | 'rejected'
+let selectedRows = new Set();
+let selectedTxnIndex = null;
+let duplicatesMap = {};           // str(idx) -> [idx, ...]
+
+// Quick Review state
+let reviewQueue = [];
+let reviewPos = 0;
+
+async function init() {
+  const statusRes = await fetch('/api/status');
+  const status = await statusRes.json();
+
+  document.getElementById('apiDot').className = 'status-dot ' + (status.api_key_set ? 'ok' : 'err');
+  document.getElementById('apiStatus').textContent = status.api_key_set ? 'Gemini Connected' : 'No API Key';
+  document.getElementById('dataDot').className = 'status-dot ' + (status.excel_loaded ? 'ok' : 'err');
+
+  const rc = status.ref_counts || {};
+  document.getElementById('dataStatus').textContent = status.excel_loaded
+    ? `${status.transaction_count} txns · ${status.sale_count} invoices`
+    : 'Load error';
+
+  const srcBadge = document.getElementById('dataSourceBadge');
+  if (status.google_sheets_connected) {
+    srcBadge.innerHTML = '<span class="sheets-badge">📊 Google Sheets</span>';
+  } else {
+    srcBadge.innerHTML = '<span class="excel-badge">📁 Excel File</span>';
+  }
+
+  if (status.learned_rules_count > 0) {
+    document.getElementById('rulesStatus').textContent = `🧠 ${status.learned_rules_count} learned rules`;
+  }
+
+  // Update Drive button to reflect current connection state on page load
+  try {
+    const driveRes = await fetch('/api/gdrive/status');
+    const driveSt = await driveRes.json();
+    activeDriveSheetId = driveSt.active_sheet_id || null;
+    const driveBtn = document.getElementById('driveConnectBtn');
+    if (driveSt.connected) {
+      driveBtn.innerHTML = '\u{1F4CA} Drive Connected';
+      driveBtn.style.borderColor = 'var(--green)';
+      driveBtn.style.color = 'var(--green)';
+      if (driveSt.active_sheet_name) {
+        document.getElementById('dataSourceBadge').innerHTML =
+          '<span class="sheets-badge">\u{1F4CA} ' + escHtml(driveSt.active_sheet_name) + '</span>';
+      }
+    } else if (!driveSt.oauth_configured) {
+      driveBtn.title = 'OAuth not configured — set GOOGLE_OAUTH_CLIENT_ID/SECRET in docker-compose.yml';
+    }
+  } catch(e) { /* non-fatal */ }
+
+  const dataRes = await fetch('/api/data');
+  const data = await dataRes.json();
+  allTransactions = data.transactions || [];
+  allSales = data.sales || [];
+  duplicatesMap = data.duplicates || {};
+
+  renderTable();
+  renderSales();
+  updateStats();
+}
+
+// ---- Tab switching ----
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'rules') loadRules();
+}
+
+// ---- Filters ----
+function getFilteredIndices() {
+  const search = document.getElementById('searchBox').value.toLowerCase();
+  const typeF = document.getElementById('typeFilter').value;
+  const classF = document.getElementById('classFilter').value;
+
+  return allTransactions.map((t, i) => ({ t, i })).filter(({ t, i }) => {
+    if (search && !t.narration.toLowerCase().includes(search) &&
+        !t.particulars.toLowerCase().includes(search)) return false;
+    if (typeF && t.voucher_type !== typeF) return false;
+    if (classF === 'classified' && !classificationResults[i]) return false;
+    if (classF === 'unclassified' && classificationResults[i]) return false;
+    if (classF === 'duplicate' && !duplicatesMap[String(i)]) return false;
+    if (classF === 'accepted' && reviewDecisions[i] !== 'accepted') return false;
+    if (classF === 'rejected' && reviewDecisions[i] !== 'rejected') return false;
+    return true;
+  }).map(({ i }) => i);
+}
+
+function filterTable() { renderTable(); updateStats(); }
+
+// ---- Table Render ----
+function renderTable() {
+  const indices = getFilteredIndices();
+  const tbody = document.getElementById('txnBody');
+
+  if (indices.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-muted)">No transactions found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = indices.map(i => {
+    const t = allTransactions[i];
+    const res = classificationResults[i];
+    const isReceipt = t.voucher_type === 'Receipt';
+    const isSelected = selectedRows.has(i);
+    const isDup = !!duplicatesMap[String(i)];
+    const decision = reviewDecisions[i];
+
+    const typeBadge = isReceipt
+      ? '<span class="badge badge-receipt">▲ Receipt</span>'
+      : '<span class="badge badge-payment">▼ Payment</span>';
+
+    let classBadge;
+    if (decision === 'accepted') {
+      classBadge = res ? `<span class="badge badge-accepted">✅ ${escHtml(res.classification)}</span>` : '<span class="badge badge-accepted">✅ Accepted</span>';
+    } else if (decision === 'rejected') {
+      classBadge = res ? `<span class="badge badge-rejected">❌ ${escHtml(res.classification)}</span>` : '<span class="badge badge-rejected">❌ Rejected</span>';
+    } else if (res) {
+      const isLearned = res.matched_detail === 'Auto-classified from learned feedback';
+      classBadge = isLearned
+        ? `<span class="badge badge-learned">🧠 ${escHtml(res.classification)}</span>`
+        : `<span class="badge badge-classified">${escHtml(res.classification)}</span>`;
+    } else {
+      classBadge = '<span class="badge badge-pending">Pending</span>';
+    }
+
+    const invoiceBadge = res && res.reference_id
+      ? `<span class="badge badge-invoice">📄 ${escHtml(res.reference_id)}</span>`
+      : '<span style="color:var(--text-muted);font-size:0.75rem">—</span>';
+
+    const dupBadge = isDup ? ' <span class="badge badge-dup">⚠️ DUP</span>' : '';
+
+    const confDot = res ? `<span class="confidence-dot conf-${res.confidence}"></span>${res.confidence}` : '—';
+    const amount = t.gross_total || '';
+    const amountClass = isReceipt ? 'amount-cell receipt' : 'amount-cell payment';
+    const date = t.date.split(' ')[0].replace('T', ' ');
+    const rowClass = [
+      isSelected ? 'selected' : '',
+      isDup ? 'duplicate-warn' : ''
+    ].filter(Boolean).join(' ');
+
+    return `<tr onclick="selectRow(${i})" class="${rowClass}" id="row-${i}">
+      <td onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRowSelect(${i}, this)" ${isSelected ? 'checked' : ''}></td>
+      <td style="white-space:nowrap;font-size:0.8rem">${date}</td>
+      <td style="font-size:0.78rem;color:var(--text-muted)">${escHtml(t.particulars.replace('HDFC Bank','HDFC').replace('ICICI Bank - 0901 - Birac','ICICI Birac'))}</td>
+      <td>${typeBadge}</td>
+      <td class="narration-cell" title="${escHtml(t.narration)}">${escHtml(t.narration)}${dupBadge}</td>
+      <td class="${amountClass}">${escHtml(amount)}</td>
+      <td>${classBadge}</td>
+      <td>${invoiceBadge}</td>
+      <td style="font-size:0.78rem">${confDot}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSales() {
+  document.getElementById('salesBody').innerHTML = allSales.map(s => `
+    <tr>
+      <td><span class="invoice-badge">${escHtml(s.invoice)}</span></td>
+      <td style="white-space:nowrap;font-size:0.8rem">${escHtml(s.date)}</td>
+      <td style="font-weight:500">${escHtml(s.doctor_hospital)}</td>
+      <td style="font-size:0.78rem;color:var(--text-muted);max-width:300px">${escHtml(s.address)}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadRules() {
+  document.getElementById('rulesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)"><div class="spinner"></div></td></tr>';
+  const res = await fetch('/api/feedback/rules');
+  const data = await res.json();
+  const rules = data.rules || [];
+  if (rules.length === 0) {
+    document.getElementById('rulesBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">No learned rules yet. Accept or correct classifications to build rules.</td></tr>';
+    return;
+  }
+  document.getElementById('rulesBody').innerHTML = rules.map(r => `
+    <tr>
+      <td style="font-family:monospace;font-size:0.8rem;color:var(--text-muted)">${escHtml(r.pattern)}</td>
+      <td><span class="badge badge-learned">🧠 ${escHtml(r.classification)}</span></td>
+      <td style="font-size:0.75rem;color:var(--text-muted)">${r.created_at ? r.created_at.split('T')[0] : ''}</td>
+      <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;" onclick="deleteRule(${r.id})">🗑 Delete</button></td>
+    </tr>
+  `).join('');
+  document.getElementById('rulesStatus').textContent = `🧠 ${rules.length} learned rules`;
+}
+
+async function deleteRule(id) {
+  await fetch(`/api/feedback/rules/${id}`, { method: 'DELETE' });
+  loadRules();
+}
+
+// ---- Stats ----
+function updateStats() {
+  const total = allTransactions.length;
+  const receipts = allTransactions.filter(t => t.voucher_type === 'Receipt').length;
+  const payments = allTransactions.filter(t => t.voucher_type === 'Payment').length;
+  const classified = Object.keys(classificationResults).length;
+  const accepted = Object.values(reviewDecisions).filter(d => d === 'accepted').length;
+  const dups = Object.keys(duplicatesMap).length;
+
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat-card"><div class="num">${total}</div><div class="lbl">Total Entries</div></div>
+    <div class="stat-card"><div class="num" style="color:var(--green)">${receipts}</div><div class="lbl">Receipts</div></div>
+    <div class="stat-card"><div class="num" style="color:var(--red)">${payments}</div><div class="lbl">Payments</div></div>
+    <div class="stat-card"><div class="num" style="color:#a78bfa">${classified}</div><div class="lbl">AI Classified</div></div>
+    <div class="stat-card"><div class="num" style="color:var(--green)">${accepted}</div><div class="lbl">Accepted</div></div>
+    ${dups > 0 ? `<div class="stat-card"><div class="num" style="color:var(--yellow)">${dups}</div><div class="lbl">⚠️ Dup Flags</div></div>` : ''}
+  `;
+}
+
+// ---- Row selection + detail ----
+function selectRow(i) {
+  selectedTxnIndex = i;
+  document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+  const row = document.getElementById('row-' + i);
+  if (row) { row.classList.add('selected'); if (duplicatesMap[String(i)]) row.classList.add('duplicate-warn'); }
+  renderDetailPanel(i);
+}
+
+function renderDetailPanel(i) {
+  const t = allTransactions[i];
+  const res = classificationResults[i];
+  const panel = document.getElementById('detailPanel');
+  const isReceipt = t.voucher_type === 'Receipt';
+  const dups = duplicatesMap[String(i)] || [];
+  const decision = reviewDecisions[i];
+
+  let dupHtml = '';
+  if (dups.length > 0) {
+    const links = dups.map(di =>
+      `<span class="dup-link" onclick="selectRow(${di})">#${allTransactions[di]?.voucher_no || di} (${String(allTransactions[di]?.date || '').split(' ')[0]})</span>`
+    ).join(', ');
+    dupHtml = `
+      <div class="dup-warning">
+        <h3>⚠️ Possible Duplicate Payment</h3>
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">Same vendor, similar amount found in:</div>
+        <div>${links}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;">Review narration and date before accepting.</div>
+      </div>`;
+  }
+
+  let reviewStatusHtml = '';
+  if (decision === 'accepted') {
+    reviewStatusHtml = `<div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:10px 14px;font-size:0.85rem;color:var(--green);">✅ You accepted this classification</div>`;
+  } else if (decision === 'rejected') {
+    reviewStatusHtml = `<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:10px 14px;font-size:0.85rem;color:var(--red);">❌ You rejected this classification</div>`;
+  }
+
+  const catOptions = ALL_CATEGORIES.map(c =>
+    `<option value="${c}" ${res && res.classification === c ? 'selected' : ''}>${c}</option>`
+  ).join('');
+
+  panel.innerHTML = `
+    <h2>Transaction #${escHtml(t.voucher_no)} <span style="font-size:0.8rem;color:var(--text-muted)">${t.date.split(' ')[0]}</span></h2>
+
+    ${dupHtml}
+
+    <div class="detail-section">
+      <h3>Details</h3>
+      <div class="detail-row"><div class="detail-label">Bank</div><div class="detail-value">${escHtml(t.particulars)}</div></div>
+      <div class="detail-row"><div class="detail-label">Type</div><div class="detail-value">${isReceipt ? '▲ Receipt (Incoming)' : '▼ Payment (Outgoing)'}</div></div>
+      <div class="detail-row"><div class="detail-label">Amount</div><div class="detail-value" style="color:${isReceipt ? 'var(--green)' : 'var(--red)'};font-size:1.1rem;font-weight:700">${escHtml(t.gross_total)}</div></div>
+      <div class="detail-row"><div class="detail-label">Narration</div><div class="narration-full">${escHtml(t.narration)}</div></div>
+    </div>
+
+    ${res ? `
+    <div class="classify-result">
+      <h3>✨ AI Classification</h3>
+      <div class="category">${escHtml(res.classification)}</div>
+      ${res.reference_id ? `<div style="margin:6px 0"><span class="badge badge-invoice">📄 ${escHtml(res.reference_id)}</span></div>` : ''}
+      ${res.matched_detail ? `<div style="font-size:0.82rem;margin:4px 0;color:var(--accent2)">🔗 ${escHtml(res.matched_detail)}</div>` : ''}
+      <div style="margin:6px 0"><span class="confidence-dot conf-${res.confidence}"></span><span style="font-size:0.78rem;color:var(--text-muted)">${res.confidence} confidence</span></div>
+      <div class="reasoning">${escHtml(res.reasoning)}</div>
+    </div>
+
+    ${reviewStatusHtml}
+
+    <div class="feedback-box">
+      <h3>💬 Give Feedback</h3>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px;">Correct the classification if wrong:</div>
+      <select class="cat-select" id="feedbackCat">${catOptions}</select>
+      <label class="learn-toggle">
+        <input type="checkbox" id="feedbackLearn" checked>
+        <span>Learn from this — auto-apply to similar transactions</span>
+      </label>
+      <div class="feedback-actions">
+        <button class="btn btn-success" onclick="acceptClassification(${i})">✅ Accept</button>
+        <button class="btn btn-primary" onclick="submitFeedback(${i})">💾 Save Correction</button>
+      </div>
+    </div>
+    ` : `
+    <button class="btn btn-primary" style="width:100%" onclick="classifySingle(${i})">
+      ✨ Classify This Entry
+    </button>
+    `}
+  `;
+}
+
+// ---- Accept classification (no correction) ----
+function acceptClassification(i) {
+  reviewDecisions[i] = 'accepted';
+  renderTable();
+  renderDetailPanel(i);
+  updateStats();
+}
+
+// ---- Submit feedback correction ----
+async function submitFeedback(i) {
+  const t = allTransactions[i];
+  const res = classificationResults[i];
+  const corrected = document.getElementById('feedbackCat').value;
+  const shouldLearn = document.getElementById('feedbackLearn').checked;
+
+  if (!corrected) return;
+
+  const resp = await fetch('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      index: i,
+      original_classification: res ? res.classification : '',
+      corrected_classification: corrected,
+      should_learn: shouldLearn,
+      narration: t.narration,
+      date: t.date,
+      gross_total: t.gross_total
+    })
+  });
+  const data = await resp.json();
+
+  // Update the local classification
+  if (classificationResults[i]) {
+    classificationResults[i].classification = corrected;
+    classificationResults[i].matched_detail = shouldLearn ? 'User corrected + learned' : 'User corrected';
+    classificationResults[i].confidence = 'high';
+    classificationResults[i].reasoning = `Manually corrected to "${corrected}" by user.`;
+  }
+  reviewDecisions[i] = 'accepted';
+
+  // If there are affected transactions, update them too
+  if (shouldLearn && data.affected_indices && data.affected_indices.length > 0) {
+    const count = data.affected_indices.length;
+    data.affected_indices.forEach(ai => {
+      if (classificationResults[ai]) {
+        classificationResults[ai].classification = corrected;
+        classificationResults[ai].matched_detail = 'Auto-classified from learned feedback';
+        classificationResults[ai].confidence = 'high';
+        classificationResults[ai].reasoning = `Auto-applied from learned rule: "${corrected}".`;
+      } else {
+        classificationResults[ai] = {
+          idx: ai, classification: corrected, reference_id: '',
+          matched_detail: 'Auto-classified from learned feedback',
+          confidence: 'high',
+          reasoning: `Auto-applied from learned rule: "${corrected}".`
+        };
+      }
+    });
+    showToast(`✅ Correction saved. Rule learned and applied to ${count} similar transaction${count !== 1 ? 's' : ''}.`);
+  } else {
+    showToast('✅ Correction saved.');
+  }
+
+  renderTable();
+  renderDetailPanel(i);
+  updateStats();
+}
+
+// ---- Toast ----
+function showToast(msg, duration = 3500) {
+  const existing = document.getElementById('toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.id = 'toast';
+  t.style.cssText = `position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 24px;font-size:0.88rem;color:var(--text);z-index:300;box-shadow:0 8px 24px rgba(0,0,0,0.4);transition:opacity 0.3s;`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, duration);
+}
+
+// ---- Quick Review ----
+function buildCatOptions(select, current) {
+  select.innerHTML = ALL_CATEGORIES.map(c =>
+    `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`
+  ).join('');
+}
+
+function openQuickReview() {
+  // Build queue: classified, not yet accepted/rejected
+  reviewQueue = Object.keys(classificationResults)
+    .map(Number)
+    .filter(i => !reviewDecisions[i])
+    .sort((a, b) => a - b);
+
+  if (reviewQueue.length === 0) {
+    showToast('No unreviewed classified transactions. Run AI classification first.');
+    return;
+  }
+  reviewPos = 0;
+  document.getElementById('reviewOverlay').classList.add('show');
+  renderReviewCard();
+
+  document.addEventListener('keydown', handleReviewKey);
+}
+
+function closeQuickReview() {
+  document.getElementById('reviewOverlay').classList.remove('show');
+  document.removeEventListener('keydown', handleReviewKey);
+  renderTable();
+  updateStats();
+}
+
+function renderReviewCard() {
+  if (reviewPos >= reviewQueue.length) {
+    closeQuickReview();
+    showToast(`✅ Review complete! ${Object.values(reviewDecisions).filter(d=>d==='accepted').length} accepted.`);
+    return;
+  }
+  const i = reviewQueue[reviewPos];
+  const t = allTransactions[i];
+  const res = classificationResults[i];
+  const isReceipt = t.voucher_type === 'Receipt';
+
+  document.getElementById('reviewProgress').textContent = `${reviewPos + 1} of ${reviewQueue.length}`;
+  document.getElementById('reviewNarration').textContent = t.narration;
+  document.getElementById('reviewDate').textContent = t.date.split(' ')[0];
+  document.getElementById('reviewTypeSpan').innerHTML = isReceipt
+    ? '<span class="badge badge-receipt" style="font-size:0.72rem">▲ Receipt</span>'
+    : '<span class="badge badge-payment" style="font-size:0.72rem">▼ Payment</span>';
+  document.getElementById('reviewAmount').textContent = t.gross_total;
+  document.getElementById('reviewAmount').style.color = isReceipt ? 'var(--green)' : 'var(--red)';
+  document.getElementById('reviewClassification').textContent = res ? res.classification : '—';
+  document.getElementById('reviewReasoning').textContent = res ? res.reasoning : '';
+
+  // Duplicate warning
+  const isDup = !!duplicatesMap[String(i)];
+  document.getElementById('reviewDupWarn').style.display = isDup ? 'block' : 'none';
+
+  // Reset correction panel
+  document.getElementById('reviewCorrection').classList.remove('show');
+  buildCatOptions(document.getElementById('reviewCatSelect'), res ? res.classification : '');
+  document.getElementById('reviewLearnCheck').checked = true;
+}
+
+function reviewAccept() {
+  const i = reviewQueue[reviewPos];
+  reviewDecisions[i] = 'accepted';
+  reviewPos++;
+  renderReviewCard();
+}
+
+function reviewReject() {
+  document.getElementById('reviewCorrection').classList.add('show');
+}
+
+function reviewSkip() {
+  reviewPos++;
+  renderReviewCard();
+}
+
+function reviewCancelCorrection() {
+  document.getElementById('reviewCorrection').classList.remove('show');
+}
+
+async function reviewSubmitCorrection() {
+  const i = reviewQueue[reviewPos];
+  const t = allTransactions[i];
+  const res = classificationResults[i];
+  const corrected = document.getElementById('reviewCatSelect').value;
+  const shouldLearn = document.getElementById('reviewLearnCheck').checked;
+
+  const resp = await fetch('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      index: i, original_classification: res ? res.classification : '',
+      corrected_classification: corrected, should_learn: shouldLearn,
+      narration: t.narration, date: t.date, gross_total: t.gross_total
+    })
+  });
+  const data = await resp.json();
+
+  classificationResults[i] = {
+    ...(classificationResults[i] || {}),
+    classification: corrected,
+    matched_detail: shouldLearn ? 'User corrected + learned' : 'User corrected',
+    confidence: 'high',
+    reasoning: `Manually corrected to "${corrected}" by user.`
+  };
+  reviewDecisions[i] = 'rejected';
+
+  if (shouldLearn && data.affected_indices && data.affected_indices.length > 0) {
+    data.affected_indices.forEach(ai => {
+      classificationResults[ai] = {
+        ...(classificationResults[ai] || { idx: ai, reference_id: '' }),
+        classification: corrected,
+        matched_detail: 'Auto-classified from learned feedback',
+        confidence: 'high',
+        reasoning: `Auto-applied from learned rule: "${corrected}".`
+      };
+    });
+  }
+
+  reviewPos++;
+  renderReviewCard();
+}
+
+function handleReviewKey(e) {
+  if (!document.getElementById('reviewOverlay').classList.contains('show')) return;
+  const correctionShowing = document.getElementById('reviewCorrection').classList.contains('show');
+  if (correctionShowing) return; // Let user interact with the select
+  if (e.key === 'Enter') { e.preventDefault(); reviewAccept(); }
+  else if (e.key === 'r' || e.key === 'R') reviewReject();
+  else if (e.key === 's' || e.key === 'S') reviewSkip();
+  else if (e.key === 'Escape') closeQuickReview();
+}
+
+// ---- Classify ----
+async function classifySingle(i) {
+  const panel = document.getElementById('detailPanel');
+  const btn = panel.querySelector('.btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Classifying...'; }
+
+  const res = await fetch('/api/classify_single', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index: i })
+  });
+  const data = await res.json();
+  if (data.result) {
+    classificationResults[i] = data.result;
+    renderTable();
+    renderDetailPanel(i);
+    updateStats();
+  }
+}
+
+async function classifyAll() {
+  const indices = getFilteredIndices();
+  if (indices.length === 0) return;
+
+  document.getElementById('progressOverlay').classList.add('show');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressCount').textContent = `0 / ${indices.length} classified`;
+  document.getElementById('classifyAllBtn').disabled = true;
+
+  const batchSize = 50;
+  let done = 0;
+  for (let s = 0; s < indices.length; s += batchSize) {
+    const batch = indices.slice(s, s + batchSize);
+    const res = await fetch('/api/classify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ indices: batch })
+    });
+    const data = await res.json();
+    if (data.results) {
+      data.results.forEach((r, j) => { classificationResults[batch[j]] = r; });
+    }
+    done = Math.min(s + batchSize, indices.length);
+    const pct = Math.round((done / indices.length) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressCount').textContent = `${done} / ${indices.length} classified`;
+  }
+
+  document.getElementById('progressOverlay').classList.remove('show');
+  document.getElementById('classifyAllBtn').disabled = false;
+  renderTable();
+  updateStats();
+}
+
+async function classifySelected() {
+  const indices = [...selectedRows];
+  if (indices.length === 0) return;
+
+  document.getElementById('progressOverlay').classList.add('show');
+  document.getElementById('progressFill').style.width = '10%';
+  document.getElementById('progressCount').textContent = `Classifying ${indices.length} entries...`;
+
+  const res = await fetch('/api/classify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ indices })
+  });
+  const data = await res.json();
+  if (data.results) {
+    data.results.forEach((r, j) => { classificationResults[indices[j]] = r; });
+  }
+
+  document.getElementById('progressOverlay').classList.remove('show');
+  renderTable();
+  updateStats();
+}
+
+// ---- Row checkbox ----
+function toggleRowSelect(i, cb) {
+  if (cb.checked) selectedRows.add(i);
+  else selectedRows.delete(i);
+  document.getElementById('classifySelBtn').disabled = selectedRows.size === 0;
+}
+
+function toggleSelectAll(cb) {
+  const indices = getFilteredIndices();
+  if (cb.checked) indices.forEach(i => selectedRows.add(i));
+  else selectedRows.clear();
+  document.getElementById('classifySelBtn').disabled = selectedRows.size === 0;
+  renderTable();
+}
+
+// ---- Export CSV ----
+function exportCSV() {
+  const rows = [['Date','Particulars','Voucher Type','Voucher No','Narration','Gross Total',
+    'AI Classification','Reference ID','Matched Detail','Confidence','Reasoning','Review Decision','Duplicate Flag']];
+  allTransactions.forEach((t, i) => {
+    const res = classificationResults[i] || {};
+    rows.push([
+      t.date, t.particulars, t.voucher_type, t.voucher_no,
+      t.narration, t.gross_total,
+      res.classification || '',
+      res.reference_id || '',
+      res.matched_detail || '',
+      res.confidence || '',
+      res.reasoning || '',
+      reviewDecisions[i] || '',
+      duplicatesMap[String(i)] ? 'YES' : ''
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'alfaleus_classified_transactions.csv';
+  a.click();
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+init();
+
+
+// ======== Google Drive Picker ========
+let driveSheets = [];
+let activeDriveSheetId = null;
+let driveActiveTabName = null;
+let pendingSheetId = null;
+let pendingSheetName = null;
+
+async function openDriveModal() {
+  document.getElementById('driveModalOverlay').classList.add('show');
+  const res = await fetch('/api/gdrive/status');
+  const st = await res.json();
+  activeDriveSheetId = st.active_sheet_id || null;
+
+  if (!st.oauth_configured) {
+    document.getElementById('oauthSetupHint').style.display = 'block';
+    document.getElementById('connectGoogleBtn').disabled = true;
+  }
+
+  if (st.connected) {
+    showDriveConnected();
+    loadDriveSheets();
+    if (st.active_sheet_id) {
+      driveActiveTabName = st.active_tab_name || null;
+      document.getElementById('saveToSheetBtn').style.display = '';
+    }
+  } else {
+    showDriveNotConnected();
+  }
+}
+
+function closeDriveModal() {
+  document.getElementById('driveModalOverlay').classList.remove('show');
+}
+
+function showDriveConnected() {
+  document.getElementById('driveNotConnected').style.display = 'none';
+  document.getElementById('driveConnected').style.display = 'flex';
+}
+
+function showDriveNotConnected() {
+  document.getElementById('driveNotConnected').style.display = 'block';
+  document.getElementById('driveConnected').style.display = 'none';
+}
+
+function startOAuth() {
+  const popup = window.open('/api/gdrive/auth', 'gdrive_oauth',
+    'width=520,height=640,scrollbars=yes,resizable=yes');
+  document.getElementById('driveConnectStatus').innerHTML = '<div class="spinner"></div> Waiting for sign-in...';
+
+  window.addEventListener('message', async function handler(e) {
+    if (e.data && e.data.type === 'gdrive_connected') {
+      window.removeEventListener('message', handler);
+      document.getElementById('driveConnectStatus').innerHTML = '✅ Connected!';
+      showDriveConnected();
+      loadDriveSheets();
+    } else if (e.data && e.data.type === 'gdrive_error') {
+      window.removeEventListener('message', handler);
+      document.getElementById('driveConnectStatus').innerHTML = '❌ ' + (e.data.error || 'Auth failed');
+    }
+  });
+}
+
+async function loadDriveSheets() {
+  document.getElementById('driveSheetList').innerHTML =
+    '<div style="text-align:center;padding:30px;color:var(--text-muted);"><div class="spinner"></div><br>Loading...</div>';
+
+  const res = await fetch('/api/gdrive/sheets');
+  if (!res.ok) {
+    const err = await res.json();
+    document.getElementById('driveSheetList').innerHTML =
+      `<div style="text-align:center;padding:30px;color:var(--red);">Error: ${escHtml(err.error || 'Unknown')}</div>`;
+    return;
+  }
+  const data = await res.json();
+  driveSheets = data.sheets || [];
+  renderDriveSheets(driveSheets);
+}
+
+function renderDriveSheets(sheets) {
+  const list = document.getElementById('driveSheetList');
+  if (sheets.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);">No spreadsheets found in your Drive.</div>';
+    return;
+  }
+  list.innerHTML = sheets.map(s => {
+    const isActive = s.id === activeDriveSheetId;
+    const modified = s.modifiedTime ? new Date(s.modifiedTime).toLocaleDateString() : '';
+    return `<div class="drive-sheet-item ${isActive ? 'active-sheet' : ''}" data-id="${escHtml(s.id)}" data-name="${escHtml(s.name)}" onclick="selectDriveSheet(this.dataset.id, this.dataset.name)">
+      <div class="drive-sheet-icon">📊</div>
+      <div class="drive-sheet-info">
+        <div class="drive-sheet-name">${escHtml(s.name)}</div>
+        <div class="drive-sheet-meta">Modified ${modified} · ID: ${escHtml(s.id.slice(0,18))}…</div>
+      </div>
+      ${isActive ? '<div class="drive-sheet-tick">✓ Active</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function filterDriveSheets() {
+  const q = document.getElementById('driveSearch').value.toLowerCase();
+  renderDriveSheets(driveSheets.filter(s => s.name.toLowerCase().includes(q)));
+}
+
+async function selectDriveSheet(sheetId, sheetName) {
+  // Step 1: fetch worksheet tabs for this spreadsheet
+  pendingSheetId   = sheetId;
+  pendingSheetName = sheetName;
+  const overlay = document.getElementById('tabPickerOverlay');
+  const tabList = document.getElementById('tabPickerList');
+  overlay.classList.add('show');
+  tabList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);"><div class="spinner"></div><br>Loading tabs…</div>';
+
+  try {
+    const res = await fetch('/api/gdrive/worksheets?sheet_id=' + encodeURIComponent(sheetId));
+    const data = await res.json();
+    const tabs = data.tabs || [];
+    if (tabs.length === 0) {
+      tabList.innerHTML = '<div style="color:var(--red);font-size:0.85rem;">No sheets found in this spreadsheet.</div>';
+      return;
+    }
+    tabList.innerHTML = tabs.map(t => `
+      <div class="tab-item" onclick="confirmTabSelection('${escHtml(t).replace(/'/g,"\\'")}')">
+        <span>📄</span> ${escHtml(t)}
+      </div>`).join('');
+  } catch(e) {
+    tabList.innerHTML = '<div style="color:var(--red);font-size:0.85rem;">Error loading tabs: ' + escHtml(String(e)) + '</div>';
+  }
+}
+
+async function confirmTabSelection(tabName) {
+  const sheetId   = pendingSheetId;
+  const sheetName = pendingSheetName;
+  closeTabPicker();
+
+  // Highlight selected tab item briefly, then save & load
+  const res = await fetch('/api/gdrive/select', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sheet_id: sheetId, sheet_name: sheetName, tab_name: tabName })
+  });
+  if (!res.ok) return;
+
+  activeDriveSheetId = sheetId;
+  driveActiveTabName = tabName;
+  renderDriveSheets(driveSheets);
+  closeDriveModal();
+
+  document.getElementById('txnBody').innerHTML =
+    '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)"><div class="spinner"></div><br>Loading <b>' + escHtml(tabName) + '</b> from <b>' + escHtml(sheetName) + '</b>…</td></tr>';
+  allTransactions = [];
+  allSales = [];
+  classificationResults = {};
+  reviewDecisions = {};
+
+  const dataRes = await fetch('/api/data');
+  const data = await dataRes.json();
+  allTransactions = data.transactions || [];
+  allSales = data.sales || [];
+  duplicatesMap = data.duplicates || {};
+
+  document.getElementById('dataSourceBadge').innerHTML =
+    '<span class="sheets-badge">📊 ' + escHtml(sheetName) + ' › ' + escHtml(tabName) + '</span>';
+  document.getElementById('dataDot').className = 'status-dot ok';
+  document.getElementById('dataStatus').textContent =
+    allTransactions.length + ' txns · ' + allSales.length + ' invoices';
+
+  // Show "Save to Sheet" button now that a Drive sheet is active
+  document.getElementById('saveToSheetBtn').style.display = '';
+
+  renderTable();
+  renderSales();
+  updateStats();
+}
+
+function closeTabPicker() {
+  document.getElementById('tabPickerOverlay').classList.remove('show');
+  pendingSheetId = null;
+  pendingSheetName = null;
+}
+
+async function saveToSheet() {
+  const btn = document.getElementById('saveToSheetBtn');
+  const classified = Object.keys(classificationResults);
+  if (classified.length === 0) {
+    alert('No classified transactions yet — run AI classification first.');
+    return;
+  }
+
+  const results = allTransactions
+    .map((t, i) => {
+      const res = classificationResults[i];
+      if (!res) return null;
+      return {
+        date:           t.date,
+        narration:      t.narration,
+        voucher_type:   t.voucher_type,
+        gross_total:    t.gross_total,
+        classification: res.classification || '',
+        reference_id:   res.reference_id  || '',
+        confidence:     res.confidence    || '',
+        reasoning:      res.reasoning     || '',
+      };
+    })
+    .filter(Boolean);
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Saving…';
+  try {
+    const res = await fetch('/api/gdrive/write_results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = '✅ Saved ' + data.rows_written + ' rows → "' + data.tab + '"';
+      setTimeout(() => { btn.textContent = '☁️ Save to Sheet'; btn.disabled = false; }, 4000);
+    } else {
+      alert('Save failed: ' + (data.error || 'Unknown error'));
+      btn.textContent = '☁️ Save to Sheet';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Save error: ' + e);
+    btn.textContent = '☁️ Save to Sheet';
+    btn.disabled = false;
+  }
+}
+
+async function disconnectDrive() {
+  await fetch('/api/gdrive/disconnect', { method: 'POST' });
+  activeDriveSheetId = null;
+  driveSheets = [];
+  showDriveNotConnected();
+  document.getElementById('driveConnectStatus').innerHTML = '';
+}
+
+// Close modal on overlay click
+document.getElementById('driveModalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeDriveModal();
+});
+document.getElementById('tabPickerOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeTabPicker();
+});
+
+</script>
+
+<!-- Google Drive Picker Modal -->
+<div class="drive-modal-overlay" id="driveModalOverlay">
+  <div class="drive-modal">
+    <div class="drive-modal-header">
+      <h2>📊 Connect Google Drive</h2>
+      <button class="drive-modal-close" onclick="closeDriveModal()">✕</button>
+    </div>
+
+    <!-- Not-connected view -->
+    <div id="driveNotConnected">
+      <div class="drive-connect-section">
+        <div style="font-size:0.88rem;color:var(--text-muted);line-height:1.6;">
+          Connect your Google account to browse and select any spreadsheet directly from Drive — no service account or manual Sheet ID needed.
+        </div>
+        <div class="oauth-setup-hint" id="oauthSetupHint" style="display:none;">
+          ⚠️ OAuth not configured yet. Set these env vars in your <code>docker-compose.yml</code>:<br>
+          <code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code>
+          <br><br>
+          Create credentials at <code>console.cloud.google.com</code> → APIs → Credentials → OAuth 2.0 Client (Web Application). Set redirect URI to <code>http://localhost:8080/api/gdrive/callback</code>.
+        </div>
+        <div class="drive-btn-row">
+          <button class="btn btn-primary" id="connectGoogleBtn" onclick="startOAuth()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            Sign in with Google
+          </button>
+          <span id="driveConnectStatus" class="drive-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connected view: sheet list -->
+    <div id="driveConnected" style="display:none; flex-direction:column; gap:14px; flex:1; min-height:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div class="drive-status" id="driveConnectedAs">
+          <span class="status-dot ok"></span> Connected to Google Drive
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" style="font-size:0.78rem;padding:5px 11px;" onclick="loadDriveSheets()">🔄 Refresh</button>
+          <button class="btn btn-danger" style="font-size:0.78rem;padding:5px 11px;" onclick="disconnectDrive()">Disconnect</button>
+        </div>
+      </div>
+      <input class="drive-search" type="text" placeholder="🔍 Filter spreadsheets..." id="driveSearch" oninput="filterDriveSheets()">
+      <div class="drive-sheet-list" id="driveSheetList">
+        <div style="text-align:center;padding:30px;color:var(--text-muted);"><div class="spinner"></div><br>Loading your spreadsheets...</div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--text-muted);">Click a spreadsheet to load it as the active data source. The app will read your transactions and sales from that sheet.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab Picker Modal -->
+<div class="tab-picker-overlay" id="tabPickerOverlay">
+  <div class="tab-picker-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <h2>📄 Choose the transaction sheet</h2>
+      <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.2rem;" onclick="closeTabPicker()">✕</button>
+    </div>
+    <p>This spreadsheet has multiple tabs. Select the one that contains the transactions to classify.<br>
+    A new tab called <strong>"Classified"</strong> will be created for the results.</p>
+    <div class="tab-list" id="tabPickerList"></div>
+    <div style="font-size:0.75rem;color:var(--text-muted);">Can't see the right tab? Make sure you're picking the correct spreadsheet.</div>
+  </div>
+</div>
+
+</body>
+</html>

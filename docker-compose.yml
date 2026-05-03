@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Set a stable random string here — do not leave blank
+      - FLASK_SECRET_KEY=alfaleus-secret-change-me-xk39qp2026
+      - EXCEL_PATH=/app/Query_sheet_alfaleus.xlsx
+      - GOOGLE_SHEETS_ID=${GOOGLE_SHEETS_ID:-}
+      - GOOGLE_CREDENTIALS_FILE=credentials.json
+      # OAuth2 — required for "Sign in with Google" Drive picker
+      # Create at console.cloud.google.com → APIs → Credentials → OAuth 2.0 Client (Web App)
+      # Set Authorised redirect URI to: http://localhost:8080/api/gdrive/callback
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - GOOGLE_OAUTH_REDIRECT_URI=${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8080/api/gdrive/callback}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
