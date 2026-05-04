@@ -1395,9 +1395,9 @@ function renderDetailPanel(i) {
         <button class="btn btn-primary" onclick="submitFeedback(${i})">${icon('ic-check',12)} Save Correction</button>
       </div>
       <div style="margin-top:9px;font-size:0.7rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:8px">
-        <span class="key">Enter</span> Accept &nbsp;·&nbsp;
-        <span class="key">R</span> Focus correct &nbsp;·&nbsp;
-        <span class="key">↑↓</span> Navigate rows
+        <span class="key">Enter</span> Accept &amp; next &nbsp;·&nbsp;
+        <span class="key">R</span> Correct &nbsp;·&nbsp;
+        <span class="key">↑↓</span> Navigate
       </div>
     </div>
     ` : `
@@ -1559,7 +1559,7 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
     acceptClassification(selectedTxnIndex);
-    showToast('Accepted ✓ — use ↑↓ arrows to navigate rows');
+    navigateRow(1);
   } else if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
     // Focus the feedback category select in detail panel
