@@ -17,6 +17,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("alfaleus")
 
+import threading
+_classify_lock = threading.Lock()
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 
@@ -382,7 +385,11 @@ def classify_transactions_batch(transactions_df, context_sheets):
 
     def _get_model(name):
         if name not in _model_cache:
-            _model_cache[name] = genai.GenerativeModel(name)
+            # Disable the SDK's own retry so our fallback logic controls all retry/swap behaviour
+            _model_cache[name] = genai.GenerativeModel(
+                name,
+                generation_config=genai.types.GenerationConfig(),
+            )
         return _model_cache[name]
 
     def _generate_with_retry(prompt_text, max_attempts=5):
@@ -671,6 +678,9 @@ def get_data():
 
 @app.route("/api/classify", methods=["POST"])
 def classify():
+    if not _classify_lock.acquire(blocking=False):
+        log.warning("/api/classify rejected — another classification is already in progress")
+        return jsonify({"error": "A classification is already running. Please wait."}), 429
     try:
         data = request.json
         indices = data.get("indices", None)
@@ -693,6 +703,8 @@ def classify():
     except Exception as e:
         log.exception("/api/classify unhandled exception: %s", str(e))
         return jsonify({"error": str(e)}), 500
+    finally:
+        _classify_lock.release()
 
 
 @app.route("/api/classify_single", methods=["POST"])
