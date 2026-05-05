@@ -372,37 +372,40 @@ def classify_transactions_batch(transactions_df, context_sheets):
                 for _ in range(len(transactions_df))]
 
     genai.configure(api_key=GEMINI_API_KEY)
-    log.info("Gemini configured. Primary model: gemini-2.5-flash  |  Fallback: gemini-2.5-flash-lite")
 
-    # ---------- model factory with fallback ----------
-    # gemini-1.5-* is fully shut down (returns 404).
-    # gemini-2.0-flash shuts down June 1 2026.
-    # Safe chain: gemini-2.5-flash  →  gemini-2.5-flash-lite
-    PRIMARY_MODEL  = "gemini-2.5-flash"
-    FALLBACK_MODEL = "gemini-2.5-flash-lite"
-    _current_model_name = PRIMARY_MODEL
+    # ---------- model factory with cascade fallback ----------
+    # Chain: gemini-2.5-flash → gemini-2.0-flash → gemini-2.5-flash-lite
+    # 2.5-flash is fastest/smartest but gets demand spikes.
+    # 2.0-flash has more capacity headroom as a middle fallback.
+    # 2.5-flash-lite is the last resort — always available.
+    MODEL_CHAIN = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"]
+    _current_model_idx = 0
     _model_cache = {}
+
+    log.info("Gemini configured. Model chain: %s", " → ".join(MODEL_CHAIN))
 
     def _get_model(name):
         if name not in _model_cache:
-            # Disable the SDK's own retry so our fallback logic controls all retry/swap behaviour
             _model_cache[name] = genai.GenerativeModel(
                 name,
                 generation_config=genai.types.GenerationConfig(),
             )
         return _model_cache[name]
 
-    def _generate_with_retry(prompt_text, max_attempts=5):
-        """Call Gemini with exponential back-off. On rate-limit/503 swap to fallback model."""
-        nonlocal _current_model_name
-        delay = 10
+    def _generate_with_retry(prompt_text, max_attempts=6):
+        """Call Gemini with exponential back-off and model cascade on 503/429."""
+        nonlocal _current_model_idx
         for attempt in range(max_attempts):
-            model_name = _current_model_name
+            model_name = MODEL_CHAIN[_current_model_idx]
             model = _get_model(model_name)
             log.debug("Attempt %d/%d using model=%s", attempt + 1, max_attempts, model_name)
             try:
                 response = model.generate_content(prompt_text)
-                log.debug("Model %s responded successfully on attempt %d", model_name, attempt + 1)
+                log.debug("Model %s succeeded on attempt %d", model_name, attempt + 1)
+                # On success, try to step back up to primary next time
+                if _current_model_idx > 0:
+                    _current_model_idx -= 1
+                    log.info("Stepping back up model chain → %s", MODEL_CHAIN[_current_model_idx])
                 return response
             except Exception as exc:
                 err = str(exc)
@@ -413,13 +416,15 @@ def classify_transactions_batch(transactions_df, context_sheets):
                 log.warning("Gemini error (attempt %d/%d) model=%s: %s",
                             attempt + 1, max_attempts, model_name, err[:200])
                 if is_rate_or_unavailable and attempt < max_attempts - 1:
-                    if model_name == PRIMARY_MODEL:
-                        log.warning("Rate-limit/503 on primary model — switching to fallback: %s", FALLBACK_MODEL)
-                        _current_model_name = FALLBACK_MODEL
-                        wait = 3  # short wait after model swap
+                    next_idx = _current_model_idx + 1
+                    if next_idx < len(MODEL_CHAIN):
+                        log.warning("Cascading to next model: %s", MODEL_CHAIN[next_idx])
+                        _current_model_idx = next_idx
+                        wait = 3
                     else:
-                        wait = delay * (2 ** attempt)
-                        log.warning("Rate-limit/503 on fallback model — retrying in %ds", wait)
+                        # Already on last model — exponential backoff
+                        wait = min(5 * (2 ** (attempt - len(MODEL_CHAIN) + 1)), 60)
+                        log.warning("All models tried — retrying %s in %ds", model_name, wait)
                     _time.sleep(wait)
                 else:
                     log.error("Non-transient error or out of attempts. model=%s error=%s", model_name, err[:300])
@@ -475,7 +480,7 @@ def classify_transactions_batch(transactions_df, context_sheets):
     if context_section:
         context_block = f"\n=== ADDITIONAL CONTEXT SHEETS (use to match transactions) ===\n{context_section}\n"
 
-    batch_size = 50
+    batch_size = 20
     for start in range(0, len(needs_ai), batch_size):
         batch = needs_ai[start:start + batch_size]
         batch_json = json.dumps(batch, indent=2)
