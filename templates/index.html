@@ -223,6 +223,13 @@
   tbody tr:hover { background: var(--surface); }
   tbody tr.row-selected { background: rgba(59,130,246,0.07); border-left: 2px solid var(--accent); }
   tbody tr.row-dup { border-left: 2px solid var(--yellow) !important; }
+  /* Review status row colors */
+  tbody tr.row-accepted { background: rgba(16,185,129,0.07); }
+  tbody tr.row-accepted:hover { background: rgba(16,185,129,0.12); }
+  tbody tr.row-corrected { background: rgba(245,158,11,0.07); }
+  tbody tr.row-corrected:hover { background: rgba(245,158,11,0.12); }
+  tbody tr.row-flagged { background: rgba(239,68,68,0.07); }
+  tbody tr.row-flagged:hover { background: rgba(239,68,68,0.12); }
   td { padding: 9px 12px; vertical-align: middle; }
 
   .narr-cell {
@@ -276,6 +283,8 @@
   .badge-dup      { background: rgba(245,158,11,0.1); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
   .badge-accepted { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
   .badge-rejected { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+  .badge-flagged  { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+  .badge-corrected { background: rgba(245,158,11,0.1); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
 
   .conf-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
   .conf-high   { background: var(--green); }
@@ -360,6 +369,39 @@
     border-radius: 7px; padding: 8px 12px; font-size: 0.8rem; color: var(--red);
     display: flex; align-items: center; gap: 6px;
   }
+  .review-status-flag {
+    background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 7px; padding: 8px 12px; font-size: 0.8rem; color: var(--red);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .review-status-corrected {
+    background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 7px; padding: 8px 12px; font-size: 0.8rem; color: var(--yellow);
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  /* ===================== KEYWORD SUGGESTION MODAL ===================== */
+  .kw-modal-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px 28px;
+    width: 480px; max-width: 94vw;
+    box-shadow: 0 28px 72px rgba(0,0,0,0.7);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .kw-modal-title { font-family: var(--display); font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .kw-modal-narr { font-family: var(--mono); font-size: 0.73rem; color: var(--text-muted); background: var(--bg); padding: 8px 10px; border-radius: 6px; line-height: 1.6; word-break: break-all; }
+  .kw-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .kw-chip {
+    padding: 4px 12px; border-radius: 20px; font-size: 0.76rem; font-family: var(--mono);
+    background: var(--surface2); border: 1px solid var(--border2); color: var(--text-dim);
+    cursor: pointer; transition: all 0.12s;
+  }
+  .kw-chip:hover, .kw-chip.selected { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+  .kw-input {
+    width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 0.82rem; outline: none; font-family: var(--mono);
+  }
+  .kw-input:focus { border-color: var(--accent); }
 
   .feedback-box {
     border: 1px solid var(--border); border-radius: 8px; padding: 12px;
@@ -740,6 +782,8 @@
       <option value="unclassified">Unclassified</option>
       <option value="duplicate">Duplicates</option>
       <option value="accepted">Accepted</option>
+      <option value="corrected">Corrected</option>
+      <option value="flagged">Flagged</option>
       <option value="rejected">Rejected</option>
     </select>
   </div>
@@ -875,11 +919,18 @@
       </button>
       <button class="btn btn-danger" onclick="reviewReject()">
         <svg class="icon" width="13" height="13"><use href="#ic-x"/></svg>
-        Reject
+        Correct
+        <span style="font-size:0.7rem;opacity:0.7;font-family:var(--mono)">[R]</span>
+      </button>
+      <button class="btn btn-warning" onclick="reviewFlag()">
+        <svg class="icon" width="13" height="13"><use href="#ic-alert"/></svg>
+        Flag
+        <span style="font-size:0.7rem;opacity:0.7;font-family:var(--mono)">[F]</span>
       </button>
       <button class="btn btn-secondary" onclick="reviewSkip()">
         <svg class="icon" width="13" height="13"><use href="#ic-skip"/></svg>
         Skip
+        <span style="font-size:0.7rem;opacity:0.7;font-family:var(--mono)">[S]</span>
       </button>
     </div>
     <div class="review-correction" id="reviewCorrection">
@@ -899,7 +950,8 @@
     </div>
     <div class="review-shortcuts">
       <span class="key">Enter</span> Accept &nbsp;·&nbsp;
-      <span class="key">R</span> Reject &nbsp;·&nbsp;
+      <span class="key">R</span> Correct &nbsp;·&nbsp;
+      <span class="key">F</span> Flag for later &nbsp;·&nbsp;
       <span class="key">S</span> Skip &nbsp;·&nbsp;
       <span class="key">Esc</span> Close
     </div>
@@ -997,6 +1049,36 @@
         Confirm Selection
       </button>
       <button class="btn btn-ghost btn-sm" onclick="closeContextPicker()">Skip</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== KEYWORD SUGGESTION MODAL ===================== -->
+<div class="overlay-bg" id="kwModalOverlay">
+  <div class="kw-modal-box">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="kw-modal-title">
+        <svg class="icon" width="16" height="16"><use href="#ic-brain"/></svg>
+        Suggest a Learn Keyword
+      </div>
+      <button class="modal-close" onclick="closeKwModal()"><svg class="icon" width="16" height="16"><use href="#ic-x"/></svg></button>
+    </div>
+    <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.65">
+      You corrected this entry. Pick a keyword from the narration — any future transaction containing this word will be <strong>auto-classified</strong> the same way (pending your review).
+    </div>
+    <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em">Narration</div>
+    <div class="kw-modal-narr" id="kwNarration"></div>
+    <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em">Suggested keywords — click to select</div>
+    <div class="kw-chips" id="kwChips"></div>
+    <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em">Or type your own keyword</div>
+    <input class="kw-input" id="kwInput" type="text" placeholder="e.g. Nithin, AIOC, HDFC..." oninput="onKwInputChange()">
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="confirmKwModal()">
+        <svg class="icon" width="12" height="12"><use href="#ic-check"/></svg>
+        Use This Keyword
+      </button>
+      <button class="btn btn-secondary" onclick="skipKwModal()">Use Full Narration</button>
+      <button class="btn btn-ghost" onclick="closeKwModal()">Skip Learning</button>
     </div>
   </div>
 </div>
@@ -1136,6 +1218,8 @@ function getFilteredIndices() {
     if (classF === 'unclassified' && classificationResults[i]) return false;
     if (classF === 'duplicate' && !duplicatesMap[String(i)]) return false;
     if (classF === 'accepted' && reviewDecisions[i] !== 'accepted') return false;
+    if (classF === 'corrected' && reviewDecisions[i] !== 'corrected') return false;
+    if (classF === 'flagged' && reviewDecisions[i] !== 'flagged') return false;
     if (classF === 'rejected' && reviewDecisions[i] !== 'rejected') return false;
     return true;
   }).map(({ i }) => i);
@@ -1208,12 +1292,16 @@ function renderTable() {
     const decision = reviewDecisions[i];
 
     const typeBadge = isReceipt
-      ? `<span class="badge badge-receipt">${icon('ic-check',9)} Receipt</span>`
-      : `<span class="badge badge-payment">${icon('ic-x',9)} Payment</span>`;
+      ? `<span class="badge badge-receipt">↑ In</span>`
+      : `<span class="badge badge-payment">↓ Out</span>`;
 
     let classBadge;
     if (decision === 'accepted') {
       classBadge = res ? `<span class="badge badge-accepted">${icon('ic-check',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-accepted">${icon('ic-check',9)} Accepted</span>`;
+    } else if (decision === 'corrected') {
+      classBadge = res ? `<span class="badge badge-corrected">${icon('ic-check',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-corrected">Corrected</span>`;
+    } else if (decision === 'flagged') {
+      classBadge = `<span class="badge badge-flagged">${icon('ic-alert',9)} Flagged</span>`;
     } else if (decision === 'rejected') {
       classBadge = res ? `<span class="badge badge-rejected">${icon('ic-x',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-rejected">${icon('ic-x',9)} Rejected</span>`;
     } else if (res) {
@@ -1235,10 +1323,13 @@ function renderTable() {
     const bank = t.particulars.replace('HDFC Bank','HDFC').replace('ICICI Bank - 0901 - Birac','ICICI Birac');
     const rowCls = [
       selectedRows.has(i) ? 'row-selected' : '',
-      isDup ? 'row-dup' : ''
+      isDup ? 'row-dup' : '',
+      decision === 'accepted' ? 'row-accepted' : '',
+      decision === 'corrected' ? 'row-corrected' : '',
+      decision === 'flagged' ? 'row-flagged' : '',
     ].filter(Boolean).join(' ');
 
-    return `<tr onclick="selectRow(${i})" class="${rowCls}" id="row-${i}">
+    return `<tr onclick="selectRow(${i})" ondblclick="resetRowDecision(${i}, event)" class="${rowCls}" id="row-${i}" title="${decision ? 'Double-click to reset review status' : ''}">
       <td onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRowSelect(${i},this)" ${selectedRows.has(i)?'checked':''}></td>
       <td style="white-space:nowrap;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim)">${date}</td>
       <td style="font-size:0.74rem;color:var(--text-muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(bank)}</td>
@@ -1285,13 +1376,17 @@ function updateStats() {
   const payments = allTransactions.filter(t => t.voucher_type === 'Payment').length;
   const classified = Object.keys(classificationResults).length;
   const accepted = Object.values(reviewDecisions).filter(d => d === 'accepted').length;
+  const corrected = Object.values(reviewDecisions).filter(d => d === 'corrected').length;
+  const flagged = Object.values(reviewDecisions).filter(d => d === 'flagged').length;
   const dups = Object.keys(duplicatesMap).length;
   document.getElementById('statsBar').innerHTML = `
     <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${receipts}</div><div class="stat-lbl">Receipts</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--red)">${payments}</div><div class="stat-lbl">Payments</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${receipts}</div><div class="stat-lbl">↑ Receipts</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--red)">${payments}</div><div class="stat-lbl">↓ Payments</div></div>
     <div class="stat-card"><div class="stat-num" style="color:#93c5fd">${classified}</div><div class="stat-lbl">Classified</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${accepted}</div><div class="stat-lbl">Accepted</div></div>
+    ${accepted > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--green)">${accepted}</div><div class="stat-lbl">Accepted</div></div>` : ''}
+    ${corrected > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${corrected}</div><div class="stat-lbl">Corrected</div></div>` : ''}
+    ${flagged > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--red)">${flagged}</div><div class="stat-lbl">Flagged</div></div>` : ''}
     ${dups > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${dups}</div><div class="stat-lbl">Dup Flags</div></div>` : ''}
   `;
 }
@@ -1328,7 +1423,11 @@ function renderDetailPanel(i) {
 
   let reviewStatusHtml = '';
   if (decision === 'accepted') {
-    reviewStatusHtml = `<div class="review-status-ok">${icon('ic-check',13)} Accepted</div>`;
+    reviewStatusHtml = `<div class="review-status-ok">${icon('ic-check',13)} Accepted — no changes</div>`;
+  } else if (decision === 'corrected') {
+    reviewStatusHtml = `<div class="review-status-corrected">${icon('ic-check',13)} Reviewed &amp; Corrected</div>`;
+  } else if (decision === 'flagged') {
+    reviewStatusHtml = `<div class="review-status-flag">${icon('ic-alert',13)} Flagged for later review — <a href="#" style="color:var(--red)" onclick="resetRowDecision(${i}, event); return false;">Reset</a></div>`;
   } else if (decision === 'rejected') {
     reviewStatusHtml = `<div class="review-status-rej">${icon('ic-x',13)} Rejected</div>`;
   }
@@ -1356,8 +1455,8 @@ function renderDetailPanel(i) {
         <div class="detail-label">Type</div>
         <div class="detail-value">
           ${isReceipt
-            ? `<span class="badge badge-receipt">${icon('ic-check',9)} Receipt (Incoming)</span>`
-            : `<span class="badge badge-payment">${icon('ic-x',9)} Payment (Outgoing)</span>`}
+            ? `<span class="badge badge-receipt">↑ Incoming (Receipt)</span>`
+            : `<span class="badge badge-payment">↓ Outgoing (Payment)</span>`}
         </div>
       </div>
       <div class="detail-row">
@@ -1396,6 +1495,7 @@ function renderDetailPanel(i) {
       </div>
       <div style="margin-top:9px;font-size:0.7rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:8px">
         <span class="key">Enter</span> Accept &amp; next &nbsp;·&nbsp;
+        <span class="key">F</span> Flag &amp; next &nbsp;·&nbsp;
         <span class="key">R</span> Correct &nbsp;·&nbsp;
         <span class="key">↑↓</span> Navigate
       </div>
@@ -1413,17 +1513,43 @@ function acceptClassification(i) {
   renderTable(); renderDetailPanel(i); updateStats();
 }
 
+function flagClassification(i) {
+  reviewDecisions[i] = 'flagged';
+  renderTable(); renderDetailPanel(i); updateStats();
+}
+
+function resetRowDecision(i, event) {
+  if (event) event.stopPropagation();
+  if (!reviewDecisions[i]) return;
+  delete reviewDecisions[i];
+  renderTable(); renderDetailPanel(i); updateStats();
+  showToast('Review status reset.');
+}
+
 async function submitFeedback(i) {
   const t = allTransactions[i];
   const res = classificationResults[i];
   const corrected = document.getElementById('feedbackCat').value;
   const shouldLearn = document.getElementById('feedbackLearn').checked;
   if (!corrected) return;
+
+  if (shouldLearn) {
+    // Show keyword suggestion modal before saving
+    openKwModal(i, corrected, t.narration);
+    return;
+  }
+
+  await _doSubmitFeedback(i, corrected, false, null);
+}
+
+async function _doSubmitFeedback(i, corrected, shouldLearn, keyword) {
+  const t = allTransactions[i];
+  const res = classificationResults[i];
   const resp = await fetch('/api/feedback', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index: i, original_classification: res ? res.classification : '',
       corrected_classification: corrected, should_learn: shouldLearn,
-      narration: t.narration, date: t.date, gross_total: t.gross_total })
+      narration: keyword || t.narration, date: t.date, gross_total: t.gross_total })
   });
   const data = await resp.json();
   if (classificationResults[i]) {
@@ -1432,7 +1558,7 @@ async function submitFeedback(i) {
     classificationResults[i].confidence = 'high';
     classificationResults[i].reasoning = `Manually corrected to "${corrected}" by user.`;
   }
-  reviewDecisions[i] = 'accepted';
+  reviewDecisions[i] = 'corrected';
   if (shouldLearn && data.affected_indices && data.affected_indices.length > 0) {
     const count = data.affected_indices.length;
     data.affected_indices.forEach(ai => {
@@ -1512,6 +1638,10 @@ function reviewAccept() {
   reviewDecisions[i] = 'accepted'; reviewPos++; renderReviewCard();
 }
 function reviewReject() { document.getElementById('reviewCorrection').classList.add('show'); }
+function reviewFlag() {
+  const i = reviewQueue[reviewPos];
+  reviewDecisions[i] = 'flagged'; reviewPos++; renderReviewCard();
+}
 function reviewSkip() { reviewPos++; renderReviewCard(); }
 function reviewCancelCorrection() { document.getElementById('reviewCorrection').classList.remove('show'); }
 
@@ -1521,17 +1651,32 @@ async function reviewSubmitCorrection() {
   const res = classificationResults[i];
   const corrected = document.getElementById('reviewCatSelect').value;
   const shouldLearn = document.getElementById('reviewLearnCheck').checked;
+
+  if (shouldLearn) {
+    // Show keyword modal; on confirm, proceed and advance review
+    openKwModal(i, corrected, t.narration, async (keyword) => {
+      await _doReviewCorrection(i, corrected, true, keyword);
+    });
+    return;
+  }
+
+  await _doReviewCorrection(i, corrected, false, null);
+}
+
+async function _doReviewCorrection(i, corrected, shouldLearn, keyword) {
+  const t = allTransactions[i];
+  const res = classificationResults[i];
   const resp = await fetch('/api/feedback', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index: i, original_classification: res ? res.classification : '',
       corrected_classification: corrected, should_learn: shouldLearn,
-      narration: t.narration, date: t.date, gross_total: t.gross_total })
+      narration: keyword || t.narration, date: t.date, gross_total: t.gross_total })
   });
   const data = await resp.json();
   classificationResults[i] = { ...(classificationResults[i]||{}), classification: corrected,
     matched_detail: shouldLearn ? 'User corrected + learned' : 'User corrected',
     confidence: 'high', reasoning: `Manually corrected to "${corrected}" by user.` };
-  reviewDecisions[i] = 'rejected';
+  reviewDecisions[i] = 'corrected';
   if (shouldLearn && data.affected_indices && data.affected_indices.length > 0) {
     data.affected_indices.forEach(ai => {
       classificationResults[ai] = { ...(classificationResults[ai] || { idx: ai, reference_id: '' }),
@@ -1547,6 +1692,7 @@ function handleReviewKey(e) {
   if (document.getElementById('reviewCorrection').classList.contains('show')) return;
   if (e.key === 'Enter') { e.preventDefault(); reviewAccept(); }
   else if (e.key === 'r' || e.key === 'R') reviewReject();
+  else if (e.key === 'f' || e.key === 'F') reviewFlag();
   else if (e.key === 's' || e.key === 'S') reviewSkip();
   else if (e.key === 'Escape') closeQuickReview();
 }
@@ -1559,6 +1705,10 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
     acceptClassification(selectedTxnIndex);
+    navigateRow(1);
+  } else if (e.key === 'f' || e.key === 'F') {
+    e.preventDefault();
+    flagClassification(selectedTxnIndex);
     navigateRow(1);
   } else if (e.key === 'r' || e.key === 'R') {
     e.preventDefault();
@@ -1673,6 +1823,76 @@ function exportCSV() {
 function escHtml(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ======== Keyword Suggestion Modal ========
+let _kwPendingIdx = null;
+let _kwPendingClassification = null;
+let _kwPendingNarration = null;
+let _kwCallback = null;
+
+function extractKeywords(narration) {
+  // Extract meaningful tokens: skip common UPI noise words
+  const STOP = new Set(['UPI', 'NEFT', 'RTGS', 'IMPS', 'FD', 'FROM', 'TO', 'BY', 'VIA', 'PAY', 'PAYMENT', 'TRANSFER', 'REF', 'REFNO', 'TXN', 'DR', 'CR', 'ID', 'A/C', 'AC', 'NO', 'ON', 'IN', 'AT', 'OF', 'THE', 'AND', 'FOR', 'WITH', 'PVT', 'LTD', 'TECHNOLOGIES', 'TECHNOLOGY', 'PRIVATE', 'LIMITED', 'INR']);
+  const tokens = narration.toUpperCase().split(/[\s\-\/\|\.,:;@_]+/).filter(t => t.length >= 3 && !STOP.has(t) && !/^\d+$/.test(t));
+  // Unique, max 10
+  return [...new Set(tokens)].slice(0, 10);
+}
+
+function openKwModal(idx, classification, narration, callback) {
+  _kwPendingIdx = idx;
+  _kwPendingClassification = classification;
+  _kwPendingNarration = narration;
+  _kwCallback = callback || null;
+
+  document.getElementById('kwNarration').textContent = narration;
+  document.getElementById('kwInput').value = '';
+
+  const chips = extractKeywords(narration);
+  document.getElementById('kwChips').innerHTML = chips.map(kw =>
+    `<span class="kw-chip" onclick="selectKwChip(this, '${kw.replace(/'/g,"\\'")}')"><span style="font-size:0.8em;opacity:0.6">🔑</span> ${kw}</span>`
+  ).join('');
+
+  document.getElementById('kwModalOverlay').classList.add('show');
+  setTimeout(() => document.getElementById('kwInput').focus(), 100);
+}
+
+function selectKwChip(el, kw) {
+  document.querySelectorAll('.kw-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('kwInput').value = kw;
+}
+
+function onKwInputChange() {
+  document.querySelectorAll('.kw-chip').forEach(c => c.classList.remove('selected'));
+}
+
+async function confirmKwModal() {
+  const keyword = document.getElementById('kwInput').value.trim() || _kwPendingNarration;
+  closeKwModal();
+  if (_kwCallback) {
+    await _kwCallback(keyword);
+  } else {
+    await _doSubmitFeedback(_kwPendingIdx, _kwPendingClassification, true, keyword);
+  }
+}
+
+async function skipKwModal() {
+  // Use full narration as the key
+  closeKwModal();
+  if (_kwCallback) {
+    await _kwCallback(_kwPendingNarration);
+  } else {
+    await _doSubmitFeedback(_kwPendingIdx, _kwPendingClassification, true, _kwPendingNarration);
+  }
+}
+
+function closeKwModal() {
+  document.getElementById('kwModalOverlay').classList.remove('show');
+  _kwCallback = null;
+}
+
+document.getElementById('kwModalOverlay').addEventListener('click', function(e) { if (e.target === this) closeKwModal(); });
+document.getElementById('kwInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmKwModal(); });
 
 // ======== Google Drive ========
 async function openDriveModal() {
