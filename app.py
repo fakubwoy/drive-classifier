@@ -357,6 +357,30 @@ def classify_transactions_batch(transactions_df, context_sheets):
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
+    # ---------- retry wrapper ----------
+    import time as _time
+
+    def _generate_with_retry(prompt_text, max_attempts=5):
+        """Call model.generate_content with exponential back-off on transient errors."""
+        delay = 10  # seconds before first retry
+        for attempt in range(max_attempts):
+            try:
+                return model.generate_content(prompt_text)
+            except Exception as exc:
+                err = str(exc)
+                is_transient = any(kw in err for kw in [
+                    "503", "UNAVAILABLE", "high demand", "ServiceUnavailable",
+                    "429", "ResourceExhausted", "quota", "rate"
+                ])
+                if is_transient and attempt < max_attempts - 1:
+                    wait = delay * (2 ** attempt)  # 10 → 20 → 40 → 80 s
+                    print(f"Gemini transient error (attempt {attempt+1}/{max_attempts}), "
+                          f"retrying in {wait}s: {err[:120]}")
+                    _time.sleep(wait)
+                else:
+                    raise  # non-transient, or out of attempts
+    # -----------------------------------
+
     context_section = build_context_sheet_summary(context_sheets)
     learned_rules = get_learned_rules()
 
@@ -461,7 +485,7 @@ Return a JSON array (same length, same order):
 Return ONLY the JSON array. No markdown. No extra text."""
 
         try:
-            response = model.generate_content(prompt)
+            response = _generate_with_retry(prompt)
             text = response.text.strip()
             # Strip markdown fences
             text = re.sub(r"^```[a-z]*\n?", "", text)
@@ -511,7 +535,7 @@ Return ONLY the JSON array. No markdown. No extra text."""
                                 f"Return a JSON array (same length, same order):",
                                 f"Return a JSON array with exactly 1 element:"
                             ).replace(json.dumps(batch, indent=2), json.dumps([item], indent=2))
-                            r2 = model.generate_content(single_prompt)
+                            r2 = _generate_with_retry(single_prompt)
                             t2 = re.sub(r"^```[a-z]*\n?", "", r2.text.strip())
                             t2 = re.sub(r"\n?```$", "", t2).strip()
                             single_result = json.loads(t2)
