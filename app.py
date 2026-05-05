@@ -3,9 +3,19 @@ import json
 import re
 import sqlite3
 import secrets
+import logging
+import time as _time
 import pandas as pd
 from flask import Flask, render_template, jsonify, request, redirect, session
 import google.generativeai as genai
+
+# ---------- Logging ----------
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("alfaleus")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
@@ -349,40 +359,70 @@ def apply_learned_rules(item, learned_rules):
 
 
 def classify_transactions_batch(transactions_df, context_sheets):
+    log.info("classify_transactions_batch called with %d rows, %d context sheets",
+             len(transactions_df), len(context_sheets))
+
     if not GEMINI_API_KEY:
+        log.error("GEMINI_API_KEY is not set — aborting classification")
         return [{"classification": "API key missing", "reference_id": "", "matched_detail": "",
                  "confidence": "low", "reasoning": "No Gemini API key set."}
                 for _ in range(len(transactions_df))]
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    log.info("Gemini configured. Primary model: gemini-2.5-flash  |  Fallback: gemini-2.5-flash-lite")
 
-    # ---------- retry wrapper ----------
-    import time as _time
+    # ---------- model factory with fallback ----------
+    # gemini-1.5-* is fully shut down (returns 404).
+    # gemini-2.0-flash shuts down June 1 2026.
+    # Safe chain: gemini-2.5-flash  →  gemini-2.5-flash-lite
+    PRIMARY_MODEL  = "gemini-2.5-flash"
+    FALLBACK_MODEL = "gemini-2.5-flash-lite"
+    _current_model_name = PRIMARY_MODEL
+    _model_cache = {}
+
+    def _get_model(name):
+        if name not in _model_cache:
+            _model_cache[name] = genai.GenerativeModel(name)
+        return _model_cache[name]
 
     def _generate_with_retry(prompt_text, max_attempts=5):
-        """Call model.generate_content with exponential back-off on transient errors."""
-        delay = 10  # seconds before first retry
+        """Call Gemini with exponential back-off. On rate-limit/503 swap to fallback model."""
+        nonlocal _current_model_name
+        delay = 10
         for attempt in range(max_attempts):
+            model_name = _current_model_name
+            model = _get_model(model_name)
+            log.debug("Attempt %d/%d using model=%s", attempt + 1, max_attempts, model_name)
             try:
-                return model.generate_content(prompt_text)
+                response = model.generate_content(prompt_text)
+                log.debug("Model %s responded successfully on attempt %d", model_name, attempt + 1)
+                return response
             except Exception as exc:
                 err = str(exc)
-                is_transient = any(kw in err for kw in [
+                is_rate_or_unavailable = any(kw in err for kw in [
                     "503", "UNAVAILABLE", "high demand", "ServiceUnavailable",
                     "429", "ResourceExhausted", "quota", "rate"
                 ])
-                if is_transient and attempt < max_attempts - 1:
-                    wait = delay * (2 ** attempt)  # 10 → 20 → 40 → 80 s
-                    print(f"Gemini transient error (attempt {attempt+1}/{max_attempts}), "
-                          f"retrying in {wait}s: {err[:120]}")
+                log.warning("Gemini error (attempt %d/%d) model=%s: %s",
+                            attempt + 1, max_attempts, model_name, err[:200])
+                if is_rate_or_unavailable and attempt < max_attempts - 1:
+                    if model_name == PRIMARY_MODEL:
+                        log.warning("Rate-limit/503 on primary model — switching to fallback: %s", FALLBACK_MODEL)
+                        _current_model_name = FALLBACK_MODEL
+                        wait = 3  # short wait after model swap
+                    else:
+                        wait = delay * (2 ** attempt)
+                        log.warning("Rate-limit/503 on fallback model — retrying in %ds", wait)
                     _time.sleep(wait)
                 else:
-                    raise  # non-transient, or out of attempts
+                    log.error("Non-transient error or out of attempts. model=%s error=%s", model_name, err[:300])
+                    raise
     # -----------------------------------
 
     context_section = build_context_sheet_summary(context_sheets)
+    log.info("Context section length: %d chars", len(context_section))
     learned_rules = get_learned_rules()
+    log.info("Loaded %d learned rules", len(learned_rules))
 
     txn_list = []
     for i, (_, row) in enumerate(transactions_df.iterrows()):
@@ -402,6 +442,8 @@ def classify_transactions_batch(transactions_df, context_sheets):
     for item in txn_list:
         learned = apply_learned_rules(item, learned_rules)
         if learned:
+            log.debug("Rule match idx=%d narration='%s' → '%s'",
+                      item["idx"], item["narration"][:60], learned)
             results[item["idx"]] = {
                 "idx": item["idx"],
                 "classification": learned,
@@ -412,6 +454,9 @@ def classify_transactions_batch(transactions_df, context_sheets):
             }
         else:
             needs_ai.append(item)
+
+    log.info("%d transactions need AI classification, %d handled by learned rules",
+             len(needs_ai), len(txn_list) - len(needs_ai))
 
     learned_rules_text = ""
     if learned_rules:
@@ -427,6 +472,8 @@ def classify_transactions_batch(transactions_df, context_sheets):
     for start in range(0, len(needs_ai), batch_size):
         batch = needs_ai[start:start + batch_size]
         batch_json = json.dumps(batch, indent=2)
+        log.info("Sending batch %d–%d (%d items) to Gemini. Prompt size ~%d chars",
+                 start, start + len(batch) - 1, len(batch), len(batch_json))
 
         prompt = f"""You are an AI assistant classifying bank transactions for Alfaleus Technology Pvt Ltd, a medical device company selling ophthalmic (eye care) devices.
 {context_block}
@@ -486,7 +533,9 @@ Return ONLY the JSON array. No markdown. No extra text."""
 
         try:
             response = _generate_with_retry(prompt)
-            text = response.text.strip()
+            raw_text = response.text.strip()
+            log.debug("Raw Gemini response (first 300 chars): %s", raw_text[:300])
+            text = raw_text
             # Strip markdown fences
             text = re.sub(r"^```[a-z]*\n?", "", text)
             text = re.sub(r"\n?```$", "", text)
@@ -495,7 +544,9 @@ Return ONLY the JSON array. No markdown. No extra text."""
             # Attempt 1: clean parse
             try:
                 batch_results = json.loads(text)
-            except json.JSONDecodeError:
+                log.info("JSON parse attempt 1 succeeded: %d results", len(batch_results))
+            except json.JSONDecodeError as je:
+                log.warning("JSON parse attempt 1 failed: %s — trying recovery", je)
                 # Attempt 2: truncated JSON — find the last complete object
                 # by trimming after the last '}' and closing the array
                 last_brace = text.rfind("}")
@@ -505,7 +556,9 @@ Return ONLY the JSON array. No markdown. No extra text."""
                     truncated = re.sub(r",\s*$", "", truncated.strip())
                     try:
                         batch_results = json.loads(truncated + "]")
+                        log.info("JSON parse attempt 2 (truncation recovery) succeeded: %d results", len(batch_results))
                     except json.JSONDecodeError:
+                        log.warning("JSON parse attempt 2 failed — trying regex extraction")
                         batch_results = None
                 else:
                     batch_results = None
@@ -520,6 +573,10 @@ Return ONLY the JSON array. No markdown. No extra text."""
                         except json.JSONDecodeError:
                             continue
                     batch_results = parsed if parsed else None
+                    if batch_results:
+                        log.info("JSON parse attempt 3 (regex) succeeded: %d objects", len(batch_results))
+                    else:
+                        log.error("All JSON recovery attempts failed. Raw text: %s", text[:500])
 
             if batch_results:
                 successfully_parsed = {r["idx"] for r in batch_results if "idx" in r}
@@ -529,6 +586,8 @@ Return ONLY the JSON array. No markdown. No extra text."""
                 # Any items in the batch that didn't come back — retry individually
                 missing = [item for item in batch if item["idx"] not in successfully_parsed]
                 if missing:
+                    log.warning("%d items missing from batch response — retrying individually: idx=%s",
+                                len(missing), [m["idx"] for m in missing])
                     for item in missing:
                         try:
                             single_prompt = prompt.replace(
@@ -543,7 +602,8 @@ Return ONLY the JSON array. No markdown. No extra text."""
                                 results[item["idx"]] = single_result[0]
                             elif isinstance(single_result, dict):
                                 results[item["idx"]] = single_result
-                        except Exception:
+                        except Exception as single_err:
+                            log.error("Single retry failed for idx=%d: %s", item["idx"], str(single_err)[:200])
                             results[item["idx"]] = {
                                 "idx": item["idx"],
                                 "classification": "Error",
@@ -556,6 +616,7 @@ Return ONLY the JSON array. No markdown. No extra text."""
                 raise ValueError(f"All recovery attempts failed. Raw: {text[:200]}")
 
         except Exception as e:
+            log.error("Batch %d–%d failed entirely: %s", start, start + len(batch) - 1, str(e)[:300])
             for item in batch:
                 results[item["idx"]] = {
                     "idx": item["idx"],
@@ -613,8 +674,11 @@ def classify():
     try:
         data = request.json
         indices = data.get("indices", None)
+        log.info("/api/classify called — indices=%s", indices if indices is None else len(indices))
         transactions = load_transactions()
+        log.info("Loaded %d total transactions from data source", len(transactions))
         context_sheets = load_context_sheets()
+        log.info("Loaded %d context sheets", len(context_sheets))
 
         if indices is not None:
             subset = transactions.iloc[indices].copy()
@@ -624,8 +688,10 @@ def classify():
 
         results = classify_transactions_batch(subset, context_sheets)
         output = [{"original_index": indices[i], **res} for i, res in enumerate(results) if res]
+        log.info("/api/classify completed — %d results returned", len(output))
         return jsonify({"results": output})
     except Exception as e:
+        log.exception("/api/classify unhandled exception: %s", str(e))
         return jsonify({"error": str(e)}), 500
 
 
