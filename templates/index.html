@@ -916,12 +916,15 @@
 <div class="overlay-bg" id="progressOverlay">
   <div class="progress-box">
     <div class="progress-box-title">AI Classification Running</div>
-    <div class="progress-box-sub" id="progressSub">Sending batch to Gemini 2.5 Flash…</div>
+    <div class="progress-box-sub" id="progressSub">Connecting to classification stream…</div>
     <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
     <div class="progress-label" id="progressCount">0 / 0</div>
     <div class="progress-sub-track"><div class="progress-sub-fill" id="progressSubFill" style="width:0%"></div></div>
     <div class="progress-step-detail" id="progressStepDetail">&nbsp;</div>
-    <div class="progress-phase" id="progressPhase">&nbsp;</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
+      <div class="progress-phase" id="progressPhase" style="margin-top:0">&nbsp;</div>
+      <div id="progressTimer" style="font-size:0.7rem;font-family:var(--mono);color:var(--text-muted)"></div>
+    </div>
   </div>
 </div>
 
@@ -1845,30 +1848,50 @@ function classifyViaStream(indices) {
     const total = indices.length;
     let completed = 0;
 
-    // SSE requires GET, so we POST the indices first to register the job,
-    // then open the stream. Simpler: use fetch + ReadableStream on the POST response.
-    let res;
-    try {
-      res = await fetch('/api/classify_stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ indices })
-      });
-    } catch (e) {
-      showToast('Stream connection failed: ' + e);
-      resolve(); return;
-    }
+    // --- Idle animation state ---
+    // While waiting for the FIRST Gemini response the main bar crawls forward
+    // (0 → ~18%) so the user always sees movement. Once real data arrives it
+    // jumps to the true percentage and the crawl stops.
+    const CRAWL_MAX = 18;      // max % the crawl can reach before first result
+    let crawlPct = 0;
+    let firstResultReceived = false;
+    let startTime = Date.now();
 
-    if (!res.ok || !res.body) {
-      showToast('Classification stream error: ' + res.status);
-      resolve(); return;
-    }
+    // Status messages that rotate while waiting
+    const WAITING_MSGS = [
+      'Sending transactions to Gemini 2.5 Flash…',
+      'Gemini is reading your narrations…',
+      'Matching against context sheets…',
+      'Applying classification rules…',
+      'Still working — Gemini can take ~30s per batch…',
+      'Almost there — waiting on AI response…',
+    ];
+    let msgIdx = 0;
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    // Timer display
+    const timerEl = document.getElementById('progressTimer');
+    const timerInterval = setInterval(() => {
+      const secs = Math.floor((Date.now() - startTime) / 1000);
+      timerEl.textContent = `${secs}s elapsed`;
+    }, 1000);
+
+    // Crawl the main bar slowly while idle
+    const crawlInterval = setInterval(() => {
+      if (firstResultReceived) { clearInterval(crawlInterval); return; }
+      // Logarithmic slow-down so it never quite reaches CRAWL_MAX
+      crawlPct = Math.min(CRAWL_MAX, crawlPct + (CRAWL_MAX - crawlPct) * 0.045);
+      document.getElementById('progressFill').style.width = crawlPct.toFixed(1) + '%';
+    }, 500);
+
+    // Rotate status messages every 7s while idle
+    const msgInterval = setInterval(() => {
+      if (firstResultReceived) { clearInterval(msgInterval); return; }
+      msgIdx = (msgIdx + 1) % WAITING_MSGS.length;
+      document.getElementById('progressSub').textContent = WAITING_MSGS[msgIdx];
+    }, 7000);
+
+    // Sub-bar animation (green bar showing within-batch activity)
     let subAnimInterval = null;
-
     const startSub = () => {
       let pct = 5;
       document.getElementById('progressSubFill').style.width = pct + '%';
@@ -1878,9 +1901,42 @@ function classifyViaStream(indices) {
       }, 400);
     };
 
+    const cleanup = () => {
+      clearInterval(timerInterval);
+      clearInterval(crawlInterval);
+      clearInterval(msgInterval);
+      if (subAnimInterval) clearInterval(subAnimInterval);
+    };
+
+    // SSE requires GET, so we POST the indices first to register the job,
+    // then open the stream. Simpler: use fetch + ReadableStream on the POST response.
+    document.getElementById('progressSub').textContent = WAITING_MSGS[0];
+    document.getElementById('progressPhase').textContent = 'Processing in sub-batches of 20 transactions…';
+    document.getElementById('progressStepDetail').textContent = 'First response typically takes 25–40s';
     subAnimInterval = startSub();
-    document.getElementById('progressSub').textContent = 'Waiting for first Gemini response…';
-    document.getElementById('progressPhase').textContent = 'Processing in sub-batches of 20…';
+
+    let res;
+    try {
+      res = await fetch('/api/classify_stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ indices })
+      });
+    } catch (e) {
+      cleanup();
+      showToast('Stream connection failed: ' + e);
+      resolve(); return;
+    }
+
+    if (!res.ok || !res.body) {
+      cleanup();
+      showToast('Classification stream error: ' + res.status);
+      resolve(); return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
     while (true) {
       let chunk;
@@ -1897,21 +1953,30 @@ function classifyViaStream(indices) {
         try { event = JSON.parse(line.slice(6)); } catch { continue; }
 
         if (event.error) {
-          clearInterval(subAnimInterval);
+          cleanup();
           showToast('Classification error: ' + event.error);
           resolve(); return;
         }
 
-        // Apply results to the table immediately
         if (event.results && event.results.length > 0) {
+          // First real result — stop the idle crawl and jump to true %
+          if (!firstResultReceived) {
+            firstResultReceived = true;
+            clearInterval(crawlInterval);
+            clearInterval(msgInterval);
+            document.getElementById('progressStepDetail').textContent = '';
+          }
+
           event.results.forEach(r => {
             if (r.original_index !== undefined) {
               classificationResults[r.original_index] = r;
             }
           });
-          // Flash the sub-bar to 100% to signal a sub-batch landed
-          clearInterval(subAnimInterval);
+
+          // Flash sub-bar to 100% to signal a sub-batch landed
+          if (subAnimInterval) clearInterval(subAnimInterval);
           document.getElementById('progressSubFill').style.width = '100%';
+
           completed = event.completed || completed + event.results.length;
           const pct = Math.round((completed / total) * 100);
           document.getElementById('progressFill').style.width = pct + '%';
@@ -1919,10 +1984,12 @@ function classifyViaStream(indices) {
           document.getElementById('progressSub').textContent =
             `${completed} classified — ${total - completed} remaining`;
           document.getElementById('progressPhase').textContent = completed < total
-            ? 'Sub-batch complete ✓ — next in progress…'
+            ? `Sub-batch complete ✓ — sending next 20…`
             : 'All done ✓';
+
           // Update table in real time so user sees results as they arrive
           renderTable(); updateStats();
+
           // Reset sub-bar for next sub-batch
           await sleep(300);
           document.getElementById('progressSubFill').style.width = '0%';
@@ -1930,14 +1997,14 @@ function classifyViaStream(indices) {
         }
 
         if (event.done) {
-          clearInterval(subAnimInterval);
+          cleanup();
           document.getElementById('progressSubFill').style.width = completed > 0 ? '100%' : '0%';
           await sleep(400);
           resolve(); return;
         }
       }
     }
-    clearInterval(subAnimInterval);
+    cleanup();
     resolve();
   });
 }
