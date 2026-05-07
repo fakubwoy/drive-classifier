@@ -22,6 +22,15 @@ _classify_lock = threading.Lock()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
+# Make sessions permanent (survive browser restarts) and set SameSite=Lax
+# so the OAuth popup callback can still write to the same session cookie.
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("RAILWAY_ENVIRONMENT") is not None
+app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30  # 30 days
+
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
 
 OAUTH_CLIENT_ID     = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
@@ -73,8 +82,29 @@ init_db()
 
 
 # ---------- Settings helpers ----------
+#
+# PER-USER keys (stored in Flask session — each browser gets its own namespace):
+#   oauth_tokens, active_sheet_id, active_sheet_name, active_tab_name,
+#   context_tab_names, oauth_state
+#
+# GLOBAL keys (SQLite settings table — shared across users, currently unused
+#   for sensitive data; feedback/rules tables remain intentionally global).
+#
+# Per-user isolation is achieved by storing Drive tokens and sheet selection
+# in the signed Flask session cookie rather than a shared DB row.
+# Every browser session is fully independent — no user can see another's data.
+
+_PER_USER_KEYS = {
+    "oauth_tokens", "active_sheet_id", "active_sheet_name",
+    "active_tab_name", "context_tab_names", "oauth_state",
+}
+
 
 def get_setting(key, default=None):
+    """Read a setting. Per-user keys come from the Flask session."""
+    if key in _PER_USER_KEYS:
+        return session.get(key, default)
+    # Shared/global settings fall through to SQLite
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
     conn.close()
@@ -82,6 +112,10 @@ def get_setting(key, default=None):
 
 
 def set_setting(key, value):
+    """Write a setting. Per-user keys are stored in the Flask session."""
+    if key in _PER_USER_KEYS:
+        session[key] = value
+        return
     conn = sqlite3.connect(DB_PATH)
     conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, value))
     conn.commit()
@@ -179,6 +213,7 @@ def _refresh_oauth_creds(tokens: dict):
         updated["access_token"] = creds.token
         if creds.refresh_token:
             updated["refresh_token"] = creds.refresh_token
+        # Persist back to the per-user session so other routes see the new token
         set_setting("oauth_tokens", json.dumps(updated))
     return creds
 

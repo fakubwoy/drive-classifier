@@ -8,24 +8,24 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:       #0a0c10;
-    --surface:  #111318;
-    --surface2: #181c23;
-    --surface3: #1e2330;
-    --border:   #252c3a;
-    --border2:  #2e3850;
-    --accent:   #3b82f6;
-    --accent-dim: rgba(59,130,246,0.12);
-    --accent2:  #10b981;
-    --accent2-dim: rgba(16,185,129,0.12);
-    --text:     #e2e8f0;
+    --bg:       #f8fafc;
+    --surface:  #ffffff;
+    --surface2: #f1f5f9;
+    --surface3: #e8edf5;
+    --border:   #e2e8f0;
+    --border2:  #cbd5e1;
+    --accent:   #2563eb;
+    --accent-dim: rgba(37,99,235,0.09);
+    --accent2:  #059669;
+    --accent2-dim: rgba(5,150,105,0.09);
+    --text:     #0f172a;
     --text-muted: #64748b;
-    --text-dim: #94a3b8;
-    --green:    #10b981;
-    --yellow:   #f59e0b;
-    --red:      #ef4444;
-    --blue:     #3b82f6;
-    --purple:   #8b5cf6;
+    --text-dim: #475569;
+    --green:    #059669;
+    --yellow:   #d97706;
+    --red:      #dc2626;
+    --blue:     #2563eb;
+    --purple:   #7c3aed;
     --mono: 'IBM Plex Mono', monospace;
     --sans: 'Inter', system-ui, sans-serif;
     --display: 'Syne', sans-serif;
@@ -276,10 +276,10 @@
   }
   .badge-receipt  { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
   .badge-payment  { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
-  .badge-classified { background: rgba(59,130,246,0.1); color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
-  .badge-learned  { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
+  .badge-classified { background: rgba(37,99,235,0.09); color: #1d4ed8; border: 1px solid rgba(37,99,235,0.22); }
+  .badge-learned  { background: rgba(5,150,105,0.09); color: var(--green); border: 1px solid rgba(5,150,105,0.22); }
   .badge-pending  { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
-  .badge-ref      { background: rgba(139,92,246,0.1); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.25); }
+  .badge-ref      { background: rgba(124,58,237,0.09); color: #6d28d9; border: 1px solid rgba(124,58,237,0.22); }
   .badge-dup      { background: rgba(245,158,11,0.1); color: var(--yellow); border: 1px solid rgba(245,158,11,0.25); }
   .badge-accepted { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
   .badge-rejected { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
@@ -385,7 +385,7 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 24px 28px;
     width: 480px; max-width: 94vw;
-    box-shadow: 0 28px 72px rgba(0,0,0,0.7);
+    box-shadow: 0 28px 72px rgba(15,23,42,0.18);
     display: flex; flex-direction: column; gap: 14px;
   }
   .kw-modal-title { font-family: var(--display); font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
@@ -431,7 +431,7 @@
   /* ===================== PROGRESS OVERLAY ===================== */
   .overlay-bg {
     display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    background: rgba(15,23,42,0.45); backdrop-filter: blur(4px);
     z-index: 200; align-items: center; justify-content: center;
   }
   .overlay-bg.show { display: flex; }
@@ -439,8 +439,8 @@
   .progress-box {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 28px 36px;
-    text-align: center; min-width: 300px;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+    text-align: center; min-width: 360px;
+    box-shadow: 0 24px 60px rgba(15,23,42,0.18);
   }
   .progress-box-title { font-family: var(--display); font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
   .progress-box-sub { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 18px; }
@@ -452,7 +452,7 @@
   .review-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 16px; padding: 28px; max-width: 560px; width: 90%;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    box-shadow: 0 24px 64px rgba(15,23,42,0.18);
   }
   .review-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
   .review-label {
@@ -554,7 +554,7 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 24px 28px;
     width: 440px; max-width: 94vw;
-    box-shadow: 0 28px 72px rgba(0,0,0,0.7);
+    box-shadow: 0 28px 72px rgba(15,23,42,0.18);
   }
   .picker-title { font-family: var(--display); font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
   .picker-sub { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.55; }
@@ -626,6 +626,39 @@
   }
   .context-chips-wrap { display: none; }
   .context-chips-wrap.visible { display: flex; align-items: center; gap: 6px; padding: 6px 24px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); }
+
+  /* ===================== COLUMN MANAGER ===================== */
+  .col-manager-wrap { position: relative; }
+  .col-manager-popup {
+    display: none; position: absolute; z-index: 300;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; min-width: 252px;
+    box-shadow: 0 12px 36px rgba(15,23,42,0.13);
+    top: 100%; right: 0; margin-top: 6px;
+  }
+  .col-manager-popup.show { display: block; }
+  .col-manager-popup-title {
+    font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 10px;
+  }
+  .col-manager-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 0; border-bottom: 1px solid var(--border);
+  }
+  .col-manager-row:last-of-type { border-bottom: none; }
+  .col-manager-row label {
+    flex: 1; font-size: 0.8rem; color: var(--text-dim); cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .col-manager-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+  .col-manager-row input[type="range"] { width: 60px; accent-color: var(--accent); cursor: pointer; }
+  .col-width-val { font-size: 0.7rem; font-family: var(--mono); color: var(--text-muted); min-width: 32px; text-align:right; }
+
+  /* ===================== PROGRESS DETAIL ===================== */
+  .progress-step-detail { font-size: 0.71rem; font-family: var(--mono); color: var(--accent); margin-top: 5px; min-height: 1.3em; }
+  .progress-phase { font-size: 0.73rem; color: var(--text-muted); margin-top: 4px; }
+  .progress-sub-track { background: var(--surface2); border-radius: 20px; height: 3px; overflow: hidden; margin-top: 8px; }
+  .progress-sub-fill { height: 100%; background: var(--accent2); border-radius: 20px; transition: width 0.2s; }
 </style>
 </head>
 <body>
@@ -786,6 +819,17 @@
       <option value="flagged">Flagged</option>
       <option value="rejected">Rejected</option>
     </select>
+    <div class="toolbar-sep"></div>
+    <div class="col-manager-wrap">
+      <button class="btn btn-secondary btn-sm" onclick="toggleColManager(event)">
+        <svg class="icon" width="13" height="13"><use href="#ic-layers"/></svg>
+        Columns
+      </button>
+      <div class="col-manager-popup" id="colManagerPopup">
+        <div class="col-manager-popup-title">Show / Resize Columns</div>
+        <!-- rows injected by JS -->
+      </div>
+    </div>
   </div>
 
   <!-- Stats -->
@@ -797,15 +841,15 @@
       <table id="txnTable">
         <thead>
           <tr>
-            <th style="width:30px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
-            <th>Date</th>
-            <th>Bank</th>
-            <th>Type</th>
-            <th>Narration</th>
-            <th>Amount</th>
-            <th>Classification</th>
-            <th>Ref</th>
-            <th>Conf</th>
+            <th style="width:30px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+            <th data-col="date">Date</th>
+            <th data-col="bank">Bank</th>
+            <th data-col="type">Type</th>
+            <th data-col="narration">Narration</th>
+            <th data-col="amount">Amount</th>
+            <th data-col="classification">Classification</th>
+            <th data-col="ref">Ref</th>
+            <th data-col="conf">Conf</th>
           </tr>
         </thead>
         <tbody id="txnBody">
@@ -872,9 +916,12 @@
 <div class="overlay-bg" id="progressOverlay">
   <div class="progress-box">
     <div class="progress-box-title">AI Classification Running</div>
-    <div class="progress-box-sub">Sending to Gemini 2.5 Flash...</div>
+    <div class="progress-box-sub" id="progressSub">Sending batch to Gemini 2.5 Flash…</div>
     <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
     <div class="progress-label" id="progressCount">0 / 0</div>
+    <div class="progress-sub-track"><div class="progress-sub-fill" id="progressSubFill" style="width:0%"></div></div>
+    <div class="progress-step-detail" id="progressStepDetail">&nbsp;</div>
+    <div class="progress-phase" id="progressPhase">&nbsp;</div>
   </div>
 </div>
 
@@ -1755,24 +1802,55 @@ async function classifyAll() {
   if (indices.length === 0) return;
   document.getElementById('progressOverlay').classList.add('show');
   document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressSubFill').style.width = '0%';
   document.getElementById('progressCount').textContent = `0 / ${indices.length}`;
+  document.getElementById('progressSub').textContent = 'Preparing request…';
+  document.getElementById('progressStepDetail').textContent = '';
+  document.getElementById('progressPhase').textContent = '';
   document.getElementById('classifyAllBtn').disabled = true;
   const batchSize = 50;
+  const totalBatches = Math.ceil(indices.length / batchSize);
   for (let s = 0; s < indices.length; s += batchSize) {
     const batch = indices.slice(s, s + batchSize);
+    const batchNum = Math.floor(s / batchSize) + 1;
+    document.getElementById('progressSub').textContent = `Batch ${batchNum} of ${totalBatches} — sending ${batch.length} transactions…`;
+    document.getElementById('progressPhase').textContent = 'Waiting for Gemini 2.5 Flash response…';
+    document.getElementById('progressStepDetail').textContent = `Rows ${s + 1}–${Math.min(s + batchSize, indices.length)} of ${indices.length}`;
+    // Animate sub-bar while waiting
+    document.getElementById('progressSubFill').style.width = '5%';
+    const subInterval = startSubProgress();
     const res = await fetch('/api/classify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ indices: batch })
     });
+    clearInterval(subInterval);
+    document.getElementById('progressSubFill').style.width = '100%';
     const data = await res.json();
     if (data.results) data.results.forEach((r, j) => { classificationResults[batch[j]] = r; });
     const done = Math.min(s + batchSize, indices.length);
-    document.getElementById('progressFill').style.width = Math.round((done / indices.length) * 100) + '%';
-    document.getElementById('progressCount').textContent = `${done} / ${indices.length}`;
+    const pct = Math.round((done / indices.length) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressCount').textContent = `${done} / ${indices.length} classified`;
+    document.getElementById('progressPhase').textContent = done < indices.length ? 'Batch complete ✓ — starting next…' : 'All done ✓';
+    // Small pause so user can see "batch complete"
+    if (done < indices.length) await sleep(350);
+    document.getElementById('progressSubFill').style.width = '0%';
   }
+  await sleep(600);
   document.getElementById('progressOverlay').classList.remove('show');
   document.getElementById('classifyAllBtn').disabled = false;
   renderTable(); updateStats();
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function startSubProgress() {
+  // Animate sub-fill from 5% → 90% over ~25s to signal activity
+  let pct = 5;
+  return setInterval(() => {
+    pct = Math.min(90, pct + (Math.random() * 2.5 + 0.5));
+    document.getElementById('progressSubFill').style.width = pct + '%';
+  }, 400);
 }
 
 async function classifySelected() {
@@ -1780,13 +1858,23 @@ async function classifySelected() {
   if (indices.length === 0) return;
   document.getElementById('progressOverlay').classList.add('show');
   document.getElementById('progressFill').style.width = '10%';
-  document.getElementById('progressCount').textContent = `Classifying ${indices.length} entries...`;
+  document.getElementById('progressSubFill').style.width = '5%';
+  document.getElementById('progressCount').textContent = `Classifying ${indices.length} entries…`;
+  document.getElementById('progressSub').textContent = `Sending ${indices.length} selected transactions…`;
+  document.getElementById('progressStepDetail').textContent = '';
+  document.getElementById('progressPhase').textContent = 'Waiting for Gemini 2.5 Flash response…';
+  const subInterval = startSubProgress();
   const res = await fetch('/api/classify', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ indices })
   });
+  clearInterval(subInterval);
+  document.getElementById('progressSubFill').style.width = '100%';
   const data = await res.json();
   if (data.results) data.results.forEach((r, j) => { classificationResults[indices[j]] = r; });
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressPhase').textContent = 'Done ✓';
+  await sleep(500);
   document.getElementById('progressOverlay').classList.remove('show');
   renderTable(); updateStats();
 }
@@ -2177,7 +2265,87 @@ function closeTabPicker() {
   pendingSheetId = null; pendingSheetName = null;
 }
 
+// ======== Column Manager ========
+const COL_DEFS = [
+  { key: 'check',          label: '☑ Select',        defaultW: 30,  hideable: false },
+  { key: 'date',           label: 'Date',             defaultW: 90,  hideable: true },
+  { key: 'bank',           label: 'Bank',             defaultW: 110, hideable: true },
+  { key: 'type',           label: 'Type',             defaultW: 70,  hideable: true },
+  { key: 'narration',      label: 'Narration',        defaultW: 260, hideable: true },
+  { key: 'amount',         label: 'Amount',           defaultW: 100, hideable: true },
+  { key: 'classification', label: 'Classification',   defaultW: 160, hideable: true },
+  { key: 'ref',            label: 'Ref',              defaultW: 90,  hideable: true },
+  { key: 'conf',           label: 'Conf',             defaultW: 50,  hideable: true },
+];
+
+// State: visible set and widths
+let colVisible = {};
+let colWidths = {};
+COL_DEFS.forEach(c => { colVisible[c.key] = true; colWidths[c.key] = c.defaultW; });
+
+function applyColStyles() {
+  const styleId = 'colMgrStyle';
+  let el = document.getElementById(styleId);
+  if (!el) { el = document.createElement('style'); el.id = styleId; document.head.appendChild(el); }
+  let css = '';
+  COL_DEFS.forEach((c, idx) => {
+    const nth = idx + 1;
+    if (!colVisible[c.key]) {
+      css += `#txnTable th:nth-child(${nth}), #txnTable td:nth-child(${nth}) { display: none; }\n`;
+    } else {
+      css += `#txnTable th:nth-child(${nth}), #txnTable td:nth-child(${nth}) { width: ${colWidths[c.key]}px; min-width: ${colWidths[c.key]}px; max-width: ${colWidths[c.key]}px; }\n`;
+    }
+  });
+  el.textContent = css;
+}
+
+function buildColManagerUI() {
+  const popup = document.getElementById('colManagerPopup');
+  const rows = COL_DEFS.filter(c => c.hideable).map(c => `
+    <div class="col-manager-row">
+      <label>
+        <input type="checkbox" ${colVisible[c.key] ? 'checked' : ''} onchange="toggleCol('${c.key}',this.checked)">
+        ${c.label}
+      </label>
+      <input type="range" min="40" max="400" value="${colWidths[c.key]}"
+        oninput="resizeCol('${c.key}',this.value,this.nextElementSibling)"
+        ${!colVisible[c.key] ? 'disabled' : ''}>
+      <span class="col-width-val">${colWidths[c.key]}px</span>
+    </div>`).join('');
+  // Keep title, replace rows
+  const title = popup.querySelector('.col-manager-popup-title');
+  popup.innerHTML = '';
+  popup.appendChild(title || (() => { const d = document.createElement('div'); d.className='col-manager-popup-title'; d.textContent='Show / Resize Columns'; return d; })());
+  popup.insertAdjacentHTML('beforeend', rows);
+}
+
+function toggleColManager(e) {
+  e.stopPropagation();
+  const popup = document.getElementById('colManagerPopup');
+  const isOpen = popup.classList.contains('show');
+  document.querySelectorAll('.col-manager-popup.show').forEach(p => p.classList.remove('show'));
+  if (!isOpen) { buildColManagerUI(); popup.classList.add('show'); }
+}
+
+function toggleCol(key, visible) {
+  colVisible[key] = visible;
+  applyColStyles();
+  buildColManagerUI();
+}
+
+function resizeCol(key, val, label) {
+  colWidths[key] = parseInt(val);
+  if (label) label.textContent = val + 'px';
+  applyColStyles();
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.col-manager-wrap')) {
+    document.querySelectorAll('.col-manager-popup.show').forEach(p => p.classList.remove('show'));
+  }
+});
+
 init();
-</script>
+applyColStyles();</script>
 </body>
 </html>
