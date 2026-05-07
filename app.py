@@ -22,15 +22,6 @@ _classify_lock = threading.Lock()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
-# Make sessions permanent (survive browser restarts) and set SameSite=Lax
-# so the OAuth popup callback can still write to the same session cookie.
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = os.environ.get("RAILWAY_ENVIRONMENT") is not None
-app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30  # 30 days
-
-@app.before_request
-def make_session_permanent():
-    session.permanent = True
 
 OAUTH_CLIENT_ID     = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
@@ -82,29 +73,8 @@ init_db()
 
 
 # ---------- Settings helpers ----------
-#
-# PER-USER keys (stored in Flask session — each browser gets its own namespace):
-#   oauth_tokens, active_sheet_id, active_sheet_name, active_tab_name,
-#   context_tab_names, oauth_state
-#
-# GLOBAL keys (SQLite settings table — shared across users, currently unused
-#   for sensitive data; feedback/rules tables remain intentionally global).
-#
-# Per-user isolation is achieved by storing Drive tokens and sheet selection
-# in the signed Flask session cookie rather than a shared DB row.
-# Every browser session is fully independent — no user can see another's data.
-
-_PER_USER_KEYS = {
-    "oauth_tokens", "active_sheet_id", "active_sheet_name",
-    "active_tab_name", "context_tab_names", "oauth_state",
-}
-
 
 def get_setting(key, default=None):
-    """Read a setting. Per-user keys come from the Flask session."""
-    if key in _PER_USER_KEYS:
-        return session.get(key, default)
-    # Shared/global settings fall through to SQLite
     conn = sqlite3.connect(DB_PATH)
     row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
     conn.close()
@@ -112,10 +82,6 @@ def get_setting(key, default=None):
 
 
 def set_setting(key, value):
-    """Write a setting. Per-user keys are stored in the Flask session."""
-    if key in _PER_USER_KEYS:
-        session[key] = value
-        return
     conn = sqlite3.connect(DB_PATH)
     conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, value))
     conn.commit()
@@ -213,7 +179,6 @@ def _refresh_oauth_creds(tokens: dict):
         updated["access_token"] = creds.token
         if creds.refresh_token:
             updated["refresh_token"] = creds.refresh_token
-        # Persist back to the per-user session so other routes see the new token
         set_setting("oauth_tokens", json.dumps(updated))
     return creds
 
@@ -745,6 +710,324 @@ def classify():
         return jsonify({"error": str(e)}), 500
     finally:
         _classify_lock.release()
+
+
+@app.route("/api/classify_stream", methods=["POST"])
+def classify_stream():
+    """
+    SSE endpoint — streams classification results as each Gemini sub-batch (20 txns)
+    completes, so the frontend can update the table in real time instead of waiting
+    for all 50+ transactions to finish.
+
+    Each SSE event is:
+      data: {"results": [...], "done": false, "completed": N, "total": T}
+    Final event:
+      data: {"results": [], "done": true, "completed": T, "total": T}
+    Error event:
+      data: {"error": "...", "done": true}
+    """
+    if not _classify_lock.acquire(blocking=False):
+        # Return a single SSE error event
+        def _busy():
+            yield "data: " + json.dumps({"error": "A classification is already running.", "done": True}) + "\n\n"
+        return app.response_class(_busy(), mimetype="text/event-stream")
+
+    # Capture session state NOW (before entering the generator thread)
+    # because Flask session is not available inside a generator after response starts
+    data = request.json or {}
+    indices = data.get("indices", None)
+    # Snapshot session-scoped settings so the generator can use them
+    snap_sheet_id   = session.get("active_sheet_id", "") or os.environ.get("GOOGLE_SHEETS_ID", "")
+    snap_tab_name   = session.get("active_tab_name", "") or "query_sk"
+    snap_tokens_str = session.get("oauth_tokens")
+    snap_ctx_tabs   = session.get("context_tab_names", "[]")
+
+    def _generate():
+        try:
+            # Load data using snapshotted session values
+            if snap_sheet_id and snap_tokens_str:
+                transactions = load_from_gsheets_oauth(
+                    snap_sheet_id, snap_tab_name, json.loads(snap_tokens_str))
+            elif snap_sheet_id and gsheets_available():
+                transactions = load_from_gsheets(snap_sheet_id, snap_tab_name)
+            else:
+                transactions = _load_excel_fallback()
+
+            # Load context sheets
+            context_sheets = []
+            if snap_sheet_id and snap_tokens_str:
+                try:
+                    ctx_tabs = json.loads(snap_ctx_tabs) if snap_ctx_tabs else []
+                    tokens = json.loads(snap_tokens_str)
+                    for tab in ctx_tabs:
+                        try:
+                            df = load_sheet_as_context_oauth(snap_sheet_id, tab, tokens)
+                            context_sheets.append({"tab_name": tab, "df": df})
+                        except Exception as e:
+                            log.warning("Context tab '%s' failed: %s", tab, e)
+                except Exception as e:
+                    log.warning("Context load failed: %s", e)
+
+            if indices is not None:
+                req_indices = indices
+                subset = transactions.iloc[req_indices].copy()
+            else:
+                subset = transactions.copy()
+                req_indices = list(range(len(transactions)))
+
+            total = len(req_indices)
+            completed = 0
+
+            # Stream results from the generator version of classify
+            for batch_results in _classify_transactions_stream(subset, context_sheets):
+                # batch_results is a list of result dicts with internal idx (0-based within subset)
+                output = []
+                for res in batch_results:
+                    if res and "idx" in res:
+                        original_idx = req_indices[res["idx"]]
+                        output.append({"original_index": original_idx, **res})
+                completed += len(output)
+                payload = json.dumps({"results": output, "done": False,
+                                      "completed": completed, "total": total})
+                yield f"data: {payload}\n\n"
+
+            yield f"data: {json.dumps({'results': [], 'done': True, 'completed': completed, 'total': total})}\n\n"
+
+        except Exception as e:
+            log.exception("classify_stream error: %s", e)
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+        finally:
+            _classify_lock.release()
+
+    return app.response_class(
+        _generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx/Railway proxy buffering
+        }
+    )
+
+
+def _load_excel_fallback():
+    df = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=None)
+    header_row = next((i for i, row in df.iterrows() if str(row[0]).strip() == "Date"), 3)
+    transactions = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=header_row)
+    transactions.columns = [str(c).strip() for c in transactions.columns]
+    transactions = transactions[transactions["Date"].notna()]
+    transactions = transactions[transactions["Date"].astype(str).str.strip() != "nan"]
+    transactions = transactions[~transactions["Narration"].astype(str).str.lower().str.contains("grand total", na=False)]
+    return transactions
+
+
+def _classify_transactions_stream(transactions_df, context_sheets):
+    """
+    Generator version of classify_transactions_batch.
+    Yields a list of result dicts after each Gemini sub-batch (20 items) completes,
+    instead of collecting everything and returning at the end.
+    Learned-rule matches are yielded immediately as a first batch before any AI calls.
+    """
+    import google.generativeai as genai
+
+    if not GEMINI_API_KEY:
+        yield [{"idx": i, "classification": "API key missing", "reference_id": "",
+                "matched_detail": "", "confidence": "low",
+                "reasoning": "No Gemini API key set."} for i in range(len(transactions_df))]
+        return
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    MODEL_CHAIN = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"]
+    _current_model_idx = 0
+    _model_cache = {}
+
+    def _get_model(name):
+        if name not in _model_cache:
+            _model_cache[name] = genai.GenerativeModel(name, generation_config=genai.types.GenerationConfig())
+        return _model_cache[name]
+
+    def _generate_with_retry(prompt_text, max_attempts=6):
+        nonlocal _current_model_idx
+        for attempt in range(max_attempts):
+            model_name = MODEL_CHAIN[_current_model_idx]
+            model = _get_model(model_name)
+            try:
+                response = model.generate_content(prompt_text)
+                if _current_model_idx > 0:
+                    _current_model_idx -= 1
+                return response
+            except Exception as exc:
+                err = str(exc)
+                is_transient = any(kw in err for kw in [
+                    "503", "UNAVAILABLE", "high demand", "ServiceUnavailable",
+                    "429", "ResourceExhausted", "quota", "rate"])
+                log.warning("Gemini error (attempt %d/%d) model=%s: %s",
+                            attempt + 1, max_attempts, MODEL_CHAIN[_current_model_idx], err[:200])
+                if is_transient and attempt < max_attempts - 1:
+                    next_idx = _current_model_idx + 1
+                    if next_idx < len(MODEL_CHAIN):
+                        _current_model_idx = next_idx
+                        _time.sleep(3)
+                    else:
+                        _time.sleep(min(5 * (2 ** (attempt - len(MODEL_CHAIN) + 1)), 60))
+                else:
+                    raise
+
+    context_section = build_context_sheet_summary(context_sheets)
+    learned_rules = get_learned_rules()
+
+    txn_list = []
+    for i, (_, row) in enumerate(transactions_df.iterrows()):
+        txn_list.append({
+            "idx": i,
+            "date": str(row.get("Date", "")).strip(),
+            "particulars": str(row.get("Particulars", "")).strip(),
+            "voucher_type": str(row.get("Voucher Type", "")).strip(),
+            "voucher_no": str(row.get("Voucher No.", "")).strip(),
+            "narration": str(row.get("Narration", "")).strip(),
+            "gross_total": str(row.get("Gross Total", "")).strip(),
+        })
+
+    # --- Yield learned-rule matches immediately ---
+    needs_ai = []
+    rule_matches = []
+    for item in txn_list:
+        learned = apply_learned_rules(item, learned_rules)
+        if learned:
+            rule_matches.append({
+                "idx": item["idx"],
+                "classification": learned,
+                "reference_id": "",
+                "matched_detail": "Auto-classified from learned feedback",
+                "confidence": "high",
+                "reasoning": f"Matched learned rule: '{learned}'."
+            })
+        else:
+            needs_ai.append(item)
+
+    if rule_matches:
+        yield rule_matches   # frontend gets these instantly
+
+    if not needs_ai:
+        return
+
+    # Build prompt boilerplate (same as classify_transactions_batch)
+    learned_rules_text = ""
+    if learned_rules:
+        learned_rules_text = "\n=== LEARNED RULES (OVERRIDE your judgement) ===\n"
+        for r in learned_rules:
+            learned_rules_text += f'  If narration contains "{r["pattern"]}" → classify as "{r["classification"]}"\n'
+
+    context_block = ""
+    if context_section:
+        context_block = f"\n=== ADDITIONAL CONTEXT SHEETS ===\n{context_section}\n"
+
+    batch_size = 20
+    for start in range(0, len(needs_ai), batch_size):
+        batch = needs_ai[start:start + batch_size]
+        batch_json = json.dumps(batch, indent=2)
+        log.info("[stream] Sending sub-batch %d–%d (%d items) to Gemini",
+                 start, start + len(batch) - 1, len(batch))
+
+        prompt = f"""You are an AI assistant classifying bank transactions for Alfaleus Technology Pvt Ltd, a medical device company selling ophthalmic (eye care) devices.
+{context_block}
+{learned_rules_text}
+
+=== YOUR TASK ===
+Classify each transaction below. Use the context sheets above to match transactions to known records wherever possible.
+"Other Expense" and "Other Income" are LAST RESORTS — use specific categories first.
+
+PAYMENTS (outgoing) — pick the MOST SPECIFIC matching category:
+- "Exhibition/Conference Expense" — AIOC, stall, fabrication, passes, AIOYV, GENERAL FUND, AIOC PROMOTION, AIOC EXPENSE, any AIOC-related spend
+- "Salary/Freelance Payment" — FREELANCING, FREELANCE, WEBDEV CONSULTANCY, or any payment clearly to an individual for services/work
+- "Hotel Booking" — hotel name in narration, or match amount+date to any hotel records in context sheets
+- "Flight Booking" — airline name or PNR in narration, or match amount+date to flight records in context sheets
+- "Cab/Transport Booking" — QUICKRIDE, SAVAARI, cab, taxi, or match to cab/transport records in context sheets
+- "Bus Booking" — bus operator name or PNR, or match to bus records in context sheets
+- "Courier/Logistics" — BLUE DART, BLUEDART, GENERATING DYNAMIC (Blue Dart code), courier, shipping
+- "Sales Incentive Payment" — Incentive in narration, MMT/IMPS to field agents
+- "Office/Admin Expense" — car wash, PAYTM jio/utility, AWFIS coworking, ROBSOAP, DAZZLE ROBOTICS, IOCL fuel/petrol, small tools/supplies
+- "Tax Payment" — CBDT, GST, TDS, income tax
+- "Bank/Finance Transaction" — LITE (UPI Lite add money), ADD MONEY, wallet top-up, UPIRET refund, PHONEPE REVERSE
+- "Business Travel/Logistics" — DELHI EXPENSES, city name + EXPENSES, travel reimbursement, petrol/toll, any travel cost without a specific booking match
+- "Sales Consultant Payment" — SALES CONSULTANT, commission payment
+- "Other Expense" — ONLY if truly none of the above fit
+
+RECEIPTS (incoming) — pick the MOST SPECIFIC matching category:
+- "Device Payment Receipt" — incoming UPI/NEFT/IMPS from any doctor, hospital, or person whose name appears in context sheets
+- "EMI/Installment Receipt" — same sender appearing more than once, or narration says EMI
+- "Card Settlement" — TERMINAL CARDS SETTL, CARDS SETTL (daily POS batch)
+- "Payment Gateway Receipt" — PAYUFLI, REF-PAYUFLI (online payment gateway)
+- "Other Income" — ONLY if truly none of the above fit
+
+CRITICAL RULES:
+1. NEVER use "Other Expense" if ANY keyword above matches the narration
+2. NEVER use "Other Income" if the sender name appears anywhere in the context sheets
+3. Payments to named individuals for city/travel costs = "Business Travel/Logistics"
+4. Payments to named individuals for work/services = "Salary/Freelance Payment"
+5. Any narration containing AIOC = "Exhibition/Conference Expense" always
+6. Match hotel/flight/bus/cab by amount AND approximate date using context sheets if provided
+
+TRANSACTIONS:
+{batch_json}
+
+Return a JSON array (same length, same order):
+[
+  {{
+    "idx": <same idx>,
+    "classification": "<category>",
+    "reference_id": "<reference ID from context sheet or empty string>",
+    "matched_detail": "<what was matched>",
+    "confidence": "high|medium|low",
+    "reasoning": "<1-2 sentence explanation>"
+  }}
+]
+
+Return ONLY the JSON array. No markdown. No extra text."""
+
+        try:
+            response = _generate_with_retry(prompt)
+            raw_text = response.text.strip()
+            text = re.sub(r"^```[a-z]*\n?", "", raw_text)
+            text = re.sub(r"\n?```$", "", text).strip()
+
+            batch_results = None
+            try:
+                batch_results = json.loads(text)
+            except json.JSONDecodeError:
+                last_brace = text.rfind("}")
+                if last_brace != -1:
+                    truncated = re.sub(r",\s*$", "", text[:last_brace + 1].strip())
+                    try:
+                        batch_results = json.loads(truncated + "]")
+                    except json.JSONDecodeError:
+                        pass
+                if batch_results is None:
+                    objects = re.findall(r'\{[^{}]*\}', text, re.DOTALL)
+                    parsed = [json.loads(o) for o in objects if _safe_json(o)]
+                    batch_results = parsed if parsed else None
+
+            if batch_results:
+                yield batch_results   # ← stream this sub-batch to the frontend NOW
+            else:
+                error_batch = [{"idx": item["idx"], "classification": "Error",
+                                "reference_id": "", "matched_detail": "",
+                                "confidence": "low",
+                                "reasoning": "JSON parse failed."} for item in batch]
+                yield error_batch
+
+        except Exception as e:
+            log.error("[stream] Sub-batch %d–%d failed: %s", start, start + len(batch) - 1, str(e)[:200])
+            yield [{"idx": item["idx"], "classification": "Error", "reference_id": "",
+                    "matched_detail": "", "confidence": "low",
+                    "reasoning": f"Classification failed: {str(e)}"} for item in batch]
+
+
+def _safe_json(s):
+    try:
+        json.loads(s)
+        return True
+    except Exception:
+        return False
 
 
 @app.route("/api/classify_single", methods=["POST"])

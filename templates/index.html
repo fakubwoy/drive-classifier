@@ -1800,84 +1800,149 @@ async function classifySingle(i) {
 async function classifyAll() {
   const indices = getFilteredIndices();
   if (indices.length === 0) return;
+
   document.getElementById('progressOverlay').classList.add('show');
   document.getElementById('progressFill').style.width = '0%';
   document.getElementById('progressSubFill').style.width = '0%';
   document.getElementById('progressCount').textContent = `0 / ${indices.length}`;
-  document.getElementById('progressSub').textContent = 'Preparing request…';
+  document.getElementById('progressSub').textContent = 'Connecting to classification stream…';
   document.getElementById('progressStepDetail').textContent = '';
   document.getElementById('progressPhase').textContent = '';
   document.getElementById('classifyAllBtn').disabled = true;
-  const batchSize = 50;
-  const totalBatches = Math.ceil(indices.length / batchSize);
-  for (let s = 0; s < indices.length; s += batchSize) {
-    const batch = indices.slice(s, s + batchSize);
-    const batchNum = Math.floor(s / batchSize) + 1;
-    document.getElementById('progressSub').textContent = `Batch ${batchNum} of ${totalBatches} — sending ${batch.length} transactions…`;
-    document.getElementById('progressPhase').textContent = 'Waiting for Gemini 2.5 Flash response…';
-    document.getElementById('progressStepDetail').textContent = `Rows ${s + 1}–${Math.min(s + batchSize, indices.length)} of ${indices.length}`;
-    // Animate sub-bar while waiting
-    document.getElementById('progressSubFill').style.width = '5%';
-    const subInterval = startSubProgress();
-    const res = await fetch('/api/classify', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ indices: batch })
-    });
-    clearInterval(subInterval);
-    document.getElementById('progressSubFill').style.width = '100%';
-    const data = await res.json();
-    if (data.results) data.results.forEach((r, j) => { classificationResults[batch[j]] = r; });
-    const done = Math.min(s + batchSize, indices.length);
-    const pct = Math.round((done / indices.length) * 100);
-    document.getElementById('progressFill').style.width = pct + '%';
-    document.getElementById('progressCount').textContent = `${done} / ${indices.length} classified`;
-    document.getElementById('progressPhase').textContent = done < indices.length ? 'Batch complete ✓ — starting next…' : 'All done ✓';
-    // Small pause so user can see "batch complete"
-    if (done < indices.length) await sleep(350);
-    document.getElementById('progressSubFill').style.width = '0%';
-  }
-  await sleep(600);
-  document.getElementById('progressOverlay').classList.remove('show');
+
+  await classifyViaStream(indices);
+
   document.getElementById('classifyAllBtn').disabled = false;
+  document.getElementById('progressOverlay').classList.remove('show');
   renderTable(); updateStats();
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function startSubProgress() {
-  // Animate sub-fill from 5% → 90% over ~25s to signal activity
-  let pct = 5;
-  return setInterval(() => {
-    pct = Math.min(90, pct + (Math.random() * 2.5 + 0.5));
-    document.getElementById('progressSubFill').style.width = pct + '%';
-  }, 400);
 }
 
 async function classifySelected() {
   const indices = [...selectedRows];
   if (indices.length === 0) return;
+
   document.getElementById('progressOverlay').classList.add('show');
-  document.getElementById('progressFill').style.width = '10%';
-  document.getElementById('progressSubFill').style.width = '5%';
-  document.getElementById('progressCount').textContent = `Classifying ${indices.length} entries…`;
-  document.getElementById('progressSub').textContent = `Sending ${indices.length} selected transactions…`;
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressSubFill').style.width = '0%';
+  document.getElementById('progressCount').textContent = `0 / ${indices.length}`;
+  document.getElementById('progressSub').textContent = `Classifying ${indices.length} selected transactions…`;
   document.getElementById('progressStepDetail').textContent = '';
-  document.getElementById('progressPhase').textContent = 'Waiting for Gemini 2.5 Flash response…';
-  const subInterval = startSubProgress();
-  const res = await fetch('/api/classify', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ indices })
-  });
-  clearInterval(subInterval);
-  document.getElementById('progressSubFill').style.width = '100%';
-  const data = await res.json();
-  if (data.results) data.results.forEach((r, j) => { classificationResults[indices[j]] = r; });
-  document.getElementById('progressFill').style.width = '100%';
-  document.getElementById('progressPhase').textContent = 'Done ✓';
-  await sleep(500);
+  document.getElementById('progressPhase').textContent = '';
+
+  await classifyViaStream(indices);
+
   document.getElementById('progressOverlay').classList.remove('show');
   renderTable(); updateStats();
 }
+
+/**
+ * Core streaming classify: POSTs to /api/classify_stream, reads SSE events,
+ * and updates the table after every Gemini sub-batch (~20 transactions) completes.
+ * The backend yields one SSE event per Gemini call so the UI updates in real time.
+ */
+function classifyViaStream(indices) {
+  return new Promise(async (resolve) => {
+    const total = indices.length;
+    let completed = 0;
+
+    // SSE requires GET, so we POST the indices first to register the job,
+    // then open the stream. Simpler: use fetch + ReadableStream on the POST response.
+    let res;
+    try {
+      res = await fetch('/api/classify_stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ indices })
+      });
+    } catch (e) {
+      showToast('Stream connection failed: ' + e);
+      resolve(); return;
+    }
+
+    if (!res.ok || !res.body) {
+      showToast('Classification stream error: ' + res.status);
+      resolve(); return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let subAnimInterval = null;
+
+    const startSub = () => {
+      let pct = 5;
+      document.getElementById('progressSubFill').style.width = pct + '%';
+      return setInterval(() => {
+        pct = Math.min(90, pct + Math.random() * 2 + 0.5);
+        document.getElementById('progressSubFill').style.width = pct + '%';
+      }, 400);
+    };
+
+    subAnimInterval = startSub();
+    document.getElementById('progressSub').textContent = 'Waiting for first Gemini response…';
+    document.getElementById('progressPhase').textContent = 'Processing in sub-batches of 20…';
+
+    while (true) {
+      let chunk;
+      try { chunk = await reader.read(); } catch (e) { break; }
+      if (chunk.done) break;
+
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete last line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let event;
+        try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (event.error) {
+          clearInterval(subAnimInterval);
+          showToast('Classification error: ' + event.error);
+          resolve(); return;
+        }
+
+        // Apply results to the table immediately
+        if (event.results && event.results.length > 0) {
+          event.results.forEach(r => {
+            if (r.original_index !== undefined) {
+              classificationResults[r.original_index] = r;
+            }
+          });
+          // Flash the sub-bar to 100% to signal a sub-batch landed
+          clearInterval(subAnimInterval);
+          document.getElementById('progressSubFill').style.width = '100%';
+          completed = event.completed || completed + event.results.length;
+          const pct = Math.round((completed / total) * 100);
+          document.getElementById('progressFill').style.width = pct + '%';
+          document.getElementById('progressCount').textContent = `${completed} / ${total} classified`;
+          document.getElementById('progressSub').textContent =
+            `${completed} classified — ${total - completed} remaining`;
+          document.getElementById('progressPhase').textContent = completed < total
+            ? 'Sub-batch complete ✓ — next in progress…'
+            : 'All done ✓';
+          // Update table in real time so user sees results as they arrive
+          renderTable(); updateStats();
+          // Reset sub-bar for next sub-batch
+          await sleep(300);
+          document.getElementById('progressSubFill').style.width = '0%';
+          if (completed < total) subAnimInterval = startSub();
+        }
+
+        if (event.done) {
+          clearInterval(subAnimInterval);
+          document.getElementById('progressSubFill').style.width = completed > 0 ? '100%' : '0%';
+          await sleep(400);
+          resolve(); return;
+        }
+      }
+    }
+    clearInterval(subAnimInterval);
+    resolve();
+  });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function toggleRowSelect(i, cb) {
   if (cb.checked) selectedRows.add(i); else selectedRows.delete(i);
