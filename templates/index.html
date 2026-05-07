@@ -2179,12 +2179,9 @@ async function openDriveModal() {
   const res = await fetch('/api/gdrive/status');
   const st = await res.json();
   activeDriveSheetId = st.active_sheet_id || null;
-  if (!st.oauth_configured) {
-    document.getElementById('oauthSetupHint').style.display = 'block';
-    document.getElementById('connectGoogleBtn').disabled = true;
-  }
-  if (st.connected) { showDriveConnected(); loadDriveSheets(); }
-  else { showDriveNotConnected(); }
+  // Drive access is granted at login — always go straight to sheet picker
+  showDriveConnected();
+  loadDriveSheets();
 }
 
 function closeDriveModal() { document.getElementById('driveModalOverlay').classList.remove('show'); }
@@ -2198,27 +2195,22 @@ function showDriveNotConnected() {
 }
 
 function startOAuth() {
-  window.open('/api/gdrive/auth', 'gdrive_oauth', 'width=520,height=640,scrollbars=yes,resizable=yes');
-  const el = document.getElementById('driveConnectStatus');
-  el.innerHTML = `<div class="spinner"></div> Waiting for sign-in...`;
-  window.addEventListener('message', async function handler(e) {
-    if (e.data && e.data.type === 'gdrive_connected') {
-      window.removeEventListener('message', handler);
-      el.innerHTML = `<span class="conf-dot conf-high"></span> Connected`;
-      showDriveConnected(); loadDriveSheets();
-    } else if (e.data && e.data.type === 'gdrive_error') {
-      window.removeEventListener('message', handler);
-      el.innerHTML = `Error: ${e.data.error || 'Auth failed'}`;
-    }
-  });
+  // Fallback: redirect to login to re-grant Drive access (token was likely revoked)
+  window.location.href = '/auth/google';
 }
 
 async function loadDriveSheets() {
-  document.getElementById('driveSheetList').innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading...</div>`;
+  document.getElementById('driveSheetList').innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading your sheets...</div>`;
   const res = await fetch('/api/gdrive/sheets');
   if (!res.ok) {
     const err = await res.json();
-    document.getElementById('driveSheetList').innerHTML = `<div style="text-align:center;padding:28px;color:var(--red)">Error: ${escHtml(err.error||'Unknown')}</div>`;
+    document.getElementById('driveSheetList').innerHTML = `
+      <div style="text-align:center;padding:28px;color:var(--red)">
+        <div>Could not load sheets: ${escHtml(err.error||'Unknown error')}</div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="startOAuth()">
+          Re-authenticate with Google
+        </button>
+      </div>`;
     return;
   }
   const data = await res.json();

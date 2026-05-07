@@ -236,13 +236,18 @@ def google_login():
         return "GOOGLE_OAUTH_CLIENT_ID not set", 500
     state = secrets.token_urlsafe(16)
     session["login_state"] = state
+    # Request Drive + Sheets scopes at login so no second OAuth popup is needed
     params = {
         "client_id": OAUTH_CLIENT_ID,
         "redirect_uri": LOGIN_REDIRECT_URI,
         "response_type": "code",
-        "scope": "openid email profile",
+        "scope": (
+            "openid email profile "
+            "https://www.googleapis.com/auth/spreadsheets "
+            "https://www.googleapis.com/auth/drive.readonly"
+        ),
         "access_type": "offline",
-        "prompt": "select_account",
+        "prompt": "consent",   # always show consent so we get a refresh_token
         "state": state,
     }
     return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
@@ -260,7 +265,7 @@ def google_callback():
     if state != session.pop("login_state", None):
         return "State mismatch — possible CSRF", 400
 
-    # Exchange code for tokens
+    # Exchange code for tokens (includes Drive/Sheets access + refresh token)
     resp = req_lib.post("https://oauth2.googleapis.com/token", data={
         "code": code,
         "client_id": OAUTH_CLIENT_ID,
@@ -285,13 +290,24 @@ def google_callback():
         return "Could not retrieve user info from Google", 400
 
     user = upsert_user(google_id, email, name, picture)
-    session["user_id"]   = user["id"]
+    session["user_id"]    = user["id"]
     session["user_email"] = user["email"]
     session["user_name"]  = user["name"]
     session["user_pic"]   = user["picture"]
     session.permanent = True
 
-    log.info("User logged in: %s (id=%s)", email, user["id"])
+    # Save Drive/Sheets tokens immediately — no second "Connect Drive" OAuth needed
+    # Only overwrite if we got a refresh_token (first login always has one due to prompt=consent)
+    uid = user["id"]
+    existing_tokens_str = get_setting("oauth_tokens", user_id=uid)
+    if tokens.get("refresh_token"):
+        set_setting("oauth_tokens", json.dumps(tokens), user_id=uid)
+    elif not existing_tokens_str:
+        # No refresh token this time and nothing saved yet — store what we have
+        set_setting("oauth_tokens", json.dumps(tokens), user_id=uid)
+
+    log.info("User logged in: %s (id=%s), drive_tokens_saved=%s",
+             email, uid, bool(tokens.get("refresh_token") or existing_tokens_str))
     return redirect("/")
 
 
@@ -1033,55 +1049,9 @@ def status():
         return jsonify({"api_key_set": has_key, "excel_loaded": False, "error": str(e)})
 
 
-# ---------- Google Drive OAuth2 — Sheet picker ----------
-
-@app.route("/api/gdrive/auth")
-@login_required
-def gdrive_auth():
-    if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
-        return jsonify({"error": "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET not set"}), 400
-    state = secrets.token_urlsafe(16)
-    session["oauth_state"] = state
-    params = {
-        "client_id":     OAUTH_CLIENT_ID,
-        "redirect_uri":  OAUTH_REDIRECT_URI,
-        "response_type": "code",
-        "scope": ("https://www.googleapis.com/auth/spreadsheets "
-                  "https://www.googleapis.com/auth/drive.readonly"),
-        "access_type": "offline",
-        "prompt":      "consent",
-        "state":       state,
-    }
-    return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
-
-
-@app.route("/api/gdrive/callback")
-def gdrive_callback():
-    import requests as req_lib
-    error = request.args.get("error")
-    if error:
-        return (f"<script>window.opener.postMessage("
-                f"{{type:'gdrive_error',error:{json.dumps(error)}}}, '*'); window.close();</script>")
-
-    code  = request.args.get("code", "")
-    state = request.args.get("state", "")
-    if state != session.get("oauth_state", ""):
-        return "State mismatch — possible CSRF", 400
-
-    resp = req_lib.post("https://oauth2.googleapis.com/token", data={
-        "code":          code,
-        "client_id":     OAUTH_CLIENT_ID,
-        "client_secret": OAUTH_CLIENT_SECRET,
-        "redirect_uri":  OAUTH_REDIRECT_URI,
-        "grant_type":    "authorization_code",
-    })
-    tokens = resp.json()
-    if "access_token" not in tokens:
-        return f"Token exchange failed: {tokens}", 400
-
-    # Store tokens scoped to this user
-    set_setting("oauth_tokens", json.dumps(tokens))
-    return "<script>window.opener.postMessage({type:'gdrive_connected'}, '*'); window.close();</script>"
+# ---------- Google Drive — Sheet picker ----------
+# Note: Drive access is granted at login time (no separate OAuth popup needed).
+# /api/gdrive/auth is kept as a fallback re-auth in case the refresh token was revoked.
 
 
 @app.route("/api/gdrive/sheets")
@@ -1194,6 +1164,7 @@ def gdrive_status():
         context_tabs = json.loads(get_setting("context_tab_names", "[]") or "[]")
     except Exception:
         pass
+    # Connected = we have tokens from login (Drive scope was requested at sign-in)
     return jsonify({
         "connected":         bool(tokens_str),
         "active_sheet_id":   sheet_id,
@@ -1201,6 +1172,7 @@ def gdrive_status():
         "active_tab_name":   tab_name,
         "context_tabs":      context_tabs,
         "oauth_configured":  bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET),
+        "drive_granted_at_login": True,
     })
 
 
