@@ -1,13 +1,16 @@
 import os
 import json
 import re
-import sqlite3
 import secrets
 import logging
 import time as _time
 import pandas as pd
-from flask import Flask, render_template, jsonify, request, redirect, session
+from functools import wraps
+from flask import Flask, render_template, jsonify, request, redirect, session, url_for
 import google.generativeai as genai
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from urllib.parse import urlencode
 
 # ---------- Logging ----------
 logging.basicConfig(
@@ -26,97 +29,290 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 OAUTH_CLIENT_ID     = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
 OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
 OAUTH_REDIRECT_URI  = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8080/api/gdrive/callback")
+# Separate OAuth for user login (identity) — can reuse same client ID
+LOGIN_REDIRECT_URI  = os.environ.get("GOOGLE_LOGIN_REDIRECT_URI",
+                                     "http://localhost:8080/auth/google/callback")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-EXCEL_PATH = os.environ.get("EXCEL_PATH", "Query_sheet_alfaleus.xlsx")
-GOOGLE_SHEETS_ID = os.environ.get("GOOGLE_SHEETS_ID", "")
-GOOGLE_SHEETS_CREDS = os.environ.get("GOOGLE_CREDENTIALS_FILE", "credentials.json")
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+EXCEL_PATH     = os.environ.get("EXCEL_PATH", "Query_sheet_alfaleus.xlsx")
+BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR       = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
-DB_PATH = os.path.join(DATA_DIR, "feedback.db")
 
-# ---------- Database ----------
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+
+# ---------- Postgres helpers ----------
+
+def get_db():
+    """Return a new psycopg2 connection. Caller must close."""
+    url = DATABASE_URL
+    if not url:
+        raise RuntimeError("DATABASE_URL env var not set")
+    # Railway sometimes gives postgres:// — psycopg2 needs postgresql://
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    return psycopg2.connect(url, cursor_factory=RealDictCursor)
+
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     c = conn.cursor()
+
+    # ── users ──────────────────────────────────────────────────────────────
     c.execute("""
-        CREATE TABLE IF NOT EXISTS feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            txn_key TEXT NOT NULL,
-            original_classification TEXT,
-            corrected_classification TEXT,
-            should_learn INTEGER DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        CREATE TABLE IF NOT EXISTS users (
+            id          SERIAL PRIMARY KEY,
+            google_id   TEXT UNIQUE NOT NULL,
+            email       TEXT UNIQUE NOT NULL,
+            name        TEXT,
+            picture     TEXT,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
         )
     """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS learned_rules (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            narration_pattern TEXT NOT NULL,
-            classification TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            source_txn_key TEXT
-        )
-    """)
+
+    # ── per-user settings (key/value) ──────────────────────────────────────
     c.execute("""
         CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
+            user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            key      TEXT    NOT NULL,
+            value    TEXT,
+            PRIMARY KEY (user_id, key)
         )
     """)
+
+    # ── per-user feedback ──────────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            id                       SERIAL PRIMARY KEY,
+            user_id                  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            txn_key                  TEXT NOT NULL,
+            original_classification  TEXT,
+            corrected_classification TEXT,
+            should_learn             INTEGER DEFAULT 1,
+            created_at               TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    # ── per-user learned rules ─────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS learned_rules (
+            id                 SERIAL PRIMARY KEY,
+            user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            narration_pattern  TEXT    NOT NULL,
+            classification     TEXT    NOT NULL,
+            created_at         TIMESTAMPTZ DEFAULT NOW(),
+            source_txn_key     TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+    log.info("Database initialised")
+
+
+try:
+    init_db()
+except Exception as e:
+    log.error("DB init failed (will retry on first request): %s", e)
+
+
+# ---------- Auth helpers ----------
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "unauthenticated", "login_url": "/auth/google"}), 401
+            return redirect("/auth/google")
+        return f(*args, **kwargs)
+    return decorated
+
+
+def current_user_id():
+    return session.get("user_id")
+
+
+# ---------- User DB helpers ----------
+
+def upsert_user(google_id, email, name, picture):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO users (google_id, email, name, picture)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (google_id) DO UPDATE
+            SET email = EXCLUDED.email,
+                name  = EXCLUDED.name,
+                picture = EXCLUDED.picture
+        RETURNING id, email, name, picture
+    """, (google_id, email, name, picture))
+    row = c.fetchone()
+    conn.commit()
+    conn.close()
+    return row
+
+
+def get_user_by_id(user_id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id, email, name, picture FROM users WHERE id=%s", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row
+
+
+# ---------- Settings helpers (per-user) ----------
+
+def get_setting(key, default=None, user_id=None):
+    uid = user_id or current_user_id()
+    if not uid:
+        return default
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT value FROM settings WHERE user_id=%s AND key=%s", (uid, key))
+    row = c.fetchone()
+    conn.close()
+    return row["value"] if row else default
+
+
+def set_setting(key, value, user_id=None):
+    uid = user_id or current_user_id()
+    if not uid:
+        return
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO settings (user_id, key, value) VALUES (%s, %s, %s)
+        ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value
+    """, (uid, key, value))
     conn.commit()
     conn.close()
 
-init_db()
 
-
-# ---------- Settings helpers ----------
-
-def get_setting(key, default=None):
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+def get_learned_rules(user_id=None):
+    uid = user_id or current_user_id()
+    if not uid:
+        return []
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT narration_pattern, classification FROM learned_rules WHERE user_id=%s", (uid,))
+    rows = c.fetchall()
     conn.close()
-    return row[0] if row else default
+    return [{"pattern": r["narration_pattern"], "classification": r["classification"]} for r in rows]
 
 
-def set_setting(key, value):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, value))
-    conn.commit()
-    conn.close()
-
-
-def get_learned_rules():
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT narration_pattern, classification FROM learned_rules").fetchall()
-    conn.close()
-    return [{"pattern": r[0], "classification": r[1]} for r in rows]
-
-
-def save_feedback(txn_key, original, corrected, should_learn, narration=""):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "INSERT INTO feedback (txn_key, original_classification, corrected_classification, should_learn) VALUES (?,?,?,?)",
-        (txn_key, original, corrected, int(should_learn))
-    )
+def save_feedback(txn_key, original, corrected, should_learn, narration="", user_id=None):
+    uid = user_id or current_user_id()
+    if not uid:
+        return
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO feedback (user_id, txn_key, original_classification, corrected_classification, should_learn)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (uid, txn_key, original, corrected, int(should_learn)))
     if should_learn and narration:
         pattern = narration.strip()[:60]
-        existing = conn.execute(
-            "SELECT id FROM learned_rules WHERE narration_pattern=? AND classification=?",
-            (pattern, corrected)
-        ).fetchone()
-        if not existing:
-            conn.execute(
-                "INSERT INTO learned_rules (narration_pattern, classification, source_txn_key) VALUES (?,?,?)",
-                (pattern, corrected, txn_key)
-            )
+        c.execute("""
+            SELECT id FROM learned_rules
+            WHERE user_id=%s AND narration_pattern=%s AND classification=%s
+        """, (uid, pattern, corrected))
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO learned_rules (user_id, narration_pattern, classification, source_txn_key)
+                VALUES (%s, %s, %s, %s)
+            """, (uid, pattern, corrected, txn_key))
     conn.commit()
     conn.close()
 
 
-# ---------- Google Sheets ----------
+# ---------- Google OAuth2 — Login (identity) ----------
+
+@app.route("/auth/google")
+def google_login():
+    if not OAUTH_CLIENT_ID:
+        return "GOOGLE_OAUTH_CLIENT_ID not set", 500
+    state = secrets.token_urlsafe(16)
+    session["login_state"] = state
+    params = {
+        "client_id": OAUTH_CLIENT_ID,
+        "redirect_uri": LOGIN_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+        "state": state,
+    }
+    return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
+
+
+@app.route("/auth/google/callback")
+def google_callback():
+    import requests as req_lib
+    error = request.args.get("error")
+    if error:
+        return f"Login failed: {error}", 400
+
+    code  = request.args.get("code", "")
+    state = request.args.get("state", "")
+    if state != session.pop("login_state", None):
+        return "State mismatch — possible CSRF", 400
+
+    # Exchange code for tokens
+    resp = req_lib.post("https://oauth2.googleapis.com/token", data={
+        "code": code,
+        "client_id": OAUTH_CLIENT_ID,
+        "client_secret": OAUTH_CLIENT_SECRET,
+        "redirect_uri": LOGIN_REDIRECT_URI,
+        "grant_type": "authorization_code",
+    })
+    tokens = resp.json()
+    if "access_token" not in tokens:
+        return f"Token exchange failed: {tokens}", 400
+
+    # Fetch user info
+    user_resp = req_lib.get("https://www.googleapis.com/oauth2/v2/userinfo",
+                            headers={"Authorization": f"Bearer {tokens['access_token']}"})
+    info = user_resp.json()
+    google_id = info.get("id", "")
+    email     = info.get("email", "")
+    name      = info.get("name", "")
+    picture   = info.get("picture", "")
+
+    if not google_id or not email:
+        return "Could not retrieve user info from Google", 400
+
+    user = upsert_user(google_id, email, name, picture)
+    session["user_id"]   = user["id"]
+    session["user_email"] = user["email"]
+    session["user_name"]  = user["name"]
+    session["user_pic"]   = user["picture"]
+    session.permanent = True
+
+    log.info("User logged in: %s (id=%s)", email, user["id"])
+    return redirect("/")
+
+
+@app.route("/auth/logout", methods=["POST", "GET"])
+def logout():
+    session.clear()
+    return redirect("/auth/google")
+
+
+@app.route("/api/me")
+@login_required
+def me():
+    return jsonify({
+        "id":      session["user_id"],
+        "email":   session.get("user_email"),
+        "name":    session.get("user_name"),
+        "picture": session.get("user_pic"),
+    })
+
+
+# ---------- Google Sheets helpers ----------
 
 def gsheets_available():
     try:
@@ -126,36 +322,6 @@ def gsheets_available():
     except ImportError:
         return False
 
-
-def load_from_gsheets(sheet_id, sheet_name="query_sk"):
-    import gspread
-    from google.oauth2 import service_account
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets.readonly",
-        "https://www.googleapis.com/auth/drive.readonly"
-    ]
-    creds_path = os.path.join(BASE_DIR, GOOGLE_SHEETS_CREDS)
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=scopes)
-    client = gspread.authorize(creds)
-    sh = client.open_by_key(sheet_id)
-    ws = sh.worksheet(sheet_name)
-    rows = ws.get_all_values()
-    if not rows:
-        return pd.DataFrame()
-    header_row = 0
-    for i, row in enumerate(rows):
-        if row and str(row[0]).strip() == "Date":
-            header_row = i
-            break
-    df = pd.DataFrame(rows[header_row + 1:], columns=rows[header_row])
-    df.columns = [str(c).strip() for c in df.columns]
-    df = df[df["Date"].notna()]
-    df = df[df["Date"].astype(str).str.strip() != ""]
-    df = df[~df["Narration"].astype(str).str.lower().str.contains("grand total", na=False)]
-    return df
-
-
-# ---------- OAuth2 Google Sheets helpers ----------
 
 def _oauth_creds(tokens: dict):
     from google.oauth2.credentials import Credentials
@@ -185,11 +351,11 @@ def _refresh_oauth_creds(tokens: dict):
 
 def load_from_gsheets_oauth(sheet_id, sheet_name, tokens):
     import gspread
-    creds = _refresh_oauth_creds(tokens)
+    creds  = _refresh_oauth_creds(tokens)
     client = gspread.authorize(creds)
-    sh = client.open_by_key(sheet_id)
-    ws = sh.worksheet(sheet_name)
-    rows = ws.get_all_values()
+    sh     = client.open_by_key(sheet_id)
+    ws     = sh.worksheet(sheet_name)
+    rows   = ws.get_all_values()
     if not rows:
         return pd.DataFrame()
     header_row = 0
@@ -206,13 +372,12 @@ def load_from_gsheets_oauth(sheet_id, sheet_name, tokens):
 
 
 def load_sheet_as_context_oauth(sheet_id, tab_name, tokens):
-    """Load any worksheet tab as a generic context DataFrame (first-row headers)."""
     import gspread
-    creds = _refresh_oauth_creds(tokens)
+    creds  = _refresh_oauth_creds(tokens)
     client = gspread.authorize(creds)
-    sh = client.open_by_key(sheet_id)
-    ws = sh.worksheet(tab_name)
-    rows = ws.get_all_values()
+    sh     = client.open_by_key(sheet_id)
+    ws     = sh.worksheet(tab_name)
+    rows   = ws.get_all_values()
     if len(rows) < 2:
         return pd.DataFrame()
     df = pd.DataFrame(rows[1:], columns=rows[0])
@@ -241,20 +406,19 @@ def list_drive_sheets(tokens):
     return resp.json().get("files", [])
 
 
-# ---------- Data Loading ----------
+# ---------- Data Loading (scoped to current user) ----------
 
 def load_transactions():
-    active_sheet_id = get_setting("active_sheet_id") or GOOGLE_SHEETS_ID
+    active_sheet_id = get_setting("active_sheet_id")
     active_tab_name = get_setting("active_tab_name") or "query_sk"
     active_creds    = get_setting("oauth_tokens")
-    if active_sheet_id:
+
+    if active_sheet_id and active_creds:
         try:
-            if active_creds:
-                return load_from_gsheets_oauth(active_sheet_id, active_tab_name, json.loads(active_creds))
-            elif gsheets_available():
-                return load_from_gsheets(active_sheet_id, active_tab_name)
+            return load_from_gsheets_oauth(
+                active_sheet_id, active_tab_name, json.loads(active_creds))
         except Exception as e:
-            print(f"GSheets failed, falling back to Excel: {e}")
+            log.warning("GSheets load failed: %s", e)
 
     df = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=None)
     header_row = next((i for i, row in df.iterrows() if str(row[0]).strip() == "Date"), 3)
@@ -262,17 +426,14 @@ def load_transactions():
     transactions.columns = [str(c).strip() for c in transactions.columns]
     transactions = transactions[transactions["Date"].notna()]
     transactions = transactions[transactions["Date"].astype(str).str.strip() != "nan"]
-    transactions = transactions[~transactions["Narration"].astype(str).str.lower().str.contains("grand total", na=False)]
+    transactions = transactions[~transactions["Narration"].astype(str).str.lower().str.contains(
+        "grand total", na=False)]
     return transactions
 
 
 def load_context_sheets():
-    """
-    Load all user-selected context sheets (additional tabs chosen after base sheet selection).
-    Returns list of { tab_name, df } dicts.
-    """
-    active_sheet_id = get_setting("active_sheet_id") or GOOGLE_SHEETS_ID
-    active_creds    = get_setting("oauth_tokens")
+    active_sheet_id   = get_setting("active_sheet_id")
+    active_creds      = get_setting("oauth_tokens")
     context_tabs_json = get_setting("context_tab_names", "[]")
     try:
         context_tabs = json.loads(context_tabs_json)
@@ -283,14 +444,26 @@ def load_context_sheets():
         return []
 
     results = []
-    tokens = json.loads(active_creds)
+    tokens  = json.loads(active_creds)
     for tab in context_tabs:
         try:
             df = load_sheet_as_context_oauth(active_sheet_id, tab, tokens)
             results.append({"tab_name": tab, "df": df})
         except Exception as e:
-            print(f"Failed to load context tab '{tab}': {e}")
+            log.warning("Failed to load context tab '%s': %s", tab, e)
     return results
+
+
+def _load_excel_fallback():
+    df = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=None)
+    header_row = next((i for i, row in df.iterrows() if str(row[0]).strip() == "Date"), 3)
+    transactions = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=header_row)
+    transactions.columns = [str(c).strip() for c in transactions.columns]
+    transactions = transactions[transactions["Date"].notna()]
+    transactions = transactions[transactions["Date"].astype(str).str.strip() != "nan"]
+    transactions = transactions[~transactions["Narration"].astype(str).str.lower().str.contains(
+        "grand total", na=False)]
+    return transactions
 
 
 # ---------- Duplicate Detection ----------
@@ -335,19 +508,19 @@ def detect_duplicates(transactions_df):
 # ---------- Classification ----------
 
 def build_context_sheet_summary(context_sheets):
-    """Build a text summary of all user-selected context sheets to include in the AI prompt."""
     if not context_sheets:
         return ""
     parts = []
     for ctx in context_sheets:
         tab = ctx["tab_name"]
-        df = ctx["df"]
+        df  = ctx["df"]
         if df.empty:
             continue
         parts.append(f"\n=== CONTEXT SHEET: {tab} ===")
-        # Serialize up to 300 rows as compact text
         for _, row in df.head(300).iterrows():
-            row_str = " | ".join(f"{k}: {str(v).strip()}" for k, v in row.items() if str(v).strip() and str(v).strip().lower() not in ("nan", "none", ""))
+            row_str = " | ".join(
+                f"{k}: {str(v).strip()}" for k, v in row.items()
+                if str(v).strip() and str(v).strip().lower() not in ("nan", "none", ""))
             if row_str:
                 parts.append(f"  {row_str}")
     return "\n".join(parts)
@@ -361,133 +534,7 @@ def apply_learned_rules(item, learned_rules):
     return None
 
 
-def classify_transactions_batch(transactions_df, context_sheets):
-    log.info("classify_transactions_batch called with %d rows, %d context sheets",
-             len(transactions_df), len(context_sheets))
-
-    if not GEMINI_API_KEY:
-        log.error("GEMINI_API_KEY is not set — aborting classification")
-        return [{"classification": "API key missing", "reference_id": "", "matched_detail": "",
-                 "confidence": "low", "reasoning": "No Gemini API key set."}
-                for _ in range(len(transactions_df))]
-
-    genai.configure(api_key=GEMINI_API_KEY)
-
-    # ---------- model factory with cascade fallback ----------
-    # Chain: gemini-2.5-flash → gemini-2.0-flash → gemini-2.5-flash-lite
-    # 2.5-flash is fastest/smartest but gets demand spikes.
-    # 2.0-flash has more capacity headroom as a middle fallback.
-    # 2.5-flash-lite is the last resort — always available.
-    MODEL_CHAIN = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"]
-    _current_model_idx = 0
-    _model_cache = {}
-
-    log.info("Gemini configured. Model chain: %s", " → ".join(MODEL_CHAIN))
-
-    def _get_model(name):
-        if name not in _model_cache:
-            _model_cache[name] = genai.GenerativeModel(
-                name,
-                generation_config=genai.types.GenerationConfig(),
-            )
-        return _model_cache[name]
-
-    def _generate_with_retry(prompt_text, max_attempts=6):
-        """Call Gemini with exponential back-off and model cascade on 503/429."""
-        nonlocal _current_model_idx
-        for attempt in range(max_attempts):
-            model_name = MODEL_CHAIN[_current_model_idx]
-            model = _get_model(model_name)
-            log.debug("Attempt %d/%d using model=%s", attempt + 1, max_attempts, model_name)
-            try:
-                response = model.generate_content(prompt_text)
-                log.debug("Model %s succeeded on attempt %d", model_name, attempt + 1)
-                # On success, try to step back up to primary next time
-                if _current_model_idx > 0:
-                    _current_model_idx -= 1
-                    log.info("Stepping back up model chain → %s", MODEL_CHAIN[_current_model_idx])
-                return response
-            except Exception as exc:
-                err = str(exc)
-                is_rate_or_unavailable = any(kw in err for kw in [
-                    "503", "UNAVAILABLE", "high demand", "ServiceUnavailable",
-                    "429", "ResourceExhausted", "quota", "rate"
-                ])
-                log.warning("Gemini error (attempt %d/%d) model=%s: %s",
-                            attempt + 1, max_attempts, model_name, err[:200])
-                if is_rate_or_unavailable and attempt < max_attempts - 1:
-                    next_idx = _current_model_idx + 1
-                    if next_idx < len(MODEL_CHAIN):
-                        log.warning("Cascading to next model: %s", MODEL_CHAIN[next_idx])
-                        _current_model_idx = next_idx
-                        wait = 3
-                    else:
-                        # Already on last model — exponential backoff
-                        wait = min(5 * (2 ** (attempt - len(MODEL_CHAIN) + 1)), 60)
-                        log.warning("All models tried — retrying %s in %ds", model_name, wait)
-                    _time.sleep(wait)
-                else:
-                    log.error("Non-transient error or out of attempts. model=%s error=%s", model_name, err[:300])
-                    raise
-    # -----------------------------------
-
-    context_section = build_context_sheet_summary(context_sheets)
-    log.info("Context section length: %d chars", len(context_section))
-    learned_rules = get_learned_rules()
-    log.info("Loaded %d learned rules", len(learned_rules))
-
-    txn_list = []
-    for i, (_, row) in enumerate(transactions_df.iterrows()):
-        txn_list.append({
-            "idx": i,
-            "date": str(row.get("Date", "")).strip(),
-            "particulars": str(row.get("Particulars", "")).strip(),
-            "voucher_type": str(row.get("Voucher Type", "")).strip(),
-            "voucher_no": str(row.get("Voucher No.", "")).strip(),
-            "narration": str(row.get("Narration", "")).strip(),
-            "gross_total": str(row.get("Gross Total", "")).strip(),
-        })
-
-    results = [None] * len(txn_list)
-
-    needs_ai = []
-    for item in txn_list:
-        learned = apply_learned_rules(item, learned_rules)
-        if learned:
-            log.debug("Rule match idx=%d narration='%s' → '%s'",
-                      item["idx"], item["narration"][:60], learned)
-            results[item["idx"]] = {
-                "idx": item["idx"],
-                "classification": learned,
-                "reference_id": "",
-                "matched_detail": "Auto-classified from learned feedback",
-                "confidence": "high",
-                "reasoning": f"Matched learned rule: classified as '{learned}' based on previous user feedback."
-            }
-        else:
-            needs_ai.append(item)
-
-    log.info("%d transactions need AI classification, %d handled by learned rules",
-             len(needs_ai), len(txn_list) - len(needs_ai))
-
-    learned_rules_text = ""
-    if learned_rules:
-        learned_rules_text = "\n=== LEARNED RULES (from user feedback — these OVERRIDE your judgement) ===\n"
-        for r in learned_rules:
-            learned_rules_text += f'  If narration contains "{r["pattern"]}" → classify as "{r["classification"]}"\n'
-
-    context_block = ""
-    if context_section:
-        context_block = f"\n=== ADDITIONAL CONTEXT SHEETS (use to match transactions) ===\n{context_section}\n"
-
-    batch_size = 20
-    for start in range(0, len(needs_ai), batch_size):
-        batch = needs_ai[start:start + batch_size]
-        batch_json = json.dumps(batch, indent=2)
-        log.info("Sending batch %d–%d (%d items) to Gemini. Prompt size ~%d chars",
-                 start, start + len(batch) - 1, len(batch), len(batch_json))
-
-        prompt = f"""You are an AI assistant classifying bank transactions for Alfaleus Technology Pvt Ltd, a medical device company selling ophthalmic (eye care) devices.
+_CLASSIFY_PROMPT_BODY = """You are an AI assistant classifying bank transactions for Alfaleus Technology Pvt Ltd, a medical device company selling ophthalmic (eye care) devices.
 {context_block}
 {learned_rules_text}
 
@@ -543,117 +590,227 @@ Return a JSON array (same length, same order):
 
 Return ONLY the JSON array. No markdown. No extra text."""
 
-        try:
-            response = _generate_with_retry(prompt)
-            raw_text = response.text.strip()
-            log.debug("Raw Gemini response (first 300 chars): %s", raw_text[:300])
-            text = raw_text
-            # Strip markdown fences
-            text = re.sub(r"^```[a-z]*\n?", "", text)
-            text = re.sub(r"\n?```$", "", text)
-            text = text.strip()
 
-            # Attempt 1: clean parse
+def _make_model_runner():
+    genai.configure(api_key=GEMINI_API_KEY)
+    MODEL_CHAIN = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"]
+    state = {"idx": 0, "cache": {}}
+
+    def _get_model(name):
+        if name not in state["cache"]:
+            state["cache"][name] = genai.GenerativeModel(
+                name, generation_config=genai.types.GenerationConfig())
+        return state["cache"][name]
+
+    def _generate(prompt_text, max_attempts=6):
+        for attempt in range(max_attempts):
+            model_name = MODEL_CHAIN[state["idx"]]
+            model = _get_model(model_name)
             try:
-                batch_results = json.loads(text)
-                log.info("JSON parse attempt 1 succeeded: %d results", len(batch_results))
-            except json.JSONDecodeError as je:
-                log.warning("JSON parse attempt 1 failed: %s — trying recovery", je)
-                # Attempt 2: truncated JSON — find the last complete object
-                # by trimming after the last '}' and closing the array
-                last_brace = text.rfind("}")
-                if last_brace != -1:
-                    truncated = text[:last_brace + 1]
-                    # Remove any trailing comma before closing
-                    truncated = re.sub(r",\s*$", "", truncated.strip())
-                    try:
-                        batch_results = json.loads(truncated + "]")
-                        log.info("JSON parse attempt 2 (truncation recovery) succeeded: %d results", len(batch_results))
-                    except json.JSONDecodeError:
-                        log.warning("JSON parse attempt 2 failed — trying regex extraction")
-                        batch_results = None
+                response = model.generate_content(prompt_text)
+                if state["idx"] > 0:
+                    state["idx"] -= 1
+                return response
+            except Exception as exc:
+                err = str(exc)
+                is_transient = any(kw in err for kw in [
+                    "503", "UNAVAILABLE", "high demand", "ServiceUnavailable",
+                    "429", "ResourceExhausted", "quota", "rate"])
+                log.warning("Gemini error attempt %d/%d model=%s: %s",
+                            attempt + 1, max_attempts, model_name, err[:200])
+                if is_transient and attempt < max_attempts - 1:
+                    nxt = state["idx"] + 1
+                    if nxt < len(MODEL_CHAIN):
+                        state["idx"] = nxt
+                    _time.sleep(min(5 * (2 ** attempt), 60))
                 else:
-                    batch_results = None
+                    raise
+    return _generate
 
-                # Attempt 3: extract individual objects with regex
-                if batch_results is None:
-                    objects = re.findall(r'\{[^{}]*\}', text, re.DOTALL)
-                    parsed = []
-                    for obj in objects:
-                        try:
-                            parsed.append(json.loads(obj))
-                        except json.JSONDecodeError:
-                            continue
-                    batch_results = parsed if parsed else None
-                    if batch_results:
-                        log.info("JSON parse attempt 3 (regex) succeeded: %d objects", len(batch_results))
-                    else:
-                        log.error("All JSON recovery attempts failed. Raw text: %s", text[:500])
 
+def _parse_gemini_json(text):
+    text = re.sub(r"^```[a-z]*\n?", "", text.strip())
+    text = re.sub(r"\n?```$", "", text).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    last = text.rfind("}")
+    if last != -1:
+        try:
+            return json.loads(re.sub(r",\s*$", "", text[:last + 1].strip()) + "]")
+        except json.JSONDecodeError:
+            pass
+    objects = re.findall(r'\{[^{}]*\}', text, re.DOTALL)
+    parsed  = []
+    for o in objects:
+        try:
+            parsed.append(json.loads(o))
+        except json.JSONDecodeError:
+            pass
+    return parsed if parsed else None
+
+
+def classify_transactions_batch(transactions_df, context_sheets, user_id=None):
+    uid = user_id or current_user_id()
+    if not GEMINI_API_KEY:
+        return [{"classification": "API key missing", "reference_id": "", "matched_detail": "",
+                 "confidence": "low", "reasoning": "No Gemini API key set."}
+                for _ in range(len(transactions_df))]
+
+    _generate = _make_model_runner()
+    context_section = build_context_sheet_summary(context_sheets)
+    learned_rules   = get_learned_rules(uid)
+
+    txn_list = [{"idx": i,
+                 "date": str(row.get("Date", "")).strip(),
+                 "particulars": str(row.get("Particulars", "")).strip(),
+                 "voucher_type": str(row.get("Voucher Type", "")).strip(),
+                 "voucher_no": str(row.get("Voucher No.", "")).strip(),
+                 "narration": str(row.get("Narration", "")).strip(),
+                 "gross_total": str(row.get("Gross Total", "")).strip()}
+                for i, (_, row) in enumerate(transactions_df.iterrows())]
+
+    results   = [None] * len(txn_list)
+    needs_ai  = []
+    for item in txn_list:
+        learned = apply_learned_rules(item, learned_rules)
+        if learned:
+            results[item["idx"]] = {"idx": item["idx"], "classification": learned,
+                                    "reference_id": "", "matched_detail": "Auto-classified",
+                                    "confidence": "high", "reasoning": f"Learned rule: '{learned}'."}
+        else:
+            needs_ai.append(item)
+
+    learned_rules_text = ""
+    if learned_rules:
+        learned_rules_text = "\n=== LEARNED RULES (OVERRIDE your judgement) ===\n"
+        for r in learned_rules:
+            learned_rules_text += f'  If narration contains "{r["pattern"]}" → classify as "{r["classification"]}"\n'
+
+    context_block = (f"\n=== ADDITIONAL CONTEXT SHEETS ===\n{context_section}\n"
+                     if context_section else "")
+
+    batch_size = 20
+    for start in range(0, len(needs_ai), batch_size):
+        batch = needs_ai[start:start + batch_size]
+        prompt = _CLASSIFY_PROMPT_BODY.format(
+            context_block=context_block,
+            learned_rules_text=learned_rules_text,
+            batch_json=json.dumps(batch, indent=2))
+        try:
+            response     = _generate(prompt)
+            batch_results = _parse_gemini_json(response.text)
             if batch_results:
-                successfully_parsed = {r["idx"] for r in batch_results if "idx" in r}
                 for r in batch_results:
                     if "idx" in r:
                         results[r["idx"]] = r
-                # Any items in the batch that didn't come back — retry individually
-                missing = [item for item in batch if item["idx"] not in successfully_parsed]
-                if missing:
-                    log.warning("%d items missing from batch response — retrying individually: idx=%s",
-                                len(missing), [m["idx"] for m in missing])
-                    for item in missing:
-                        try:
-                            single_prompt = prompt.replace(
-                                f"Return a JSON array (same length, same order):",
-                                f"Return a JSON array with exactly 1 element:"
-                            ).replace(json.dumps(batch, indent=2), json.dumps([item], indent=2))
-                            r2 = _generate_with_retry(single_prompt)
-                            t2 = re.sub(r"^```[a-z]*\n?", "", r2.text.strip())
-                            t2 = re.sub(r"\n?```$", "", t2).strip()
-                            single_result = json.loads(t2)
-                            if isinstance(single_result, list) and single_result:
-                                results[item["idx"]] = single_result[0]
-                            elif isinstance(single_result, dict):
-                                results[item["idx"]] = single_result
-                        except Exception as single_err:
-                            log.error("Single retry failed for idx=%d: %s", item["idx"], str(single_err)[:200])
-                            results[item["idx"]] = {
-                                "idx": item["idx"],
-                                "classification": "Error",
-                                "reference_id": "",
-                                "matched_detail": "",
-                                "confidence": "low",
-                                "reasoning": "Could not classify after retry."
-                            }
             else:
-                raise ValueError(f"All recovery attempts failed. Raw: {text[:200]}")
-
+                raise ValueError("JSON parse failed")
         except Exception as e:
-            log.error("Batch %d–%d failed entirely: %s", start, start + len(batch) - 1, str(e)[:300])
+            log.error("Batch failed: %s", str(e)[:200])
             for item in batch:
-                results[item["idx"]] = {
-                    "idx": item["idx"],
-                    "classification": "Error",
-                    "reference_id": "",
-                    "matched_detail": "",
-                    "confidence": "low",
-                    "reasoning": f"Classification failed: {str(e)}"
-                }
-
+                results[item["idx"]] = {"idx": item["idx"], "classification": "Error",
+                                        "reference_id": "", "matched_detail": "",
+                                        "confidence": "low", "reasoning": str(e)[:100]}
     return results
 
 
-# ---------- Routes ----------
+def _classify_transactions_stream(transactions_df, context_sheets, user_id=None):
+    """Generator: yields list of result dicts per sub-batch."""
+    uid = user_id or current_user_id()
+    if not GEMINI_API_KEY:
+        yield [{"idx": i, "classification": "API key missing", "reference_id": "",
+                "matched_detail": "", "confidence": "low",
+                "reasoning": "No Gemini API key set."} for i in range(len(transactions_df))]
+        return
+
+    _generate = _make_model_runner()
+    context_section = build_context_sheet_summary(context_sheets)
+    learned_rules   = get_learned_rules(uid)
+
+    txn_list = [{"idx": i,
+                 "date": str(row.get("Date", "")).strip(),
+                 "particulars": str(row.get("Particulars", "")).strip(),
+                 "voucher_type": str(row.get("Voucher Type", "")).strip(),
+                 "voucher_no": str(row.get("Voucher No.", "")).strip(),
+                 "narration": str(row.get("Narration", "")).strip(),
+                 "gross_total": str(row.get("Gross Total", "")).strip()}
+                for i, (_, row) in enumerate(transactions_df.iterrows())]
+
+    needs_ai    = []
+    rule_matches = []
+    for item in txn_list:
+        learned = apply_learned_rules(item, learned_rules)
+        if learned:
+            rule_matches.append({"idx": item["idx"], "classification": learned,
+                                 "reference_id": "", "matched_detail": "Auto-classified",
+                                 "confidence": "high", "reasoning": f"Learned rule: '{learned}'."})
+        else:
+            needs_ai.append(item)
+
+    if rule_matches:
+        yield rule_matches
+
+    if not needs_ai:
+        return
+
+    learned_rules_text = ""
+    if learned_rules:
+        learned_rules_text = "\n=== LEARNED RULES (OVERRIDE your judgement) ===\n"
+        for r in learned_rules:
+            learned_rules_text += f'  If narration contains "{r["pattern"]}" → classify as "{r["classification"]}"\n'
+
+    context_block = (f"\n=== ADDITIONAL CONTEXT SHEETS ===\n{context_section}\n"
+                     if context_section else "")
+
+    batch_size = 20
+    for start in range(0, len(needs_ai), batch_size):
+        batch  = needs_ai[start:start + batch_size]
+        prompt = _CLASSIFY_PROMPT_BODY.format(
+            context_block=context_block,
+            learned_rules_text=learned_rules_text,
+            batch_json=json.dumps(batch, indent=2))
+        try:
+            response      = _generate(prompt)
+            batch_results = _parse_gemini_json(response.text)
+            if batch_results:
+                yield batch_results
+            else:
+                yield [{"idx": item["idx"], "classification": "Error", "reference_id": "",
+                        "matched_detail": "", "confidence": "low",
+                        "reasoning": "JSON parse failed."} for item in batch]
+        except Exception as e:
+            log.error("[stream] sub-batch failed: %s", str(e)[:200])
+            yield [{"idx": item["idx"], "classification": "Error", "reference_id": "",
+                    "matched_detail": "", "confidence": "low",
+                    "reasoning": f"Failed: {str(e)[:80]}"} for item in batch]
+
+
+def _safe_json(s):
+    try:
+        json.loads(s)
+        return True
+    except Exception:
+        return False
+
+
+# ============================================================
+# Routes
+# ============================================================
 
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/api/data")
+@login_required
 def get_data():
     try:
-        transactions = load_transactions()
-        context_sheets = load_context_sheets()
+        transactions    = load_transactions()
+        context_sheets  = load_context_sheets()
 
         txns = [{"date": str(row.get("Date", "")).strip(),
                  "particulars": str(row.get("Particulars", "")).strip(),
@@ -664,7 +821,6 @@ def get_data():
                 for _, row in transactions.iterrows()]
 
         duplicates = detect_duplicates(transactions)
-        data_source = "google_sheets" if GOOGLE_SHEETS_ID and gsheets_available() else "excel"
 
         context_tab_names = []
         try:
@@ -672,93 +828,71 @@ def get_data():
         except Exception:
             pass
 
-        return jsonify({"transactions": txns,
-                        "total": len(txns),
-                        "duplicates": duplicates,
-                        "data_source": data_source,
+        return jsonify({"transactions": txns, "total": len(txns),
+                        "duplicates": duplicates, "data_source": "google_sheets",
                         "context_tabs": context_tab_names})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/classify", methods=["POST"])
+@login_required
 def classify():
     if not _classify_lock.acquire(blocking=False):
-        log.warning("/api/classify rejected — another classification is already in progress")
         return jsonify({"error": "A classification is already running. Please wait."}), 429
     try:
-        data = request.json
+        data    = request.json
         indices = data.get("indices", None)
-        log.info("/api/classify called — indices=%s", indices if indices is None else len(indices))
-        transactions = load_transactions()
-        log.info("Loaded %d total transactions from data source", len(transactions))
-        context_sheets = load_context_sheets()
-        log.info("Loaded %d context sheets", len(context_sheets))
+        transactions    = load_transactions()
+        context_sheets  = load_context_sheets()
 
         if indices is not None:
             subset = transactions.iloc[indices].copy()
         else:
-            subset = transactions.copy()
+            subset  = transactions.copy()
             indices = list(range(len(transactions)))
 
         results = classify_transactions_batch(subset, context_sheets)
-        output = [{"original_index": indices[i], **res} for i, res in enumerate(results) if res]
-        log.info("/api/classify completed — %d results returned", len(output))
+        output  = [{"original_index": indices[i], **res} for i, res in enumerate(results) if res]
         return jsonify({"results": output})
     except Exception as e:
-        log.exception("/api/classify unhandled exception: %s", str(e))
+        log.exception("/api/classify error")
         return jsonify({"error": str(e)}), 500
     finally:
         _classify_lock.release()
 
 
 @app.route("/api/classify_stream", methods=["POST"])
+@login_required
 def classify_stream():
-    """
-    SSE endpoint — streams classification results as each Gemini sub-batch (20 txns)
-    completes, so the frontend can update the table in real time instead of waiting
-    for all 50+ transactions to finish.
-
-    Each SSE event is:
-      data: {"results": [...], "done": false, "completed": N, "total": T}
-    Final event:
-      data: {"results": [], "done": true, "completed": T, "total": T}
-    Error event:
-      data: {"error": "...", "done": true}
-    """
     if not _classify_lock.acquire(blocking=False):
-        # Return a single SSE error event
         def _busy():
             yield "data: " + json.dumps({"error": "A classification is already running.", "done": True}) + "\n\n"
         return app.response_class(_busy(), mimetype="text/event-stream")
 
-    # Capture session state NOW (before entering the generator thread)
-    # because Flask session is not available inside a generator after response starts
-    data = request.json or {}
+    data    = request.json or {}
     indices = data.get("indices", None)
-    # Snapshot session-scoped settings so the generator can use them
-    snap_sheet_id   = session.get("active_sheet_id", "") or os.environ.get("GOOGLE_SHEETS_ID", "")
-    snap_tab_name   = session.get("active_tab_name", "") or "query_sk"
-    snap_tokens_str = session.get("oauth_tokens")
-    snap_ctx_tabs   = session.get("context_tab_names", "[]")
+
+    # Snapshot everything from session NOW (generator runs after response starts)
+    uid              = current_user_id()
+    snap_sheet_id    = get_setting("active_sheet_id",   user_id=uid) or ""
+    snap_tab_name    = get_setting("active_tab_name",   user_id=uid) or "query_sk"
+    snap_tokens_str  = get_setting("oauth_tokens",      user_id=uid)
+    snap_ctx_tabs    = get_setting("context_tab_names", user_id=uid) or "[]"
 
     def _generate():
         try:
-            # Load data using snapshotted session values
             if snap_sheet_id and snap_tokens_str:
                 transactions = load_from_gsheets_oauth(
                     snap_sheet_id, snap_tab_name, json.loads(snap_tokens_str))
-            elif snap_sheet_id and gsheets_available():
-                transactions = load_from_gsheets(snap_sheet_id, snap_tab_name)
             else:
                 transactions = _load_excel_fallback()
 
-            # Load context sheets
             context_sheets = []
             if snap_sheet_id and snap_tokens_str:
                 try:
                     ctx_tabs = json.loads(snap_ctx_tabs) if snap_ctx_tabs else []
-                    tokens = json.loads(snap_tokens_str)
+                    tokens   = json.loads(snap_tokens_str)
                     for tab in ctx_tabs:
                         try:
                             df = load_sheet_as_context_oauth(snap_sheet_id, tab, tokens)
@@ -770,274 +904,45 @@ def classify_stream():
 
             if indices is not None:
                 req_indices = indices
-                subset = transactions.iloc[req_indices].copy()
+                subset      = transactions.iloc[req_indices].copy()
             else:
-                subset = transactions.copy()
+                subset      = transactions.copy()
                 req_indices = list(range(len(transactions)))
 
-            total = len(req_indices)
+            total     = len(req_indices)
             completed = 0
 
-            # Stream results from the generator version of classify
-            for batch_results in _classify_transactions_stream(subset, context_sheets):
-                # batch_results is a list of result dicts with internal idx (0-based within subset)
+            for batch_results in _classify_transactions_stream(subset, context_sheets, uid):
                 output = []
                 for res in batch_results:
                     if res and "idx" in res:
                         original_idx = req_indices[res["idx"]]
                         output.append({"original_index": original_idx, **res})
                 completed += len(output)
-                payload = json.dumps({"results": output, "done": False,
-                                      "completed": completed, "total": total})
-                yield f"data: {payload}\n\n"
+                yield f"data: {json.dumps({'results': output, 'done': False, 'completed': completed, 'total': total})}\n\n"
 
             yield f"data: {json.dumps({'results': [], 'done': True, 'completed': completed, 'total': total})}\n\n"
 
         except Exception as e:
-            log.exception("classify_stream error: %s", e)
+            log.exception("classify_stream error")
             yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
         finally:
             _classify_lock.release()
 
     return app.response_class(
-        _generate(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # disable nginx/Railway proxy buffering
-        }
-    )
-
-
-def _load_excel_fallback():
-    df = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=None)
-    header_row = next((i for i, row in df.iterrows() if str(row[0]).strip() == "Date"), 3)
-    transactions = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=header_row)
-    transactions.columns = [str(c).strip() for c in transactions.columns]
-    transactions = transactions[transactions["Date"].notna()]
-    transactions = transactions[transactions["Date"].astype(str).str.strip() != "nan"]
-    transactions = transactions[~transactions["Narration"].astype(str).str.lower().str.contains("grand total", na=False)]
-    return transactions
-
-
-def _classify_transactions_stream(transactions_df, context_sheets):
-    """
-    Generator version of classify_transactions_batch.
-    Yields a list of result dicts after each Gemini sub-batch (20 items) completes,
-    instead of collecting everything and returning at the end.
-    Learned-rule matches are yielded immediately as a first batch before any AI calls.
-    """
-    import google.generativeai as genai
-
-    if not GEMINI_API_KEY:
-        yield [{"idx": i, "classification": "API key missing", "reference_id": "",
-                "matched_detail": "", "confidence": "low",
-                "reasoning": "No Gemini API key set."} for i in range(len(transactions_df))]
-        return
-
-    genai.configure(api_key=GEMINI_API_KEY)
-    MODEL_CHAIN = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"]
-    _current_model_idx = 0
-    _model_cache = {}
-
-    def _get_model(name):
-        if name not in _model_cache:
-            _model_cache[name] = genai.GenerativeModel(name, generation_config=genai.types.GenerationConfig())
-        return _model_cache[name]
-
-    def _generate_with_retry(prompt_text, max_attempts=6):
-        nonlocal _current_model_idx
-        for attempt in range(max_attempts):
-            model_name = MODEL_CHAIN[_current_model_idx]
-            model = _get_model(model_name)
-            try:
-                response = model.generate_content(prompt_text)
-                if _current_model_idx > 0:
-                    _current_model_idx -= 1
-                return response
-            except Exception as exc:
-                err = str(exc)
-                is_transient = any(kw in err for kw in [
-                    "503", "UNAVAILABLE", "high demand", "ServiceUnavailable",
-                    "429", "ResourceExhausted", "quota", "rate"])
-                log.warning("Gemini error (attempt %d/%d) model=%s: %s",
-                            attempt + 1, max_attempts, MODEL_CHAIN[_current_model_idx], err[:200])
-                if is_transient and attempt < max_attempts - 1:
-                    next_idx = _current_model_idx + 1
-                    if next_idx < len(MODEL_CHAIN):
-                        _current_model_idx = next_idx
-                        _time.sleep(3)
-                    else:
-                        _time.sleep(min(5 * (2 ** (attempt - len(MODEL_CHAIN) + 1)), 60))
-                else:
-                    raise
-
-    context_section = build_context_sheet_summary(context_sheets)
-    learned_rules = get_learned_rules()
-
-    txn_list = []
-    for i, (_, row) in enumerate(transactions_df.iterrows()):
-        txn_list.append({
-            "idx": i,
-            "date": str(row.get("Date", "")).strip(),
-            "particulars": str(row.get("Particulars", "")).strip(),
-            "voucher_type": str(row.get("Voucher Type", "")).strip(),
-            "voucher_no": str(row.get("Voucher No.", "")).strip(),
-            "narration": str(row.get("Narration", "")).strip(),
-            "gross_total": str(row.get("Gross Total", "")).strip(),
-        })
-
-    # --- Yield learned-rule matches immediately ---
-    needs_ai = []
-    rule_matches = []
-    for item in txn_list:
-        learned = apply_learned_rules(item, learned_rules)
-        if learned:
-            rule_matches.append({
-                "idx": item["idx"],
-                "classification": learned,
-                "reference_id": "",
-                "matched_detail": "Auto-classified from learned feedback",
-                "confidence": "high",
-                "reasoning": f"Matched learned rule: '{learned}'."
-            })
-        else:
-            needs_ai.append(item)
-
-    if rule_matches:
-        yield rule_matches   # frontend gets these instantly
-
-    if not needs_ai:
-        return
-
-    # Build prompt boilerplate (same as classify_transactions_batch)
-    learned_rules_text = ""
-    if learned_rules:
-        learned_rules_text = "\n=== LEARNED RULES (OVERRIDE your judgement) ===\n"
-        for r in learned_rules:
-            learned_rules_text += f'  If narration contains "{r["pattern"]}" → classify as "{r["classification"]}"\n'
-
-    context_block = ""
-    if context_section:
-        context_block = f"\n=== ADDITIONAL CONTEXT SHEETS ===\n{context_section}\n"
-
-    batch_size = 20
-    for start in range(0, len(needs_ai), batch_size):
-        batch = needs_ai[start:start + batch_size]
-        batch_json = json.dumps(batch, indent=2)
-        log.info("[stream] Sending sub-batch %d–%d (%d items) to Gemini",
-                 start, start + len(batch) - 1, len(batch))
-
-        prompt = f"""You are an AI assistant classifying bank transactions for Alfaleus Technology Pvt Ltd, a medical device company selling ophthalmic (eye care) devices.
-{context_block}
-{learned_rules_text}
-
-=== YOUR TASK ===
-Classify each transaction below. Use the context sheets above to match transactions to known records wherever possible.
-"Other Expense" and "Other Income" are LAST RESORTS — use specific categories first.
-
-PAYMENTS (outgoing) — pick the MOST SPECIFIC matching category:
-- "Exhibition/Conference Expense" — AIOC, stall, fabrication, passes, AIOYV, GENERAL FUND, AIOC PROMOTION, AIOC EXPENSE, any AIOC-related spend
-- "Salary/Freelance Payment" — FREELANCING, FREELANCE, WEBDEV CONSULTANCY, or any payment clearly to an individual for services/work
-- "Hotel Booking" — hotel name in narration, or match amount+date to any hotel records in context sheets
-- "Flight Booking" — airline name or PNR in narration, or match amount+date to flight records in context sheets
-- "Cab/Transport Booking" — QUICKRIDE, SAVAARI, cab, taxi, or match to cab/transport records in context sheets
-- "Bus Booking" — bus operator name or PNR, or match to bus records in context sheets
-- "Courier/Logistics" — BLUE DART, BLUEDART, GENERATING DYNAMIC (Blue Dart code), courier, shipping
-- "Sales Incentive Payment" — Incentive in narration, MMT/IMPS to field agents
-- "Office/Admin Expense" — car wash, PAYTM jio/utility, AWFIS coworking, ROBSOAP, DAZZLE ROBOTICS, IOCL fuel/petrol, small tools/supplies
-- "Tax Payment" — CBDT, GST, TDS, income tax
-- "Bank/Finance Transaction" — LITE (UPI Lite add money), ADD MONEY, wallet top-up, UPIRET refund, PHONEPE REVERSE
-- "Business Travel/Logistics" — DELHI EXPENSES, city name + EXPENSES, travel reimbursement, petrol/toll, any travel cost without a specific booking match
-- "Sales Consultant Payment" — SALES CONSULTANT, commission payment
-- "Other Expense" — ONLY if truly none of the above fit
-
-RECEIPTS (incoming) — pick the MOST SPECIFIC matching category:
-- "Device Payment Receipt" — incoming UPI/NEFT/IMPS from any doctor, hospital, or person whose name appears in context sheets
-- "EMI/Installment Receipt" — same sender appearing more than once, or narration says EMI
-- "Card Settlement" — TERMINAL CARDS SETTL, CARDS SETTL (daily POS batch)
-- "Payment Gateway Receipt" — PAYUFLI, REF-PAYUFLI (online payment gateway)
-- "Other Income" — ONLY if truly none of the above fit
-
-CRITICAL RULES:
-1. NEVER use "Other Expense" if ANY keyword above matches the narration
-2. NEVER use "Other Income" if the sender name appears anywhere in the context sheets
-3. Payments to named individuals for city/travel costs = "Business Travel/Logistics"
-4. Payments to named individuals for work/services = "Salary/Freelance Payment"
-5. Any narration containing AIOC = "Exhibition/Conference Expense" always
-6. Match hotel/flight/bus/cab by amount AND approximate date using context sheets if provided
-
-TRANSACTIONS:
-{batch_json}
-
-Return a JSON array (same length, same order):
-[
-  {{
-    "idx": <same idx>,
-    "classification": "<category>",
-    "reference_id": "<reference ID from context sheet or empty string>",
-    "matched_detail": "<what was matched>",
-    "confidence": "high|medium|low",
-    "reasoning": "<1-2 sentence explanation>"
-  }}
-]
-
-Return ONLY the JSON array. No markdown. No extra text."""
-
-        try:
-            response = _generate_with_retry(prompt)
-            raw_text = response.text.strip()
-            text = re.sub(r"^```[a-z]*\n?", "", raw_text)
-            text = re.sub(r"\n?```$", "", text).strip()
-
-            batch_results = None
-            try:
-                batch_results = json.loads(text)
-            except json.JSONDecodeError:
-                last_brace = text.rfind("}")
-                if last_brace != -1:
-                    truncated = re.sub(r",\s*$", "", text[:last_brace + 1].strip())
-                    try:
-                        batch_results = json.loads(truncated + "]")
-                    except json.JSONDecodeError:
-                        pass
-                if batch_results is None:
-                    objects = re.findall(r'\{[^{}]*\}', text, re.DOTALL)
-                    parsed = [json.loads(o) for o in objects if _safe_json(o)]
-                    batch_results = parsed if parsed else None
-
-            if batch_results:
-                yield batch_results   # ← stream this sub-batch to the frontend NOW
-            else:
-                error_batch = [{"idx": item["idx"], "classification": "Error",
-                                "reference_id": "", "matched_detail": "",
-                                "confidence": "low",
-                                "reasoning": "JSON parse failed."} for item in batch]
-                yield error_batch
-
-        except Exception as e:
-            log.error("[stream] Sub-batch %d–%d failed: %s", start, start + len(batch) - 1, str(e)[:200])
-            yield [{"idx": item["idx"], "classification": "Error", "reference_id": "",
-                    "matched_detail": "", "confidence": "low",
-                    "reasoning": f"Classification failed: {str(e)}"} for item in batch]
-
-
-def _safe_json(s):
-    try:
-        json.loads(s)
-        return True
-    except Exception:
-        return False
+        _generate(), mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.route("/api/classify_single", methods=["POST"])
+@login_required
 def classify_single():
     try:
-        data = request.json
-        idx = data.get("index", 0)
-        transactions = load_transactions()
+        data   = request.json
+        idx    = data.get("index", 0)
+        transactions   = load_transactions()
         context_sheets = load_context_sheets()
-        subset = transactions.iloc[[idx]]
+        subset  = transactions.iloc[[idx]]
         results = classify_transactions_batch(subset, context_sheets)
         return jsonify({"result": results[0] if results else None})
     except Exception as e:
@@ -1045,17 +950,19 @@ def classify_single():
 
 
 @app.route("/api/feedback", methods=["POST"])
+@login_required
 def submit_feedback():
     try:
-        data = request.json
-        idx = data.get("index")
-        original = data.get("original_classification", "")
-        corrected = data.get("corrected_classification", "")
+        data         = request.json
+        idx          = data.get("index")
+        original     = data.get("original_classification", "")
+        corrected    = data.get("corrected_classification", "")
         should_learn = data.get("should_learn", True)
-        narration = data.get("narration", "")
+        narration    = data.get("narration", "")
         key = f"{data.get('date','')[:10]}|{narration[:80]}|{data.get('gross_total','')}"
 
-        save_feedback(key, original, corrected, should_learn, narration if should_learn else "")
+        save_feedback(key, original, corrected, should_learn,
+                      narration if should_learn else "")
 
         affected = []
         if should_learn and narration:
@@ -1065,8 +972,7 @@ def submit_feedback():
                 for i, (_, row) in enumerate(transactions.iterrows()):
                     if i == idx:
                         continue
-                    row_narr = str(row.get("Narration", "")).strip().upper()
-                    if pattern in row_narr:
+                    if pattern in str(row.get("Narration", "")).strip().upper():
                         affected.append(i)
             except Exception:
                 pass
@@ -1077,66 +983,75 @@ def submit_feedback():
 
 
 @app.route("/api/feedback/rules", methods=["GET"])
+@login_required
 def get_rules():
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute(
-        "SELECT id, narration_pattern, classification, created_at FROM learned_rules ORDER BY created_at DESC"
-    ).fetchall()
+    uid  = current_user_id()
+    conn = get_db()
+    c    = conn.cursor()
+    c.execute("""
+        SELECT id, narration_pattern, classification, created_at
+        FROM learned_rules WHERE user_id=%s ORDER BY created_at DESC
+    """, (uid,))
+    rows = c.fetchall()
     conn.close()
-    return jsonify({"rules": [{"id": r[0], "pattern": r[1], "classification": r[2], "created_at": r[3]} for r in rows]})
+    return jsonify({"rules": [{"id": r["id"], "pattern": r["narration_pattern"],
+                               "classification": r["classification"],
+                               "created_at": str(r["created_at"])} for r in rows]})
 
 
 @app.route("/api/feedback/rules/<int:rule_id>", methods=["DELETE"])
+@login_required
 def delete_rule(rule_id):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM learned_rules WHERE id=?", (rule_id,))
+    uid  = current_user_id()
+    conn = get_db()
+    c    = conn.cursor()
+    # Only delete rules belonging to this user
+    c.execute("DELETE FROM learned_rules WHERE id=%s AND user_id=%s", (rule_id, uid))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/status")
+@login_required
 def status():
     has_key = bool(GEMINI_API_KEY)
-    has_sheets = bool(GOOGLE_SHEETS_ID)
-    sheets_lib = gsheets_available()
     try:
         transactions = load_transactions()
-        rules = get_learned_rules()
-        context_tabs = json.loads(get_setting("context_tab_names", "[]"))
+        rules        = get_learned_rules()
+        context_tabs = json.loads(get_setting("context_tab_names", "[]") or "[]")
         return jsonify({
-            "api_key_set": has_key,
-            "excel_loaded": True,
-            "transaction_count": len(transactions),
-            "google_sheets_id": GOOGLE_SHEETS_ID,
-            "google_sheets_connected": has_sheets and sheets_lib,
-            "learned_rules_count": len(rules),
-            "context_tab_count": len(context_tabs),
-            "data_source": "google_sheets" if has_sheets and sheets_lib else "excel",
+            "api_key_set":            has_key,
+            "excel_loaded":           True,
+            "transaction_count":      len(transactions),
+            "google_sheets_connected": bool(get_setting("active_sheet_id")),
+            "learned_rules_count":    len(rules),
+            "context_tab_count":      len(context_tabs),
+            "data_source":            "google_sheets" if get_setting("active_sheet_id") else "excel",
         })
     except Exception as e:
         return jsonify({"api_key_set": has_key, "excel_loaded": False, "error": str(e)})
 
 
-# ---------- Google Drive OAuth2 routes ----------
+# ---------- Google Drive OAuth2 — Sheet picker ----------
 
 @app.route("/api/gdrive/auth")
+@login_required
 def gdrive_auth():
     if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
         return jsonify({"error": "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET not set"}), 400
     state = secrets.token_urlsafe(16)
     session["oauth_state"] = state
     params = {
-        "client_id": OAUTH_CLIENT_ID,
-        "redirect_uri": OAUTH_REDIRECT_URI,
+        "client_id":     OAUTH_CLIENT_ID,
+        "redirect_uri":  OAUTH_REDIRECT_URI,
         "response_type": "code",
         "scope": ("https://www.googleapis.com/auth/spreadsheets "
                   "https://www.googleapis.com/auth/drive.readonly"),
         "access_type": "offline",
-        "prompt": "consent",
-        "state": state,
+        "prompt":      "consent",
+        "state":       state,
     }
-    from urllib.parse import urlencode
     return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
 
 
@@ -1145,7 +1060,8 @@ def gdrive_callback():
     import requests as req_lib
     error = request.args.get("error")
     if error:
-        return f"<script>window.opener.postMessage({{type:'gdrive_error',error:{json.dumps(error)}}}, '*'); window.close();</script>"
+        return (f"<script>window.opener.postMessage("
+                f"{{type:'gdrive_error',error:{json.dumps(error)}}}, '*'); window.close();</script>")
 
     code  = request.args.get("code", "")
     state = request.args.get("state", "")
@@ -1153,21 +1069,23 @@ def gdrive_callback():
         return "State mismatch — possible CSRF", 400
 
     resp = req_lib.post("https://oauth2.googleapis.com/token", data={
-        "code": code,
-        "client_id": OAUTH_CLIENT_ID,
+        "code":          code,
+        "client_id":     OAUTH_CLIENT_ID,
         "client_secret": OAUTH_CLIENT_SECRET,
-        "redirect_uri": OAUTH_REDIRECT_URI,
-        "grant_type": "authorization_code",
+        "redirect_uri":  OAUTH_REDIRECT_URI,
+        "grant_type":    "authorization_code",
     })
     tokens = resp.json()
     if "access_token" not in tokens:
         return f"Token exchange failed: {tokens}", 400
 
+    # Store tokens scoped to this user
     set_setting("oauth_tokens", json.dumps(tokens))
     return "<script>window.opener.postMessage({type:'gdrive_connected'}, '*'); window.close();</script>"
 
 
 @app.route("/api/gdrive/sheets")
+@login_required
 def gdrive_sheets():
     tokens_str = get_setting("oauth_tokens")
     if not tokens_str:
@@ -1180,25 +1098,26 @@ def gdrive_sheets():
 
 
 @app.route("/api/gdrive/select", methods=["POST"])
+@login_required
 def gdrive_select():
-    data = request.json or {}
+    data       = request.json or {}
     sheet_id   = data.get("sheet_id", "").strip()
     sheet_name = data.get("sheet_name", "").strip()
     tab_name   = data.get("tab_name", "").strip()
     if not sheet_id:
         return jsonify({"error": "sheet_id required"}), 400
-    set_setting("active_sheet_id", sheet_id)
+    set_setting("active_sheet_id",   sheet_id)
     set_setting("active_sheet_name", sheet_name)
     if tab_name:
         set_setting("active_tab_name", tab_name)
-    # Clear context tabs whenever base sheet/tab changes
     set_setting("context_tab_names", "[]")
-    return jsonify({"ok": True, "sheet_id": sheet_id, "sheet_name": sheet_name, "tab_name": tab_name})
+    return jsonify({"ok": True, "sheet_id": sheet_id,
+                    "sheet_name": sheet_name, "tab_name": tab_name})
 
 
 @app.route("/api/gdrive/set_context_tabs", methods=["POST"])
+@login_required
 def set_context_tabs():
-    """Save list of worksheet tab names to use as classification context."""
     data = request.json or {}
     tabs = data.get("tabs", [])
     if not isinstance(tabs, list):
@@ -1208,8 +1127,9 @@ def set_context_tabs():
 
 
 @app.route("/api/gdrive/worksheets")
+@login_required
 def gdrive_worksheets():
-    sheet_id = request.args.get("sheet_id", "").strip()
+    sheet_id   = request.args.get("sheet_id", "").strip()
     if not sheet_id:
         return jsonify({"error": "sheet_id required"}), 400
     tokens_str = get_setting("oauth_tokens")
@@ -1227,6 +1147,7 @@ def gdrive_worksheets():
 
 
 @app.route("/api/gdrive/write_results", methods=["POST"])
+@login_required
 def gdrive_write_results():
     tokens_str = get_setting("oauth_tokens")
     sheet_id   = get_setting("active_sheet_id")
@@ -1234,8 +1155,8 @@ def gdrive_write_results():
         return jsonify({"error": "Not connected or no sheet selected"}), 400
     try:
         import gspread
-        data    = request.json or {}
-        rows    = data.get("results", [])
+        data   = request.json or {}
+        rows   = data.get("results", [])
         if not rows:
             return jsonify({"error": "No results provided"}), 400
         creds  = _refresh_oauth_creds(json.loads(tokens_str))
@@ -1249,11 +1170,10 @@ def gdrive_write_results():
             ws = sh.add_worksheet(title=OUTPUT_TAB, rows=len(rows) + 10, cols=10)
         header = ["Date", "Narration", "Voucher Type", "Gross Total",
                   "Classification", "Reference ID", "Confidence", "Reasoning"]
-        body   = [[
-            r.get("date", ""), r.get("narration", ""), r.get("voucher_type", ""),
-            r.get("gross_total", ""), r.get("classification", ""),
-            r.get("reference_id", ""), r.get("confidence", ""), r.get("reasoning", ""),
-        ] for r in rows]
+        body   = [[r.get("date",""), r.get("narration",""), r.get("voucher_type",""),
+                   r.get("gross_total",""), r.get("classification",""),
+                   r.get("reference_id",""), r.get("confidence",""), r.get("reasoning","")]
+                  for r in rows]
         ws.update([header] + body)
         ws.format("A1:H1", {"textFormat": {"bold": True},
                              "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.5}})
@@ -1263,31 +1183,34 @@ def gdrive_write_results():
 
 
 @app.route("/api/gdrive/status")
+@login_required
 def gdrive_status():
-    tokens_str = get_setting("oauth_tokens")
-    sheet_id   = get_setting("active_sheet_id") or GOOGLE_SHEETS_ID
-    sheet_name = get_setting("active_sheet_name", "")
-    tab_name   = get_setting("active_tab_name", "")
+    tokens_str   = get_setting("oauth_tokens")
+    sheet_id     = get_setting("active_sheet_id") or ""
+    sheet_name   = get_setting("active_sheet_name") or ""
+    tab_name     = get_setting("active_tab_name") or ""
     context_tabs = []
     try:
-        context_tabs = json.loads(get_setting("context_tab_names", "[]"))
+        context_tabs = json.loads(get_setting("context_tab_names", "[]") or "[]")
     except Exception:
         pass
     return jsonify({
-        "connected": bool(tokens_str),
-        "active_sheet_id": sheet_id,
+        "connected":         bool(tokens_str),
+        "active_sheet_id":   sheet_id,
         "active_sheet_name": sheet_name,
-        "active_tab_name": tab_name,
-        "context_tabs": context_tabs,
-        "oauth_configured": bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET),
+        "active_tab_name":   tab_name,
+        "context_tabs":      context_tabs,
+        "oauth_configured":  bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET),
     })
 
 
 @app.route("/api/gdrive/disconnect", methods=["POST"])
+@login_required
 def gdrive_disconnect():
-    set_setting("oauth_tokens", "")
-    set_setting("active_sheet_id", "")
+    set_setting("oauth_tokens",      "")
+    set_setting("active_sheet_id",   "")
     set_setting("active_sheet_name", "")
+    set_setting("active_tab_name",   "")
     set_setting("context_tab_names", "[]")
     return jsonify({"ok": True})
 

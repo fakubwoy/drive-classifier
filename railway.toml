@@ -2,5 +2,8 @@
 healthcheckPath = "/api/status"
 healthcheckTimeout = 30
 
+# If you added Railway's Postgres plugin, DATABASE_URL is injected automatically.
+# Otherwise set it manually in Railway → Variables.
+
 [[volumes]]
 mountPath = "/app/data"

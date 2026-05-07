@@ -99,6 +99,49 @@
 
   .header-right { display: flex; align-items: center; gap: 8px; }
 
+  /* ===================== USER AVATAR / LOGOUT ===================== */
+  .user-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 10px 4px 4px;
+    border-radius: 20px; border: 1px solid var(--border);
+    background: var(--surface2); cursor: pointer;
+    font-size: 0.78rem; font-weight: 500;
+    color: var(--text-dim);
+    transition: all 0.15s;
+    position: relative;
+  }
+  .user-chip:hover { border-color: var(--border2); background: var(--surface3); }
+  .user-avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    object-fit: cover; display: block;
+  }
+  .user-avatar-fallback {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 0.7rem; font-weight: 700;
+  }
+  .user-dropdown {
+    display: none; position: absolute; top: calc(100% + 8px); right: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 200px; padding: 8px; z-index: 200;
+  }
+  .user-dropdown.open { display: block; }
+  .user-dropdown-header {
+    padding: 8px 10px 10px; border-bottom: 1px solid var(--border); margin-bottom: 6px;
+  }
+  .user-dropdown-name { font-weight: 600; font-size: 0.85rem; color: var(--text); }
+  .user-dropdown-email { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
+  .dropdown-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 7px; cursor: pointer;
+    font-size: 0.82rem; color: var(--text-dim); transition: background 0.12s;
+  }
+  .dropdown-item:hover { background: var(--surface2); color: var(--text); }
+  .dropdown-item.danger { color: var(--red); }
+  .dropdown-item.danger:hover { background: rgba(239,68,68,0.08); }
+
   /* ===================== BUTTONS ===================== */
   .btn {
     display: inline-flex; align-items: center; gap: 6px;
@@ -758,6 +801,22 @@
       <svg class="icon" width="13" height="13"><use href="#ic-drive"/></svg>
       Connect Drive
     </button>
+    <div class="user-chip" id="userChip" onclick="toggleUserDropdown(event)" style="display:none">
+      <div class="user-avatar-fallback" id="userAvatarFallback"></div>
+      <img class="user-avatar" id="userAvatarImg" src="" alt="" style="display:none" onerror="this.style.display='none';document.getElementById('userAvatarFallback').style.display='flex'">
+      <span id="userChipName"></span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      <div class="user-dropdown" id="userDropdown">
+        <div class="user-dropdown-header">
+          <div class="user-dropdown-name" id="dropdownName"></div>
+          <div class="user-dropdown-email" id="dropdownEmail"></div>
+        </div>
+        <div class="dropdown-item danger" onclick="logoutUser()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2477,6 +2536,48 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// ======== User auth ========
+async function loadUser() {
+  try {
+    const r = await fetch('/api/me');
+    if (r.status === 401) {
+      window.location.href = '/auth/google';
+      return;
+    }
+    const u = await r.json();
+    const chip = document.getElementById('userChip');
+    chip.style.display = 'flex';
+    document.getElementById('userChipName').textContent = u.name ? u.name.split(' ')[0] : u.email;
+    document.getElementById('dropdownName').textContent  = u.name || u.email;
+    document.getElementById('dropdownEmail').textContent = u.email;
+    const initials = (u.name || u.email).charAt(0).toUpperCase();
+    document.getElementById('userAvatarFallback').textContent = initials;
+    if (u.picture) {
+      const img = document.getElementById('userAvatarImg');
+      img.src = u.picture;
+      img.style.display = 'block';
+      document.getElementById('userAvatarFallback').style.display = 'none';
+    }
+  } catch(e) {
+    console.error('loadUser failed', e);
+  }
+}
+
+function toggleUserDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('userDropdown').classList.toggle('open');
+}
+
+document.addEventListener('click', function() {
+  document.getElementById('userDropdown')?.classList.remove('open');
+});
+
+async function logoutUser() {
+  await fetch('/auth/logout', { method: 'POST' });
+  window.location.href = '/auth/google';
+}
+
+loadUser();
 init();
 applyColStyles();</script>
 </body>

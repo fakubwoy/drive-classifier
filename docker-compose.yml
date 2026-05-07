@@ -7,17 +7,42 @@ services:
       - "8080:8080"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      # Set a stable random string here — do not leave blank
       - FLASK_SECRET_KEY=alfaleus-secret-change-me-xk39qp2026
       - EXCEL_PATH=/app/Query_sheet_alfaleus.xlsx
-      - GOOGLE_SHEETS_ID=${GOOGLE_SHEETS_ID:-}
       - GOOGLE_CREDENTIALS_FILE=credentials.json
-      # OAuth2 — required for "Sign in with Google" Drive picker
+
+      # ── Postgres (required for user profiles & per-user data) ──────────
+      # Locally: spin up a postgres container or point at Railway's Postgres addon
+      - DATABASE_URL=${DATABASE_URL}
+
+      # ── Google OAuth2 — used for BOTH login and Drive picker ──────────
       # Create at console.cloud.google.com → APIs → Credentials → OAuth 2.0 Client (Web App)
-      # Set Authorised redirect URI to: http://localhost:8080/api/gdrive/callback
+      # Add TWO Authorised redirect URIs:
+      #   http://localhost:8080/auth/google/callback   ← user login
+      #   http://localhost:8080/api/gdrive/callback    ← Drive sheet picker
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+
+      # Login redirect (identity sign-in)
+      - GOOGLE_LOGIN_REDIRECT_URI=${GOOGLE_LOGIN_REDIRECT_URI:-http://localhost:8080/auth/google/callback}
+      # Drive picker redirect (sheet connect)
       - GOOGLE_OAUTH_REDIRECT_URI=${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8080/api/gdrive/callback}
+
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+
+  # ── Local Postgres (comment out if using Railway's managed Postgres) ──
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=alfaleus
+      - POSTGRES_PASSWORD=alfaleus
+      - POSTGRES_DB=alfaleus
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata:
