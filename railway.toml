@@ -1,6 +1,7 @@
 [deploy]
 # If you added Railway's Postgres plugin, DATABASE_URL is injected automatically.
 # Otherwise set it manually in Railway → Variables.
+startCommand = "gunicorn app:app --bind 0.0.0.0:$PORT --worker-class gevent --workers 1 --timeout 600 --graceful-timeout 30"
 
 [[volumes]]
 mountPath = "/app/data"
