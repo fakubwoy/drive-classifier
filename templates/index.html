@@ -2215,7 +2215,7 @@ async function classifySelected() {
  * and updates the table after every Gemini sub-batch (~20 transactions) completes.
  * The backend yields one SSE event per Gemini call so the UI updates in real time.
  */
-function classifyViaStream(indices) {
+const classifyViaStream = function classifyViaStream(indices) {
   return new Promise(async (resolve) => {
     const total = indices.length;
     let completed = 0;
@@ -3350,32 +3350,34 @@ async function wsSaveNodeClassifications() {
   });
 }
 
-// Patch classifyViaStream to auto-save after completion
-const _origClassifyViaStream = classifyViaStream;
-function classifyViaStream(indices) {
-  return _origClassifyViaStream(indices).then(async () => {
-    await wsSaveNodeClassifications();
-  });
-}
+// Patch classifyViaStream to auto-save after completion.
+// Use an IIFE to capture the original before reassigning — avoids the hoisting
+// bug where `function classifyViaStream` declarations shadow each other and
+// cause infinite recursion (Maximum call stack size exceeded).
+window.classifyViaStream = (function(_orig) {
+  return function classifyViaStream(indices) {
+    return _orig(indices).then(async () => {
+      await wsSaveNodeClassifications();
+    });
+  };
+})(classifyViaStream);
 
 // Patch _doSubmitFeedback to auto-save after feedback
-const _origDoSubmitFeedback = _doSubmitFeedback;
-async function _doSubmitFeedback(i, corrected, shouldLearn, keyword) {
-  await _origDoSubmitFeedback(i, corrected, shouldLearn, keyword);
-  await wsSaveNodeClassifications();
-}
+window._doSubmitFeedback = (function(_orig) {
+  return async function _doSubmitFeedback(i, corrected, shouldLearn, keyword) {
+    await _orig(i, corrected, shouldLearn, keyword);
+    await wsSaveNodeClassifications();
+  };
+})(_doSubmitFeedback);
 
-// Override classify_stream fetch to use node-scoped endpoint when in workspace mode
-const _origFetch = window.fetch;
-// We patch classifyViaStream's internal fetch by overriding the route string inline.
-// Instead, we monkey-patch the POST to /api/classify_stream:
-(function patchClassifyStream() {
-  const origFetch2 = window.fetch;
+// Monkey-patch fetch to redirect /api/classify_stream to the node-scoped endpoint in workspace mode
+(function() {
+  const origFetch = window.fetch;
   window.fetch = async function(url, opts) {
     if (typeof url === 'string' && url === '/api/classify_stream' && window._wsCurrentNodeId) {
       url = `/api/workspace/nodes/${window._wsCurrentNodeId}/classify_stream`;
     }
-    return origFetch2.call(this, url, opts);
+    return origFetch.call(this, url, opts);
   };
 })();
 
