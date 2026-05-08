@@ -979,6 +979,29 @@
   .main-crumb.current:hover { background: transparent; }
   .main-crumb-sep { color: var(--border2); font-size: 0.7rem; user-select: none; }
   .main-crumb-home { color: var(--accent); }
+
+  /* ===================== SHEET BACK CHIP ===================== */
+  .sheet-back-chip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px 3px 7px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-size: 0.75rem; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    max-width: 260px;
+    white-space: nowrap; overflow: hidden;
+  }
+  .sheet-back-chip:hover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+  .sheet-back-chip span {
+    overflow: hidden; text-overflow: ellipsis;
+  }
 </style>
 </head>
 <body>
@@ -1060,24 +1083,26 @@
 <!-- ===================== HEADER ===================== -->
 <div class="header">
   <div class="header-left">
-    <div class="logo">
+    <div class="logo" onclick="navigateDriveHome()" style="cursor:pointer" title="Go to My Drive">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
     </div>
     <div class="wordmark">Alfaleus <span>Classifier</span></div>
     <div class="header-divider"></div>
     <div class="status-pills">
-      <div class="pill" id="apiPill"><div class="dot"></div><span id="apiStatus">Checking...</span></div>
-      <div class="pill" id="dataPill"><div class="dot"></div><span id="dataStatus">Loading...</span></div>
+      <div class="pill ok" id="apiPill"><div class="dot"></div><span id="apiStatus">Checking...</span></div>
+      <!-- These pills only show in classifier view -->
+      <div class="pill" id="dataPill" style="display:none"><div class="dot"></div><span id="dataStatus"></span></div>
       <div class="pill" id="rulesPill" style="display:none"><div class="dot ok"></div><span id="rulesStatus"></span></div>
       <div class="pill" id="ctxPill" style="display:none"><div class="dot" style="background:var(--accent2)"></div><span id="ctxStatus"></span></div>
-      <div class="pill" id="sourcePill"></div>
+      <!-- Sheet chip: shows in classifier view, acts as back-to-home -->
+      <div class="sheet-back-chip" id="sheetBackChip" style="display:none" onclick="navigateDriveHome()" title="Back to My Drive">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+        <span id="sheetBackChipLabel"></span>
+      </div>
     </div>
   </div>
   <div class="header-right">
-    <button class="btn btn-secondary btn-sm" id="driveConnectBtn" onclick="navigateDriveHome()">
-      <svg class="icon" width="13" height="13"><use href="#ic-drive"/></svg>
-      Home
-    </button>
     <div class="user-chip" id="userChip" onclick="toggleUserDropdown(event)" style="display:none">
       <div class="user-avatar-fallback" id="userAvatarFallback"></div>
       <img class="user-avatar" id="userAvatarImg" src="" alt="" style="display:none" onerror="this.style.display='none';document.getElementById('userAvatarFallback').style.display='flex'">
@@ -1559,41 +1584,23 @@ async function init() {
   apiPill.className = 'pill ' + (status.api_key_set ? 'ok' : 'err');
   document.getElementById('apiStatus').textContent = status.api_key_set ? 'Gemini OK' : 'No API Key';
 
-  // Data
-  const dataPill = document.getElementById('dataPill');
-  dataPill.className = 'pill ' + (status.excel_loaded ? 'ok' : 'err');
-  document.getElementById('dataStatus').textContent = status.excel_loaded
-    ? `${status.transaction_count} txns`
-    : 'Load error';
+  // Store counts globally for classifier view pills
+  window._rulesCount = status.learned_rules_count || 0;
+  window._ctxCount   = status.context_tab_count   || 0;
 
-  // Rules
-  if (status.learned_rules_count > 0) {
-    document.getElementById('rulesPill').style.display = '';
-    document.getElementById('rulesStatus').textContent = `${status.learned_rules_count} rules`;
+  // Rules pill label (will show/hide based on view)
+  if (window._rulesCount > 0) {
+    document.getElementById('rulesStatus').textContent = `${window._rulesCount} rules`;
+  }
+  // Context pill label
+  if (window._ctxCount > 0) {
+    document.getElementById('ctxStatus').textContent = `${window._ctxCount} context tabs`;
   }
 
-  // Context tabs
-  if ((status.context_tab_count || 0) > 0) {
-    document.getElementById('ctxPill').style.display = '';
-    document.getElementById('ctxStatus').textContent = `${status.context_tab_count} context tabs`;
-  }
-
-  // Source badge
-  const srcPill = document.getElementById('sourcePill');
+  // Source badge (legacy — drive connection state, kept for context chips)
   activeDriveSheetId = driveSt.active_sheet_id || null;
-  const driveBtn = document.getElementById('driveConnectBtn');
-  if (driveSt.connected) {
-    if (driveSt.active_sheet_name) {
-      srcPill.innerHTML = `${icon('ic-sheet')} ${escHtml(driveSt.active_sheet_name)}${driveSt.active_tab_name ? ' › ' + escHtml(driveSt.active_tab_name) : ''}`;
-      document.getElementById('saveToSheetBtn').style.display = '';
-    }
-    // Render context chips
-    if (driveSt.context_tabs && driveSt.context_tabs.length > 0) {
-      selectedContextTabs = new Set(driveSt.context_tabs);
-      renderContextChips(driveSt.context_tabs);
-    }
-  } else {
-    srcPill.textContent = '';
+  if (driveSt.connected && driveSt.context_tabs && driveSt.context_tabs.length > 0) {
+    selectedContextTabs = new Set(driveSt.context_tabs);
   }
 
   // Always show drive home on first load — user picks their sheet from there
@@ -2976,12 +2983,6 @@ async function wsOpenClassifier(nodeId) {
   // Set the active workspace node globally so classify/data routes use it
   window._wsCurrentNodeId = nodeId;
 
-  // Update UI
-  const srcPill = document.getElementById('sourcePill');
-  srcPill.innerHTML = `${icon('ic-sheet')} ${escHtml(node.sheet_name)} › ${escHtml(node.tab_name)}`;
-  const driveBtn = document.getElementById('driveConnectBtn');
-  driveBtn.innerHTML = `${icon('ic-drive')} Workspace`;
-
   // Load transactions for this node
   document.querySelector('.table-panel') && (document.querySelector('.table-panel').innerHTML =
     `<table id="txnTable"><thead><tr>
@@ -3074,6 +3075,12 @@ async function navigateDriveHome(folderId) {
   document.getElementById('tab-transactions').style.display = 'none';
   document.getElementById('mainBreadcrumb').classList.remove('visible');
   document.getElementById('ctxChipsWrap').style.display = 'none';
+
+  // Hide classifier-specific pills and sheet chip
+  document.getElementById('dataPill').style.display = 'none';
+  document.getElementById('rulesPill').style.display = 'none';
+  document.getElementById('ctxPill').style.display = 'none';
+  document.getElementById('sheetBackChip').style.display = 'none';
 
   // Load fresh node data
   const res = await fetch('/api/workspace/nodes');
@@ -3276,6 +3283,19 @@ function showClassifierView(nodeId) {
   document.getElementById('driveHomeView').classList.remove('active');
   document.getElementById('tab-transactions').style.display = '';
   document.getElementById('ctxChipsWrap').style.display = '';
+
+  // Show classifier-specific pills
+  document.getElementById('dataPill').style.display = '';
+  document.getElementById('rulesPill').style.display = window._rulesCount > 0 ? '' : 'none';
+  document.getElementById('ctxPill').style.display = window._ctxCount > 0 ? '' : 'none';
+
+  // Show the sheet back chip with the sheet name
+  const node = wsGetNode(nodeId);
+  if (node) {
+    const label = node.sheet_name ? `${node.sheet_name} › ${node.tab_name}` : node.name;
+    document.getElementById('sheetBackChipLabel').textContent = label;
+    document.getElementById('sheetBackChip').style.display = 'flex';
+  }
 
   // Build and show the main breadcrumb
   const crumbs = wsBuildBreadcrumb(nodeId);
