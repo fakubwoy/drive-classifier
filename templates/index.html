@@ -592,6 +592,149 @@
   .drive-sheet-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
   .drive-sheet-tick { color: var(--accent2); margin-left: auto; flex-shrink: 0; }
 
+  /* ===================== WORKSPACE EXPLORER ===================== */
+  .ws-modal-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 0;
+    width: 700px; max-width: 96vw; height: 82vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 28px 72px rgba(0,0,0,0.22);
+    overflow: hidden;
+  }
+  .ws-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ws-modal-body {
+    display: flex; flex: 1; min-height: 0;
+  }
+  /* Left sidebar: tree */
+  .ws-sidebar {
+    width: 260px; flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    background: var(--surface2);
+  }
+  .ws-sidebar-header {
+    padding: 10px 14px 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted);
+  }
+  .ws-tree {
+    flex: 1; overflow-y: auto; padding: 6px 0;
+  }
+  .ws-tree-item {
+    display: flex; align-items: center; gap: 0;
+    padding: 0; cursor: pointer;
+    user-select: none;
+  }
+  .ws-tree-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    flex: 1; min-width: 0;
+    transition: background 0.1s;
+    font-size: 0.82rem;
+  }
+  .ws-tree-row:hover { background: var(--surface3); }
+  .ws-tree-row.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+  .ws-tree-row.active .ws-node-icon { color: var(--accent); }
+  .ws-tree-indent { display: inline-block; width: 16px; flex-shrink: 0; }
+  .ws-tree-toggle { width: 14px; flex-shrink: 0; color: var(--text-muted); font-size: 0.7rem; }
+  .ws-node-icon { flex-shrink: 0; }
+  .ws-node-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-node-actions {
+    display: none; gap: 2px; flex-shrink: 0;
+  }
+  .ws-tree-item:hover .ws-node-actions { display: flex; }
+  .ws-node-btn {
+    background: none; border: none; padding: 2px 4px; cursor: pointer;
+    color: var(--text-muted); border-radius: 4px; font-size: 0.7rem;
+    transition: background 0.1s;
+  }
+  .ws-node-btn:hover { background: var(--border); color: var(--text); }
+  .ws-node-btn.danger:hover { background: rgba(239,68,68,0.12); color: var(--red); }
+  /* Right pane */
+  .ws-pane {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+  }
+  .ws-pane-header {
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ws-pane-title {
+    font-family: var(--display); font-size: 0.95rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ws-pane-body {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .ws-empty {
+    text-align: center; padding: 48px 20px;
+    color: var(--text-muted); font-size: 0.85rem; line-height: 1.7;
+  }
+  .ws-sheet-picker-list {
+    display: flex; flex-direction: column; gap: 5px;
+    max-height: 260px; overflow-y: auto;
+  }
+  .ws-sheet-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 13px; border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; background: var(--surface2);
+    transition: all 0.12s; font-size: 0.83rem;
+  }
+  .ws-sheet-item:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .ws-tab-list { display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; }
+  .ws-tab-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 7px; cursor: pointer; background: var(--surface2);
+    transition: all 0.12s; font-size: 0.82rem;
+  }
+  .ws-tab-item:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .ws-tab-item.ctx-selected { border-color: var(--accent2); background: var(--accent2-dim); }
+  .ws-attached-box {
+    background: var(--accent2-dim); border: 1px solid rgba(5,150,105,0.25);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .ws-attached-title {
+    font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--accent2); margin-bottom: 8px;
+  }
+  .ws-attached-name {
+    font-family: var(--display); font-size: 0.95rem; font-weight: 700; margin-bottom: 2px;
+  }
+  .ws-section-label {
+    font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 6px;
+  }
+  .ws-new-folder-form {
+    display: flex; gap: 7px; align-items: center;
+  }
+  .ws-name-input {
+    flex: 1; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text);
+    font-size: 0.82rem; outline: none; font-family: var(--sans);
+  }
+  .ws-name-input:focus { border-color: var(--accent); }
+  .ws-breadcrumb {
+    font-size: 0.72rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px;
+    flex-wrap: wrap; margin-bottom: 2px;
+  }
+  .ws-breadcrumb span { color: var(--accent); cursor: pointer; }
+  .ws-breadcrumb span:hover { text-decoration: underline; }
+
+  /* TAB in nav bar for Workspace */
+  .ws-nav-indicator {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent2); margin-left: 4px; vertical-align: middle;
+  }
+
   /* ===================== TAB PICKER & CONTEXT PICKER ===================== */
   .picker-box {
     background: var(--surface); border: 1px solid var(--border);
@@ -797,9 +940,9 @@
     </div>
   </div>
   <div class="header-right">
-    <button class="btn btn-secondary btn-sm" id="driveConnectBtn" onclick="openDriveModal()">
+    <button class="btn btn-secondary btn-sm" id="driveConnectBtn" onclick="openWorkspaceModal()">
       <svg class="icon" width="13" height="13"><use href="#ic-drive"/></svg>
-      Connect Drive
+      Workspace
     </button>
     <div class="user-chip" id="userChip" onclick="toggleUserDropdown(event)" style="display:none">
       <div class="user-avatar-fallback" id="userAvatarFallback"></div>
@@ -1067,50 +1210,68 @@
   </div>
 </div>
 
-<!-- ===================== DRIVE MODAL ===================== -->
+<!-- ===================== WORKSPACE EXPLORER MODAL ===================== -->
+<div class="overlay-bg" id="workspaceModalOverlay">
+  <div class="ws-modal-box">
+    <div class="ws-modal-header">
+      <div class="modal-title">
+        <svg class="icon" width="16" height="16"><use href="#ic-drive"/></svg>
+        Workspace Explorer
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-secondary btn-sm" id="wsNewFolderTopBtn" onclick="wsPromptNewFolder(null)">
+          <svg class="icon" width="12" height="12"><use href="#ic-layers"/></svg>
+          New Folder
+        </button>
+        <button class="modal-close" onclick="closeWorkspaceModal()">
+          <svg class="icon" width="16" height="16"><use href="#ic-x"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="ws-modal-body">
+      <!-- Left tree sidebar -->
+      <div class="ws-sidebar">
+        <div class="ws-sidebar-header">
+          <span>Folders &amp; Sheets</span>
+        </div>
+        <div class="ws-tree" id="wsTree">
+          <div style="text-align:center;padding:24px;color:var(--text-muted);font-size:0.78rem">
+            <div class="spinner" style="margin:0 auto 8px"></div>Loading...
+          </div>
+        </div>
+      </div>
+      <!-- Right pane -->
+      <div class="ws-pane">
+        <div class="ws-pane-header">
+          <div class="ws-breadcrumb" id="wsBreadcrumb">
+            <span onclick="wsSelectNode(null)">🏠 Root</span>
+          </div>
+          <div class="ws-pane-title" id="wsPaneTitle">
+            <svg class="icon" width="14" height="14"><use href="#ic-drive"/></svg>
+            My Workspace
+          </div>
+        </div>
+        <div class="ws-pane-body" id="wsPaneBody">
+          <div class="ws-empty">Select a folder or sheet on the left, or create a new folder to get started.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== DRIVE MODAL (kept for internal sheet-picker use) ===================== -->
 <div class="overlay-bg" id="driveModalOverlay">
   <div class="modal-box">
     <div class="modal-header">
       <div class="modal-title">
         <svg class="icon" width="16" height="16"><use href="#ic-drive"/></svg>
-        Connect Google Drive
+        Pick a Google Sheet
       </div>
       <button class="modal-close" onclick="closeDriveModal()">
         <svg class="icon" width="16" height="16"><use href="#ic-x"/></svg>
       </button>
     </div>
-
-    <!-- Not connected -->
-    <div id="driveNotConnected">
-      <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.65">
-        Connect your Google account to browse and select any spreadsheet directly from Drive — no service account or manual Sheet ID needed.
-      </p>
-      <div class="modal-hint" id="oauthSetupHint" style="display:none">
-        OAuth not configured. Set <code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code> in your <code>docker-compose.yml</code>.
-        Create credentials at <code>console.cloud.google.com</code> → APIs → Credentials → OAuth 2.0 Client (Web App). Set redirect URI to <code>http://localhost:8080/api/gdrive/callback</code>.
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-        <button class="btn btn-primary" id="connectGoogleBtn" onclick="startOAuth()">
-          <svg class="icon" width="14" height="14"><use href="#ic-google"/></svg>
-          Sign in with Google
-        </button>
-        <span id="driveConnectStatus" style="font-size:0.8rem;color:var(--text-muted);display:flex;align-items:center;gap:6px"></span>
-      </div>
-    </div>
-
-    <!-- Connected -->
-    <div id="driveConnected" style="display:none;flex-direction:column;gap:12px;flex:1;min-height:0">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-dim)">
-          <div class="pill ok"><div class="dot"></div>Connected to Google Drive</div>
-        </div>
-        <div style="display:flex;gap:7px">
-          <button class="btn btn-secondary btn-sm" onclick="loadDriveSheets()">
-            <svg class="icon" width="11" height="11"><use href="#ic-refresh"/></svg> Refresh
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="disconnectDrive()">Disconnect</button>
-        </div>
-      </div>
+    <div id="driveConnected" style="display:flex;flex-direction:column;gap:12px;flex:1;min-height:0">
       <div class="drive-search-wrap">
         <span class="icon"><svg width="13" height="13"><use href="#ic-search"/></svg></span>
         <input class="drive-search" type="text" placeholder="Filter spreadsheets..." id="driveSearch" oninput="filterDriveSheets()">
@@ -1118,7 +1279,7 @@
       <div class="drive-sheet-list" id="driveSheetList">
         <div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading spreadsheets...</div>
       </div>
-      <div style="font-size:0.72rem;color:var(--text-muted)">Click a spreadsheet to select it as the active data source.</div>
+      <div style="font-size:0.72rem;color:var(--text-muted)">Click a spreadsheet to attach it to this workspace node.</div>
     </div>
   </div>
 </div>
@@ -1282,11 +1443,35 @@ async function init() {
       renderContextChips(driveSt.context_tabs);
     }
   } else {
-    srcPill.textContent = 'Excel File';
+    srcPill.textContent = 'No sheet loaded — open Workspace';
   }
 
   const dataRes = await fetch('/api/data');
   const data = await dataRes.json();
+
+  if (data.needs_setup) {
+    document.getElementById('statsBar').innerHTML = '';
+    document.querySelector('.table-panel').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                  padding:60px 24px;gap:16px;text-align:center">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M3 9h18M3 15h18M9 3v18"/>
+        </svg>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--text)">No sheet connected yet</div>
+        <div style="color:var(--text-muted);max-width:360px;font-size:0.88rem;line-height:1.6">
+          Click <strong>Connect Drive</strong> to link your Google Sheet.
+          Your transactions will load automatically after that.
+        </div>
+        <button class="btn btn-primary" onclick="openWorkspaceModal()" style="margin-top:8px">
+          <svg class="icon" width="13" height="13"><use href="#ic-drive"/></svg>
+          Open Workspace
+        </button>
+      </div>`;
+    return;
+  }
+
   allTransactions = data.transactions || [];
   duplicatesMap = data.duplicates || {};
 
@@ -2173,123 +2358,7 @@ function closeKwModal() {
 document.getElementById('kwModalOverlay').addEventListener('click', function(e) { if (e.target === this) closeKwModal(); });
 document.getElementById('kwInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmKwModal(); });
 
-// ======== Google Drive ========
-async function openDriveModal() {
-  document.getElementById('driveModalOverlay').classList.add('show');
-  const res = await fetch('/api/gdrive/status');
-  const st = await res.json();
-  activeDriveSheetId = st.active_sheet_id || null;
-  // Drive access is granted at login — always go straight to sheet picker
-  showDriveConnected();
-  loadDriveSheets();
-}
-
-function closeDriveModal() { document.getElementById('driveModalOverlay').classList.remove('show'); }
-function showDriveConnected() {
-  document.getElementById('driveNotConnected').style.display = 'none';
-  document.getElementById('driveConnected').style.display = 'flex';
-}
-function showDriveNotConnected() {
-  document.getElementById('driveNotConnected').style.display = 'block';
-  document.getElementById('driveConnected').style.display = 'none';
-}
-
-function startOAuth() {
-  // Fallback: redirect to login to re-grant Drive access (token was likely revoked)
-  window.location.href = '/auth/google';
-}
-
-async function loadDriveSheets() {
-  document.getElementById('driveSheetList').innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading your sheets...</div>`;
-  const res = await fetch('/api/gdrive/sheets');
-  if (!res.ok) {
-    const err = await res.json();
-    document.getElementById('driveSheetList').innerHTML = `
-      <div style="text-align:center;padding:28px;color:var(--red)">
-        <div>Could not load sheets: ${escHtml(err.error||'Unknown error')}</div>
-        <button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="startOAuth()">
-          Re-authenticate with Google
-        </button>
-      </div>`;
-    return;
-  }
-  const data = await res.json();
-  driveSheets = data.sheets || [];
-  renderDriveSheets(driveSheets);
-}
-
-function renderDriveSheets(sheets) {
-  const list = document.getElementById('driveSheetList');
-  if (sheets.length === 0) {
-    list.innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)">No spreadsheets found.</div>`;
-    return;
-  }
-  list.innerHTML = sheets.map(s => {
-    const isActive = s.id === activeDriveSheetId;
-    const modified = s.modifiedTime ? new Date(s.modifiedTime).toLocaleDateString() : '';
-    return `<div class="drive-sheet-item ${isActive ? 'active-sheet' : ''}" data-id="${escHtml(s.id)}" data-name="${escHtml(s.name)}" onclick="selectDriveSheet(this.dataset.id, this.dataset.name)">
-      <span class="drive-sheet-icon">${icon('ic-sheet',16)}</span>
-      <div style="flex:1;min-width:0">
-        <div class="drive-sheet-name">${escHtml(s.name)}</div>
-        <div class="drive-sheet-meta">Modified ${modified}</div>
-      </div>
-      ${isActive ? `<span class="drive-sheet-tick">${icon('ic-check',14)}</span>` : ''}
-    </div>`;
-  }).join('');
-}
-
-function filterDriveSheets() {
-  const q = document.getElementById('driveSearch').value.toLowerCase();
-  renderDriveSheets(driveSheets.filter(s => s.name.toLowerCase().includes(q)));
-}
-
-// Step 1: Sheet selected → show tab picker (transaction tab)
-async function selectDriveSheet(sheetId, sheetName) {
-  pendingSheetId = sheetId;
-  pendingSheetName = sheetName;
-  const overlay = document.getElementById('tabPickerOverlay');
-  const tabList = document.getElementById('tabPickerList');
-  overlay.classList.add('show');
-  tabList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading tabs...</div>`;
-  try {
-    const res = await fetch('/api/gdrive/worksheets?sheet_id=' + encodeURIComponent(sheetId));
-    const data = await res.json();
-    pendingAllTabs = data.tabs || [];
-    if (pendingAllTabs.length === 0) {
-      tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem">No sheets found in this spreadsheet.</div>`;
-      return;
-    }
-    tabList.innerHTML = pendingAllTabs.map(t =>
-      `<div class="tab-item" onclick="confirmTabSelection('${escHtml(t).replace(/'/g,"\\'")}')">
-        ${icon('ic-sheet',13)} ${escHtml(t)}
-       </div>`
-    ).join('');
-  } catch(e) {
-    tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem">Error: ${escHtml(String(e))}</div>`;
-  }
-}
-
-// Step 2: Transaction tab confirmed → save, then show context picker
-async function confirmTabSelection(tabName) {
-  const sheetId = pendingSheetId;
-  const sheetName = pendingSheetName;
-  closeTabPicker();
-  const res = await fetch('/api/gdrive/select', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sheet_id: sheetId, sheet_name: sheetName, tab_name: tabName })
-  });
-  if (!res.ok) return;
-  activeDriveSheetId = sheetId;
-
-  // Now show context picker if there are other tabs
-  const otherTabs = pendingAllTabs.filter(t => t !== tabName);
-  if (otherTabs.length > 0) {
-    openContextPicker(otherTabs);
-  } else {
-    await finishSheetSetup(sheetName, tabName);
-  }
-}
-
+// ======== Context Picker helpers (shared) ========
 function openContextPicker(tabs) {
   selectedContextTabs = new Set();
   const list = document.getElementById('contextPickerList');
@@ -2300,7 +2369,6 @@ function openContextPicker(tabs) {
     </div>`
   ).join('');
   document.getElementById('contextPickerOverlay').classList.add('show');
-  // Store tabs for toggle-all
   document.getElementById('contextPickerList').dataset.tabs = JSON.stringify(tabs);
 }
 
@@ -2326,9 +2394,442 @@ function toggleSelectAllContext() {
   }
 }
 
+function closeContextPicker() {
+  document.getElementById('contextPickerOverlay').classList.remove('show');
+}
+
+function closeTabPicker() {
+  document.getElementById('tabPickerOverlay').classList.remove('show');
+  _wsPendingSheetId = null; _wsPendingSheetName = null;
+}
+
+document.getElementById('tabPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeTabPicker(); });
+document.getElementById('contextPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeContextPicker(); });
+
+// ======== Google Drive internal helpers ========
+async function openDriveModal() {
+  document.getElementById('driveModalOverlay').classList.add('show');
+  await loadDriveSheets();
+}
+function closeDriveModal() { document.getElementById('driveModalOverlay').classList.remove('show'); }
+
+async function loadDriveSheets() {
+  document.getElementById('driveSheetList').innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading your sheets...</div>`;
+  const res = await fetch('/api/gdrive/sheets');
+  if (!res.ok) {
+    const err = await res.json();
+    document.getElementById('driveSheetList').innerHTML = `
+      <div style="text-align:center;padding:28px;color:var(--red)">
+        Could not load sheets: ${escHtml(err.error||'Unknown error')}
+        <br><button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="window.location='/auth/google'">Re-authenticate</button>
+      </div>`;
+    return;
+  }
+  const data = await res.json();
+  driveSheets = data.sheets || [];
+  renderDriveSheets(driveSheets);
+}
+
+function renderDriveSheets(sheets) {
+  const list = document.getElementById('driveSheetList');
+  if (sheets.length === 0) {
+    list.innerHTML = `<div style="text-align:center;padding:28px;color:var(--text-muted)">No spreadsheets found.</div>`;
+    return;
+  }
+  list.innerHTML = sheets.map(s => {
+    const modified = s.modifiedTime ? new Date(s.modifiedTime).toLocaleDateString() : '';
+    return `<div class="drive-sheet-item" data-id="${escHtml(s.id)}" data-name="${escHtml(s.name)}"
+        onclick="_wsDriveSheetPicked(this.dataset.id, this.dataset.name)">
+      <span class="drive-sheet-icon">${icon('ic-sheet',16)}</span>
+      <div style="flex:1;min-width:0">
+        <div class="drive-sheet-name">${escHtml(s.name)}</div>
+        <div class="drive-sheet-meta">Modified ${modified}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterDriveSheets() {
+  const q = document.getElementById('driveSearch').value.toLowerCase();
+  renderDriveSheets(driveSheets.filter(s => s.name.toLowerCase().includes(q)));
+}
+
+document.getElementById('driveModalOverlay').addEventListener('click', function(e) { if (e.target === this) closeDriveModal(); });
+
+// ======== Workspace Explorer ========
+
+let wsNodes = [];          // flat list from server
+let wsActiveNodeId = null; // currently selected node in tree
+let wsExpandedIds = new Set(); // folders that are open
+let _wsDrivePickCallback = null;
+let _wsAttachTargetNodeId = null;
+
+async function openWorkspaceModal() {
+  document.getElementById('workspaceModalOverlay').classList.add('show');
+  await wsLoadNodes();
+  wsRenderTree();
+  wsSelectNode(null); // show root pane
+}
+
+function closeWorkspaceModal() {
+  document.getElementById('workspaceModalOverlay').classList.remove('show');
+}
+
+async function wsLoadNodes() {
+  const res = await fetch('/api/workspace/nodes');
+  const data = await res.json();
+  wsNodes = data.nodes || [];
+}
+
+function wsChildren(parentId) {
+  return wsNodes.filter(n => n.parent_id === (parentId ?? null));
+}
+
+function wsGetNode(id) {
+  return wsNodes.find(n => n.id === id) || null;
+}
+
+function wsBuildBreadcrumb(nodeId) {
+  const crumbs = [];
+  let cur = nodeId ? wsGetNode(nodeId) : null;
+  while (cur) {
+    crumbs.unshift(cur);
+    cur = cur.parent_id ? wsGetNode(cur.parent_id) : null;
+  }
+  return crumbs;
+}
+
+function wsRenderTree() {
+  const container = document.getElementById('wsTree');
+  const html = _wsRenderLevel(null, 0);
+  container.innerHTML = html || `<div style="padding:16px;text-align:center;font-size:0.78rem;color:var(--text-muted)">No folders yet. Click <strong>New Folder</strong> above.</div>`;
+}
+
+function _wsRenderLevel(parentId, depth) {
+  const children = wsChildren(parentId);
+  if (!children.length) return '';
+  return children.map(node => {
+    const isFolder = node.node_type === 'folder';
+    const isExpanded = wsExpandedIds.has(node.id);
+    const isActive = wsActiveNodeId === node.id;
+    const hasChildren = wsNodes.some(n => n.parent_id === node.id);
+    const indent = `<span class="ws-tree-indent" style="width:${depth * 14}px"></span>`;
+    const toggle = isFolder
+      ? `<span class="ws-tree-toggle">${hasChildren ? (isExpanded ? '▾' : '▸') : ' '}</span>`
+      : `<span class="ws-tree-toggle"> </span>`;
+    const nodeIcon = isFolder
+      ? `<svg class="icon ws-node-icon" width="13" height="13" style="color:var(--yellow)"><use href="#ic-layers"/></svg>`
+      : `<svg class="icon ws-node-icon" width="13" height="13" style="color:var(--accent2)"><use href="#ic-sheet"/></svg>`;
+
+    const attachedBadge = (node.node_type === 'sheet' && node.sheet_id)
+      ? `<span style="font-size:0.6rem;background:var(--accent2-dim);color:var(--accent2);padding:1px 5px;border-radius:10px;margin-left:2px">✓</span>`
+      : '';
+
+    const actions = `
+      <div class="ws-node-actions">
+        ${isFolder ? `<button class="ws-node-btn" title="New subfolder" onclick="event.stopPropagation();wsPromptNewFolder(${node.id})">📁+</button>
+        <button class="ws-node-btn" title="Attach sheet here" onclick="event.stopPropagation();wsAttachSheet(${node.id})">📎</button>` : ''}
+        <button class="ws-node-btn" title="Rename" onclick="event.stopPropagation();wsRenameNode(${node.id})">✏️</button>
+        <button class="ws-node-btn danger" title="Delete" onclick="event.stopPropagation();wsDeleteNode(${node.id})">🗑</button>
+      </div>`;
+
+    const rowHtml = `
+      <div class="ws-tree-item">
+        <div class="ws-tree-row ${isActive ? 'active' : ''}" onclick="wsToggleNode(${node.id})">
+          ${indent}${toggle}${nodeIcon}
+          <span class="ws-node-label">${escHtml(node.name)}${attachedBadge}</span>
+          ${actions}
+        </div>
+      </div>`;
+
+    const childrenHtml = (isFolder && isExpanded) ? _wsRenderLevel(node.id, depth + 1) : '';
+    return rowHtml + childrenHtml;
+  }).join('');
+}
+
+function wsToggleNode(id) {
+  const node = wsGetNode(id);
+  if (!node) return;
+  if (node.node_type === 'folder') {
+    if (wsExpandedIds.has(id)) wsExpandedIds.delete(id);
+    else wsExpandedIds.add(id);
+  }
+  wsActiveNodeId = id;
+  wsRenderTree();
+  wsSelectNode(id);
+}
+
+function wsSelectNode(id) {
+  wsActiveNodeId = id;
+  const node = id ? wsGetNode(id) : null;
+  const crumbs = wsBuildBreadcrumb(id);
+  // Breadcrumb
+  const breadcrumbEl = document.getElementById('wsBreadcrumb');
+  breadcrumbEl.innerHTML = [
+    `<span onclick="wsSelectNode(null)">🏠 Root</span>`,
+    ...crumbs.map(c => `<span style="color:var(--text-muted)">/</span><span onclick="wsSelectNode(${c.id})">${escHtml(c.name)}</span>`)
+  ].join('');
+
+  const titleEl = document.getElementById('wsPaneTitle');
+  const bodyEl  = document.getElementById('wsPaneBody');
+
+  if (!node) {
+    // Root pane
+    titleEl.innerHTML = `${icon('ic-drive',14)} My Workspace`;
+    const children = wsChildren(null);
+    bodyEl.innerHTML = `
+      <div>
+        <div class="ws-section-label">Quick Actions</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" onclick="wsPromptNewFolder(null)">
+            ${icon('ic-layers',12)} New Root Folder
+          </button>
+        </div>
+      </div>
+      ${children.length === 0 ? `<div class="ws-empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 12px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <div>Your workspace is empty.</div>
+        <div style="margin-top:6px;font-size:0.78rem">Create folders to organise your sheets, then attach a Google Sheet to classify transactions.</div>
+      </div>` : ''}
+    `;
+    return;
+  }
+
+  if (node.node_type === 'folder') {
+    titleEl.innerHTML = `${icon('ic-layers',14)} ${escHtml(node.name)}`;
+    const children = wsChildren(id);
+    bodyEl.innerHTML = `
+      <div>
+        <div class="ws-section-label">Contents (${children.length})</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="btn btn-secondary btn-sm" onclick="wsPromptNewFolder(${id})">
+            ${icon('ic-layers',12)} New Subfolder
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="wsAttachSheet(${id})">
+            ${icon('ic-sheet',12)} Attach Sheet Here
+          </button>
+        </div>
+        ${children.length === 0
+          ? `<div style="color:var(--text-muted);font-size:0.82rem;padding:20px 0;text-align:center">This folder is empty.</div>`
+          : `<div class="ws-tab-list">${children.map(c => `
+            <div class="ws-tab-item" onclick="wsSelectNode(${c.id})">
+              ${c.node_type === 'folder'
+                ? `<svg class="icon" width="13" height="13" style="color:var(--yellow)"><use href="#ic-layers"/></svg>`
+                : `<svg class="icon" width="13" height="13" style="color:var(--accent2)"><use href="#ic-sheet"/></svg>`}
+              ${escHtml(c.name)}
+              ${c.node_type === 'sheet' && c.sheet_id
+                ? `<span style="margin-left:auto;font-size:0.7rem;color:var(--accent2)">📎 ${escHtml(c.sheet_name)} › ${escHtml(c.tab_name)}</span>`
+                : c.node_type === 'sheet' ? `<span style="margin-left:auto;font-size:0.7rem;color:var(--text-muted)">No sheet attached</span>` : ''}
+            </div>`).join('')}
+          </div>`}
+      </div>
+    `;
+  } else {
+    // Sheet node
+    titleEl.innerHTML = `${icon('ic-sheet',14)} ${escHtml(node.name)}`;
+    bodyEl.innerHTML = wsRenderSheetPane(node);
+  }
+}
+
+function wsRenderSheetPane(node) {
+  const hasSheet = !!(node.sheet_id && node.tab_name);
+  const ctxTabs = node.context_tabs || [];
+  return `
+    <div>
+      <div class="ws-section-label">Attached Sheet</div>
+      ${hasSheet ? `
+        <div class="ws-attached-box">
+          <div class="ws-attached-title">✓ Sheet Attached</div>
+          <div class="ws-attached-name">${escHtml(node.sheet_name)}</div>
+          <div style="font-size:0.78rem;color:var(--text-muted)">Tab: <strong>${escHtml(node.tab_name)}</strong></div>
+          ${ctxTabs.length > 0 ? `<div style="font-size:0.75rem;margin-top:6px;color:var(--accent2)">Context tabs: ${ctxTabs.map(escHtml).join(', ')}</div>` : ''}
+          <div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="wsOpenClassifier(${node.id})">
+              ${icon('ic-sparkle',12)} Open Classifier
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="wsAttachSheet(${node.id})">
+              ${icon('ic-refresh',12)} Change Sheet
+            </button>
+          </div>
+        </div>
+      ` : `
+        <div style="padding:16px;border:2px dashed var(--border);border-radius:10px;text-align:center;color:var(--text-muted);font-size:0.82rem">
+          No sheet attached yet.<br>
+          <button class="btn btn-primary" style="margin-top:10px" onclick="wsAttachSheet(${node.id})">
+            ${icon('ic-drive',12)} Attach Google Sheet
+          </button>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+async function wsPromptNewFolder(parentId) {
+  const name = prompt(parentId ? 'New subfolder name:' : 'New root folder name:');
+  if (!name || !name.trim()) return;
+  const res = await fetch('/api/workspace/nodes', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name: name.trim(), node_type: 'folder', parent_id: parentId })
+  });
+  const data = await res.json();
+  if (data.node) {
+    wsNodes.push(data.node);
+    if (parentId) wsExpandedIds.add(parentId);
+    wsRenderTree();
+    wsSelectNode(parentId);
+  }
+}
+
+async function wsRenameNode(id) {
+  const node = wsGetNode(id);
+  if (!node) return;
+  const name = prompt('Rename to:', node.name);
+  if (!name || !name.trim() || name.trim() === node.name) return;
+  const res = await fetch(`/api/workspace/nodes/${id}`, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name: name.trim() })
+  });
+  const data = await res.json();
+  if (data.node) {
+    const idx = wsNodes.findIndex(n => n.id === id);
+    if (idx >= 0) wsNodes[idx] = data.node;
+    wsRenderTree();
+    if (wsActiveNodeId === id) wsSelectNode(id);
+  }
+}
+
+async function wsDeleteNode(id) {
+  const node = wsGetNode(id);
+  if (!node) return;
+  const hasChildren = wsNodes.some(n => n.parent_id === id);
+  const msg = hasChildren
+    ? `Delete "${node.name}" and ALL its contents? This cannot be undone.`
+    : `Delete "${node.name}"?`;
+  if (!confirm(msg)) return;
+  await fetch(`/api/workspace/nodes/${id}`, { method: 'DELETE' });
+  // Remove this node and all descendants
+  const toRemove = new Set();
+  const collect = (nid) => {
+    toRemove.add(nid);
+    wsNodes.filter(n => n.parent_id === nid).forEach(c => collect(c.id));
+  };
+  collect(id);
+  wsNodes = wsNodes.filter(n => !toRemove.has(n.id));
+  wsExpandedIds.delete(id);
+  if (wsActiveNodeId && toRemove.has(wsActiveNodeId)) wsActiveNodeId = null;
+  wsRenderTree();
+  wsSelectNode(wsActiveNodeId);
+}
+
+// --- Attach a Google Sheet to a node ---
+let _wsPendingAttachNodeId = null;
+let _wsPendingSheetId = null;
+let _wsPendingSheetName = null;
+let _wsPendingAllTabs = [];
+
+async function wsAttachSheet(nodeId) {
+  // If it's a folder node, first create a sheet-type child node
+  const node = wsGetNode(nodeId);
+  if (!node) return;
+  if (node.node_type === 'folder') {
+    // Create a new sheet node inside this folder
+    const name = prompt('Name for this sheet entry:');
+    if (!name || !name.trim()) return;
+    const res = await fetch('/api/workspace/nodes', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name: name.trim(), node_type: 'sheet', parent_id: nodeId })
+    });
+    const data = await res.json();
+    if (!data.node) return;
+    wsNodes.push(data.node);
+    wsExpandedIds.add(nodeId);
+    wsRenderTree();
+    nodeId = data.node.id;
+    wsActiveNodeId = nodeId;
+  }
+  _wsPendingAttachNodeId = nodeId;
+  openDriveModal();
+}
+
+async function _wsDriveSheetPicked(sheetId, sheetName) {
+  closeDriveModal();
+  if (!_wsPendingAttachNodeId) return;
+  _wsPendingSheetId = sheetId;
+  _wsPendingSheetName = sheetName;
+  // Show tab picker overlay
+  const overlay = document.getElementById('tabPickerOverlay');
+  const tabList = document.getElementById('tabPickerList');
+  overlay.classList.add('show');
+  tabList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading tabs...</div>`;
+  try {
+    const res = await fetch('/api/gdrive/worksheets?sheet_id=' + encodeURIComponent(sheetId));
+    const data = await res.json();
+    _wsPendingAllTabs = data.tabs || [];
+    if (_wsPendingAllTabs.length === 0) {
+      tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem">No sheets found.</div>`;
+      return;
+    }
+    tabList.innerHTML = _wsPendingAllTabs.map(t =>
+      `<div class="tab-item" onclick="wsConfirmTabForAttach('${escHtml(t).replace(/'/g,"\\'")}')">
+        ${icon('ic-sheet',13)} ${escHtml(t)}
+       </div>`
+    ).join('');
+  } catch(e) {
+    tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem">Error: ${escHtml(String(e))}</div>`;
+  }
+}
+
+async function wsConfirmTabForAttach(tabName) {
+  closeTabPicker();
+  // Context picker
+  const otherTabs = _wsPendingAllTabs.filter(t => t !== tabName);
+  if (otherTabs.length > 0) {
+    // Show context picker; on confirm, finish
+    openContextPicker(otherTabs);
+    _wsContextConfirmCallback = async (ctxTabs) => {
+      await _wsFinishAttach(tabName, ctxTabs);
+    };
+  } else {
+    await _wsFinishAttach(tabName, []);
+  }
+}
+
+let _wsContextConfirmCallback = null;
+
+async function _wsFinishAttach(tabName, ctxTabs) {
+  const nodeId = _wsPendingAttachNodeId;
+  const res = await fetch(`/api/workspace/nodes/${nodeId}`, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      sheet_id: _wsPendingSheetId,
+      sheet_name: _wsPendingSheetName,
+      tab_name: tabName,
+      context_tabs: ctxTabs
+    })
+  });
+  const data = await res.json();
+  if (data.node) {
+    const idx = wsNodes.findIndex(n => n.id === nodeId);
+    if (idx >= 0) wsNodes[idx] = data.node;
+  }
+  _wsPendingAttachNodeId = null;
+  wsRenderTree();
+  wsSelectNode(nodeId);
+  showToast(`Sheet attached: ${_wsPendingSheetName} › ${tabName}`);
+}
+
+// Override confirmContextSelection to support workspace flow
+const _origConfirmContextSelection = typeof confirmContextSelection === 'undefined' ? null : confirmContextSelection;
 async function confirmContextSelection() {
   const tabs = [...selectedContextTabs];
   closeContextPicker();
+  if (_wsContextConfirmCallback) {
+    const cb = _wsContextConfirmCallback;
+    _wsContextConfirmCallback = null;
+    await cb(tabs);
+    return;
+  }
+  // Legacy flow (kept for old "Edit context" chip)
   await fetch('/api/gdrive/set_context_tabs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tabs })
@@ -2338,110 +2839,168 @@ async function confirmContextSelection() {
   await finishSheetSetup(st.active_sheet_name, st.active_tab_name, tabs);
 }
 
-function closeContextPicker() {
-  document.getElementById('contextPickerOverlay').classList.remove('show');
-}
+// --- Open Classifier for a workspace sheet node ---
+async function wsOpenClassifier(nodeId) {
+  closeWorkspaceModal();
+  const node = wsGetNode(nodeId);
+  if (!node) return;
 
-async function openContextPickerStandalone() {
-  // For "Edit" button on chip bar — load existing tabs
-  const sheetRes = await fetch('/api/gdrive/status');
-  const st = await sheetRes.json();
-  if (!st.active_sheet_id) return;
-  const wsRes = await fetch('/api/gdrive/worksheets?sheet_id=' + encodeURIComponent(st.active_sheet_id));
-  const wsData = await wsRes.json();
-  const allTabs = wsData.tabs || [];
-  const baseTabs = st.active_tab_name ? [st.active_tab_name] : [];
-  const otherTabs = allTabs.filter(t => !baseTabs.includes(t));
-  selectedContextTabs = new Set(st.context_tabs || []);
-  openContextPicker(otherTabs);
-  // Pre-select existing
-  selectedContextTabs.forEach(t => {
-    const el = document.getElementById(`ctxitem-${escHtml(t)}`);
-    if (el) el.classList.add('selected');
-  });
-}
+  // Set the active workspace node globally so classify/data routes use it
+  window._wsCurrentNodeId = nodeId;
 
-async function finishSheetSetup(sheetName, tabName, contextTabs) {
-  closeDriveModal();
-  document.getElementById('txnBody').innerHTML =
-    `<tr><td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 10px"></div><br>Loading <strong>${escHtml(tabName)}</strong> from <strong>${escHtml(sheetName)}</strong>...</td></tr>`;
+  // Update UI
+  const srcPill = document.getElementById('sourcePill');
+  srcPill.innerHTML = `${icon('ic-sheet')} ${escHtml(node.sheet_name)} › ${escHtml(node.tab_name)}`;
+  const driveBtn = document.getElementById('driveConnectBtn');
+  driveBtn.innerHTML = `${icon('ic-drive')} Workspace`;
+
+  // Load transactions for this node
+  document.querySelector('.table-panel') && (document.querySelector('.table-panel').innerHTML =
+    `<table id="txnTable"><thead><tr>
+      <th style="width:30px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+      <th data-col="date">Date</th><th data-col="bank">Bank</th><th data-col="type">Type</th>
+      <th data-col="narration">Narration</th><th data-col="amount">Amount</th>
+      <th data-col="classification">Classification</th><th data-col="ref">Ref</th><th data-col="conf">Conf</th>
+    </tr></thead>
+    <tbody id="txnBody">
+      <tr><td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted)">
+        <div class="spinner" style="margin:0 auto 10px"></div><br>
+        Loading <strong>${escHtml(node.tab_name)}</strong> from <strong>${escHtml(node.sheet_name)}</strong>...
+      </td></tr>
+    </tbody></table>
+    <div class="pagination-bar" id="paginationBar">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="pageInfo">—</span>
+        <select class="page-size-select" id="pageSizeSelect" onchange="changePageSize(this.value)">
+          <option value="25">25 / page</option><option value="50" selected>50 / page</option>
+          <option value="100">100 / page</option><option value="200">200 / page</option>
+        </select>
+      </div>
+      <div class="pagination-controls" id="pageControls"></div>
+    </div>`);
+
   allTransactions = [];
   classificationResults = {};
   reviewDecisions = {};
+  duplicatesMap = {};
 
-  const dataRes = await fetch('/api/data');
-  const data = await dataRes.json();
-  allTransactions = data.transactions || [];
-  duplicatesMap = data.duplicates || {};
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/load_transactions`);
+    const data = await res.json();
+    if (data.error) {
+      showToast('Error: ' + data.error);
+      return;
+    }
+    allTransactions = data.transactions || [];
+    duplicatesMap   = data.duplicates || {};
 
-  const srcPill = document.getElementById('sourcePill');
-  srcPill.innerHTML = `${icon('ic-sheet')} ${escHtml(sheetName)} › ${escHtml(tabName)}`;
-  document.getElementById('dataPill').className = 'pill ok';
-  document.getElementById('dataStatus').textContent = `${allTransactions.length} txns`;
-  document.getElementById('saveToSheetBtn').style.display = '';
+    // Load saved classifications for this node
+    const clsRes = await fetch(`/api/workspace/nodes/${nodeId}/classifications`);
+    const clsData = await clsRes.json();
+    classificationResults = {};
+    (clsData.classifications || []).forEach(c => {
+      // Match by txn_key to index
+      const key = c.txn_key;
+      const idx = allTransactions.findIndex(t =>
+        _makeTxnKey(t) === key
+      );
+      if (idx >= 0) {
+        classificationResults[idx] = {
+          classification: c.classification,
+          reference_id: c.reference_id || '',
+          matched_detail: c.matched_detail || '',
+          confidence: c.confidence || 'high',
+          reasoning: c.reasoning || '',
+          idx: idx
+        };
+        if (c.review_decision) reviewDecisions[idx] = c.review_decision;
+      }
+    });
 
-  const driveBtn = document.getElementById('driveConnectBtn');
-  driveBtn.innerHTML = `${icon('ic-drive')} Drive Connected`;
-  driveBtn.style.borderColor = 'var(--green)';
-  driveBtn.style.color = 'var(--green)';
+    // Patch classify stream & feedback to use workspace node routes
+    _wsCurrentNodeId = nodeId;
 
-  // Refresh context chips
-  const contextRes = await fetch('/api/gdrive/status');
-  const ctx = await contextRes.json();
-  if (ctx.context_tabs && ctx.context_tabs.length > 0) {
-    document.getElementById('ctxPill').style.display = '';
-    document.getElementById('ctxStatus').textContent = `${ctx.context_tabs.length} context tabs`;
-    renderContextChips(ctx.context_tabs);
+    document.getElementById('dataPill').className = 'pill ok';
+    document.getElementById('dataStatus').textContent = `${allTransactions.length} txns`;
+
+    renderTable(); updateStats();
+    showToast(`Loaded ${allTransactions.length} transactions from "${node.tab_name}".`);
+  } catch(e) {
+    showToast('Failed to load: ' + String(e));
   }
-
-  renderTable(); updateStats();
-  showToast(`Loaded ${allTransactions.length} transactions from "${tabName}".`);
 }
 
-async function saveToSheet() {
-  const btn = document.getElementById('saveToSheetBtn');
-  const classified = Object.keys(classificationResults);
-  if (classified.length === 0) { showToast('No classified transactions yet.'); return; }
-  const results = allTransactions.map((t, i) => {
+function _makeTxnKey(t) {
+  return `${(t.date||'').slice(0,10)}|${(t.narration||'').slice(0,80)}|${t.gross_total||''}`;
+}
+
+// Save classifications back to the workspace node after any classify run
+async function wsSaveNodeClassifications() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) return;
+  const records = allTransactions.map((t, i) => {
     const res = classificationResults[i];
     if (!res) return null;
-    return { date: t.date, narration: t.narration, voucher_type: t.voucher_type,
-             gross_total: t.gross_total, classification: res.classification||'',
-             reference_id: res.reference_id||'', confidence: res.confidence||'', reasoning: res.reasoning||'' };
+    return {
+      txn_key: _makeTxnKey(t),
+      classification: res.classification || '',
+      reference_id: res.reference_id || '',
+      matched_detail: res.matched_detail || '',
+      confidence: res.confidence || 'high',
+      reasoning: res.reasoning || '',
+      review_decision: reviewDecisions[i] || ''
+    };
   }).filter(Boolean);
-  btn.disabled = true;
-  btn.innerHTML = `<div class="spinner"></div> Saving...`;
-  try {
-    const res = await fetch('/api/gdrive/write_results', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ results })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      btn.innerHTML = `${icon('ic-check',13)} Saved ${data.rows_written} rows`;
-      setTimeout(() => { btn.innerHTML = `${icon('ic-cloud',13)} Save to Sheet`; btn.disabled = false; }, 4000);
-    } else {
-      showToast('Save failed: ' + (data.error || 'Unknown'));
-      btn.innerHTML = `${icon('ic-cloud',13)} Save to Sheet`; btn.disabled = false;
+  if (!records.length) return;
+  await fetch(`/api/workspace/nodes/${nodeId}/classifications`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ records })
+  });
+}
+
+// Patch classifyViaStream to auto-save after completion
+const _origClassifyViaStream = classifyViaStream;
+function classifyViaStream(indices) {
+  return _origClassifyViaStream(indices).then(async () => {
+    await wsSaveNodeClassifications();
+  });
+}
+
+// Patch _doSubmitFeedback to auto-save after feedback
+const _origDoSubmitFeedback = _doSubmitFeedback;
+async function _doSubmitFeedback(i, corrected, shouldLearn, keyword) {
+  await _origDoSubmitFeedback(i, corrected, shouldLearn, keyword);
+  await wsSaveNodeClassifications();
+}
+
+// Override classify_stream fetch to use node-scoped endpoint when in workspace mode
+const _origFetch = window.fetch;
+// We patch classifyViaStream's internal fetch by overriding the route string inline.
+// Instead, we monkey-patch the POST to /api/classify_stream:
+(function patchClassifyStream() {
+  const origFetch2 = window.fetch;
+  window.fetch = async function(url, opts) {
+    if (typeof url === 'string' && url === '/api/classify_stream' && window._wsCurrentNodeId) {
+      url = `/api/workspace/nodes/${window._wsCurrentNodeId}/classify_stream`;
     }
-  } catch(e) {
-    showToast('Save error: ' + e);
-    btn.innerHTML = `${icon('ic-cloud',13)} Save to Sheet`; btn.disabled = false;
-  }
+    return origFetch2.call(this, url, opts);
+  };
+})();
+
+document.getElementById('workspaceModalOverlay').addEventListener('click', function(e) { if (e.target === this) closeWorkspaceModal(); });
+
+// Legacy finishSheetSetup kept for any residual calls
+async function finishSheetSetup(sheetName, tabName, contextTabs) {
+  closeDriveModal();
+  showToast(`Legacy sheet setup (use Workspace for per-folder sheets)`);
 }
 
 async function disconnectDrive() {
   await fetch('/api/gdrive/disconnect', { method: 'POST' });
   activeDriveSheetId = null; driveSheets = [];
-  showDriveNotConnected();
-  document.getElementById('driveConnectStatus').innerHTML = '';
-  document.getElementById('ctxChipsWrap').className = 'context-chips-wrap';
-  document.getElementById('ctxPill').style.display = 'none';
 }
 
-document.getElementById('driveModalOverlay').addEventListener('click', function(e) { if (e.target === this) closeDriveModal(); });
-document.getElementById('tabPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeTabPicker(); });
-document.getElementById('contextPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeContextPicker(); });
+function startOAuth() { window.location.href = '/auth/google'; }
 
 function closeTabPicker() {
   document.getElementById('tabPickerOverlay').classList.remove('show');

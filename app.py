@@ -106,6 +106,42 @@ def init_db():
         )
     """)
 
+    # ── workspace nodes (folder tree + sheet attachments, per user) ───────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_nodes (
+            id          SERIAL PRIMARY KEY,
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            parent_id   INTEGER REFERENCES workspace_nodes(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,
+            node_type   TEXT NOT NULL DEFAULT 'folder',  -- 'folder' | 'sheet'
+            sheet_id    TEXT,
+            sheet_name  TEXT,
+            tab_name    TEXT,
+            context_tabs TEXT DEFAULT '[]',
+            sort_order  INTEGER DEFAULT 0,
+            created_at  TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    # ── per-node classifications (scoped to user + node) ─────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS node_classifications (
+            id              SERIAL PRIMARY KEY,
+            user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            node_id         INTEGER NOT NULL REFERENCES workspace_nodes(id) ON DELETE CASCADE,
+            txn_key         TEXT NOT NULL,
+            classification  TEXT,
+            reference_id    TEXT DEFAULT '',
+            matched_detail  TEXT DEFAULT '',
+            confidence      TEXT DEFAULT 'high',
+            reasoning       TEXT DEFAULT '',
+            review_decision TEXT DEFAULT '',
+            created_at      TIMESTAMPTZ DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(user_id, node_id, txn_key)
+        )
+    """)
+
     conn.commit()
     conn.close()
     log.info("Database initialised")
@@ -424,6 +460,10 @@ def list_drive_sheets(tokens):
 
 # ---------- Data Loading (scoped to current user) ----------
 
+class NoSheetConnectedError(Exception):
+    pass
+
+
 def load_transactions():
     active_sheet_id = get_setting("active_sheet_id")
     active_tab_name = get_setting("active_tab_name") or "query_sk"
@@ -435,16 +475,12 @@ def load_transactions():
                 active_sheet_id, active_tab_name, json.loads(active_creds))
         except Exception as e:
             log.warning("GSheets load failed: %s", e)
+            raise
 
-    df = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=None)
-    header_row = next((i for i, row in df.iterrows() if str(row[0]).strip() == "Date"), 3)
-    transactions = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=header_row)
-    transactions.columns = [str(c).strip() for c in transactions.columns]
-    transactions = transactions[transactions["Date"].notna()]
-    transactions = transactions[transactions["Date"].astype(str).str.strip() != "nan"]
-    transactions = transactions[~transactions["Narration"].astype(str).str.lower().str.contains(
-        "grand total", na=False)]
-    return transactions
+    # No sheet connected — give a clear actionable error instead of crashing on missing xlsx
+    raise NoSheetConnectedError(
+        "No Google Sheet connected. Click 'Connect Drive' in the top-right to link your sheet."
+    )
 
 
 def load_context_sheets():
@@ -471,15 +507,9 @@ def load_context_sheets():
 
 
 def _load_excel_fallback():
-    df = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=None)
-    header_row = next((i for i, row in df.iterrows() if str(row[0]).strip() == "Date"), 3)
-    transactions = pd.read_excel(EXCEL_PATH, sheet_name="query_sk", header=header_row)
-    transactions.columns = [str(c).strip() for c in transactions.columns]
-    transactions = transactions[transactions["Date"].notna()]
-    transactions = transactions[transactions["Date"].astype(str).str.strip() != "nan"]
-    transactions = transactions[~transactions["Narration"].astype(str).str.lower().str.contains(
-        "grand total", na=False)]
-    return transactions
+    raise NoSheetConnectedError(
+        "No Google Sheet connected. Click 'Connect Drive' in the top-right to link your sheet."
+    )
 
 
 # ---------- Duplicate Detection ----------
@@ -847,6 +877,8 @@ def get_data():
         return jsonify({"transactions": txns, "total": len(txns),
                         "duplicates": duplicates, "data_source": "google_sheets",
                         "context_tabs": context_tab_names})
+    except NoSheetConnectedError as e:
+        return jsonify({"error": str(e), "needs_setup": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1185,6 +1217,280 @@ def gdrive_disconnect():
     set_setting("active_tab_name",   "")
     set_setting("context_tab_names", "[]")
     return jsonify({"ok": True})
+
+
+# ============================================================
+# Workspace (folder tree) routes
+# ============================================================
+
+def _node_to_dict(r):
+    return {
+        "id":           r["id"],
+        "parent_id":    r["parent_id"],
+        "name":         r["name"],
+        "node_type":    r["node_type"],
+        "sheet_id":     r["sheet_id"] or "",
+        "sheet_name":   r["sheet_name"] or "",
+        "tab_name":     r["tab_name"] or "",
+        "context_tabs": json.loads(r["context_tabs"] or "[]"),
+        "sort_order":   r["sort_order"],
+        "created_at":   str(r["created_at"]),
+    }
+
+
+@app.route("/api/workspace/nodes", methods=["GET"])
+@login_required
+def workspace_list_nodes():
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT * FROM workspace_nodes WHERE user_id=%s ORDER BY parent_id NULLS FIRST, sort_order, name
+    """, (uid,))
+    rows = c.fetchall()
+    conn.close()
+    return jsonify({"nodes": [_node_to_dict(r) for r in rows]})
+
+
+@app.route("/api/workspace/nodes", methods=["POST"])
+@login_required
+def workspace_create_node():
+    uid  = current_user_id()
+    data = request.json or {}
+    name      = data.get("name", "").strip()
+    node_type = data.get("node_type", "folder")
+    parent_id = data.get("parent_id")  # None = root
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    if node_type not in ("folder", "sheet"):
+        return jsonify({"error": "node_type must be folder or sheet"}), 400
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO workspace_nodes (user_id, parent_id, name, node_type, sheet_id, sheet_name, tab_name, context_tabs, sort_order)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+            (SELECT COALESCE(MAX(sort_order),0)+1 FROM workspace_nodes WHERE user_id=%s AND parent_id IS NOT DISTINCT FROM %s))
+        RETURNING *
+    """, (uid, parent_id, name, node_type,
+          data.get("sheet_id",""), data.get("sheet_name",""), data.get("tab_name",""),
+          json.dumps(data.get("context_tabs",[])),
+          uid, parent_id))
+    row = c.fetchone()
+    conn.commit()
+    conn.close()
+    return jsonify({"node": _node_to_dict(row)})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>", methods=["PATCH"])
+@login_required
+def workspace_update_node(node_id):
+    uid  = current_user_id()
+    data = request.json or {}
+    fields = []
+    vals   = []
+    for col in ("name", "sheet_id", "sheet_name", "tab_name", "parent_id", "sort_order"):
+        if col in data:
+            fields.append(f"{col} = %s")
+            vals.append(data[col])
+    if "context_tabs" in data:
+        fields.append("context_tabs = %s")
+        vals.append(json.dumps(data["context_tabs"]))
+    if not fields:
+        return jsonify({"ok": True})
+    vals += [node_id, uid]
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(f"UPDATE workspace_nodes SET {', '.join(fields)} WHERE id=%s AND user_id=%s RETURNING *", vals)
+    row = c.fetchone()
+    conn.commit()
+    conn.close()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"node": _node_to_dict(row)})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>", methods=["DELETE"])
+@login_required
+def workspace_delete_node(node_id):
+    uid  = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    # Cascade deletes children via FK; also deletes node_classifications via FK
+    c.execute("DELETE FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/classifications", methods=["GET"])
+@login_required
+def workspace_get_classifications(node_id):
+    uid  = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    # Verify ownership
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    c.execute("""
+        SELECT txn_key, classification, reference_id, matched_detail, confidence, reasoning, review_decision
+        FROM node_classifications WHERE node_id=%s AND user_id=%s
+    """, (node_id, uid))
+    rows = c.fetchall()
+    conn.close()
+    return jsonify({"classifications": [dict(r) for r in rows]})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/classifications", methods=["POST"])
+@login_required
+def workspace_save_classifications(node_id):
+    uid  = current_user_id()
+    data = request.json or {}
+    records = data.get("records", [])
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    for rec in records:
+        c.execute("""
+            INSERT INTO node_classifications
+              (user_id, node_id, txn_key, classification, reference_id, matched_detail, confidence, reasoning, review_decision, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
+            ON CONFLICT (user_id, node_id, txn_key) DO UPDATE SET
+              classification  = EXCLUDED.classification,
+              reference_id    = EXCLUDED.reference_id,
+              matched_detail  = EXCLUDED.matched_detail,
+              confidence      = EXCLUDED.confidence,
+              reasoning       = EXCLUDED.reasoning,
+              review_decision = EXCLUDED.review_decision,
+              updated_at      = NOW()
+        """, (uid, node_id,
+              rec.get("txn_key",""),
+              rec.get("classification",""),
+              rec.get("reference_id",""),
+              rec.get("matched_detail",""),
+              rec.get("confidence","high"),
+              rec.get("reasoning",""),
+              rec.get("review_decision","")))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "saved": len(records)})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/load_transactions", methods=["GET"])
+@login_required
+def workspace_load_node_transactions(node_id):
+    """Load transactions for a specific workspace sheet node."""
+    uid  = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    node = c.fetchone()
+    conn.close()
+    if not node:
+        return jsonify({"error": "not found"}), 404
+    if node["node_type"] != "sheet" or not node["sheet_id"] or not node["tab_name"]:
+        return jsonify({"error": "Node has no sheet attached"}), 400
+    tokens_str = get_setting("oauth_tokens")
+    if not tokens_str:
+        return jsonify({"error": "not_connected"}), 401
+    try:
+        df = load_from_gsheets_oauth(node["sheet_id"], node["tab_name"], json.loads(tokens_str))
+        txns = [{"date": str(row.get("Date","")).strip(),
+                 "particulars": str(row.get("Particulars","")).strip(),
+                 "voucher_type": str(row.get("Voucher Type","")).strip(),
+                 "voucher_no": str(row.get("Voucher No.","")).strip(),
+                 "narration": str(row.get("Narration","")).strip(),
+                 "gross_total": str(row.get("Gross Total","")).strip()}
+                for _, row in df.iterrows()]
+        duplicates = detect_duplicates(df)
+        return jsonify({"transactions": txns, "total": len(txns), "duplicates": duplicates})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/classify_stream", methods=["POST"])
+@login_required
+def workspace_classify_stream(node_id):
+    """Streaming classification scoped to a workspace node."""
+    if not _classify_lock.acquire(blocking=False):
+        def _busy():
+            yield "data: " + json.dumps({"error": "A classification is already running.", "done": True}) + "\n\n"
+        return app.response_class(_busy(), mimetype="text/event-stream")
+
+    uid  = current_user_id()
+    data = request.json or {}
+    indices = data.get("indices", None)
+
+    # Load node details
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    node = c.fetchone()
+    conn.close()
+
+    if not node:
+        _classify_lock.release()
+        def _err():
+            yield "data: " + json.dumps({"error": "Node not found", "done": True}) + "\n\n"
+        return app.response_class(_err(), mimetype="text/event-stream")
+
+    snap_sheet_id   = node["sheet_id"] or ""
+    snap_tab_name   = node["tab_name"] or "query_sk"
+    snap_tokens_str = get_setting("oauth_tokens", user_id=uid)
+    snap_ctx_tabs   = node["context_tabs"] or "[]"
+
+    def _generate():
+        try:
+            transactions = load_from_gsheets_oauth(
+                snap_sheet_id, snap_tab_name, json.loads(snap_tokens_str))
+
+            context_sheets = []
+            try:
+                ctx_tabs = json.loads(snap_ctx_tabs) if isinstance(snap_ctx_tabs, str) else snap_ctx_tabs
+                tokens   = json.loads(snap_tokens_str)
+                for tab in ctx_tabs:
+                    try:
+                        df = load_sheet_as_context_oauth(snap_sheet_id, tab, tokens)
+                        context_sheets.append({"tab_name": tab, "df": df})
+                    except Exception as e:
+                        log.warning("Context tab '%s' failed: %s", tab, e)
+            except Exception as e:
+                log.warning("Context load failed: %s", e)
+
+            if indices is not None:
+                req_indices = indices
+                subset      = transactions.iloc[req_indices].copy()
+            else:
+                subset      = transactions.copy()
+                req_indices = list(range(len(transactions)))
+
+            total     = len(req_indices)
+            completed = 0
+
+            for batch_results in _classify_transactions_stream(subset, context_sheets, uid):
+                output = []
+                for res in batch_results:
+                    if res and "idx" in res:
+                        original_idx = req_indices[res["idx"]]
+                        output.append({"original_index": original_idx, **res})
+                completed += len(output)
+                yield f"data: {json.dumps({'results': output, 'done': False, 'completed': completed, 'total': total})}\n\n"
+
+            yield f"data: {json.dumps({'results': [], 'done': True, 'completed': completed, 'total': total})}\n\n"
+
+        except Exception as e:
+            log.exception("workspace_classify_stream error")
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+        finally:
+            _classify_lock.release()
+
+    return app.response_class(
+        _generate(), mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 if __name__ == "__main__":
