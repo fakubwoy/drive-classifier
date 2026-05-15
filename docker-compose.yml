@@ -12,8 +12,9 @@ services:
       - GOOGLE_CREDENTIALS_FILE=credentials.json
 
       # ── Postgres (required for user profiles & per-user data) ──────────
-      # Locally: spin up a postgres container or point at Railway's Postgres addon
-      - DATABASE_URL=${DATABASE_URL}
+      # Locally: falls back to the local db service if DATABASE_URL is not set in your shell/.env
+      # On Railway: DATABASE_URL is auto-injected by the Postgres plugin — this default is ignored
+      - DATABASE_URL=${DATABASE_URL:-postgresql://alfaleus:alfaleus@db:5432/alfaleus}
 
       # ── Google OAuth2 — used for BOTH login and Drive picker ──────────
       # Create at console.cloud.google.com → APIs → Credentials → OAuth 2.0 Client (Web App)
@@ -30,6 +31,8 @@ services:
 
     volumes:
       - ./data:/app/data
+    depends_on:
+      - db
     restart: unless-stopped
 
   # ── Local Postgres (comment out if using Railway's managed Postgres) ──

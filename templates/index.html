@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Alfaleus — Transaction Classifier</title>
+<title>Alfaleus — Accounting Tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -247,6 +247,7 @@
   .table-panel { overflow: auto; padding-bottom: 60px; }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  #txnTable { min-width: 900px; table-layout: fixed; }
   thead th {
     background: var(--surface);
     color: var(--text-muted);
@@ -316,6 +317,7 @@
     padding: 2px 8px; border-radius: 5px;
     font-size: 0.7rem; font-weight: 600; white-space: nowrap;
     font-family: var(--mono);
+    max-width: 155px; overflow: hidden; text-overflow: ellipsis;
   }
   .badge-receipt  { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
   .badge-payment  { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
@@ -840,6 +842,29 @@
   .col-manager-row input[type="range"] { width: 60px; accent-color: var(--accent); cursor: pointer; }
   .col-width-val { font-size: 0.7rem; font-family: var(--mono); color: var(--text-muted); min-width: 32px; text-align:right; }
 
+  /* ===================== CONTEXT MENU (merged Add Context / Upload Context) ===================== */
+  .ctx-menu-wrap { position: relative; }
+  .ctx-menu-popup {
+    display: none; position: absolute; z-index: 300;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 6px; min-width: 288px;
+    box-shadow: 0 12px 36px rgba(15,23,42,0.13);
+    top: 100%; left: 0; margin-top: 6px;
+  }
+  .ctx-menu-popup.show { display: block; }
+  .ctx-menu-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 10px; border-radius: 7px; cursor: pointer;
+    color: var(--text);
+  }
+  .ctx-menu-item:hover { background: var(--bg); }
+  .ctx-menu-item .icon { margin-top: 2px; flex-shrink: 0; opacity: 0.75; }
+  .ctx-menu-item-text { display: flex; flex-direction: column; gap: 2px; }
+  .ctx-menu-item-title { font-size: 0.82rem; font-weight: 500; color: var(--text); }
+  .ctx-menu-item-sub { font-size: 0.7rem; color: var(--text-muted); line-height: 1.3; }
+  .ctx-menu-item.disabled { cursor: not-allowed; opacity: 0.5; }
+  .ctx-menu-item.disabled:hover { background: transparent; }
+
   /* ===================== PROGRESS DETAIL ===================== */
   .progress-step-detail { font-size: 0.71rem; font-family: var(--mono); color: var(--accent); margin-top: 5px; min-height: 1.3em; }
   .progress-phase { font-size: 0.73rem; color: var(--text-muted); margin-top: 4px; }
@@ -980,7 +1005,232 @@
   .main-crumb-sep { color: var(--border2); font-size: 0.7rem; user-select: none; }
   .main-crumb-home { color: var(--accent); }
 
-  /* ===================== SHEET BACK CHIP ===================== */
+  /* ===================== EXCEL LOOK ===================== */
+  :root {
+    --xls-header-bg: #217346;
+    --xls-header-fg: #ffffff;
+    --xls-row-alt: #f7faf8;
+    --xls-border: #d0d7de;
+    --xls-sel: #c6efce;
+    --xls-sel-border: #217346;
+    --xls-formula-bar: #f9f9f9;
+  }
+
+  /* Override table to look like Excel */
+  table { font-size: 0.79rem; border-collapse: collapse; }
+  thead th {
+    background: var(--xls-header-bg) !important;
+    color: var(--xls-header-fg) !important;
+    font-size: 0.72rem; font-weight: 600;
+    padding: 6px 10px;
+    border: 1px solid rgba(255,255,255,0.18) !important;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+    position: sticky; top: 0; z-index: 2;
+    user-select: none;
+  }
+  thead th:first-child { background: #1a5c38 !important; width: 38px; }
+  /* Row number column styling */
+  .row-num {
+    color: var(--text-muted); font-family: var(--mono); font-size: 0.68rem;
+    text-align: right; background: var(--surface2); border-right: 1px solid var(--xls-border);
+    padding: 5px 6px; user-select: none; min-width: 36px;
+  }
+  tbody tr { border-bottom: 1px solid var(--xls-border); }
+  tbody tr:nth-child(even) { background: var(--xls-row-alt); }
+  tbody tr:hover { background: #e8f5ed !important; }
+  tbody tr.row-selected { background: var(--xls-sel) !important; outline: 2px solid var(--xls-sel-border); }
+  td { padding: 5px 9px; border: 1px solid var(--xls-border); vertical-align: middle; }
+
+  /* Formula bar (shows selected cell full content) */
+  .formula-bar {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--xls-formula-bar);
+    border-bottom: 1px solid var(--xls-border);
+    padding: 4px 12px;
+    font-size: 0.8rem; font-family: var(--mono);
+    color: var(--text-dim);
+    min-height: 28px;
+  }
+  .formula-bar-label {
+    color: #217346; font-weight: 700; font-size: 0.72rem;
+    background: rgba(33,115,70,0.08); border: 1px solid rgba(33,115,70,0.2);
+    border-radius: 3px; padding: 1px 6px; white-space: nowrap;
+  }
+  .formula-bar-content { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+  /* Freeze row numbers: add a sticky col effect via JS class */
+  .col-rownum { min-width: 36px; max-width: 36px; }
+
+  /* ===================== GST / TDS BADGE COLUMNS ===================== */
+  .gst-badge, .tds-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700;
+    font-family: var(--mono); white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+  /* GST out (collected) → green */
+  .gst-out  { background: rgba(16,185,129,0.12); color: #065f46; border: 1px solid rgba(16,185,129,0.3); }
+  /* GST in (ITC credit) → blue */
+  .gst-in   { background: rgba(37,99,235,0.1);  color: #1e3a8a; border: 1px solid rgba(37,99,235,0.25); }
+  /* GST N/A */
+  .gst-no   { background: rgba(100,116,139,0.08); color: var(--text-muted); border: 1px solid var(--border); }
+  /* GST reverse charge → yellow */
+  .gst-rc   { background: rgba(245,158,11,0.12); color: #92400e; border: 1px solid rgba(245,158,11,0.3); }
+  /* TDS out (deducted from vendor) → red */
+  .tds-out  { background: rgba(239,68,68,0.1);  color: #991b1b; border: 1px solid rgba(239,68,68,0.25); }
+  /* TDS in (customer deducted from us) → purple */
+  .tds-in   { background: rgba(124,58,237,0.1); color: #4c1d95; border: 1px solid rgba(124,58,237,0.25); }
+  /* TDS N/A */
+  .tds-no   { background: rgba(100,116,139,0.08); color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* Pending tax (not yet classified) */
+  .tax-pending { color: var(--text-muted); font-size: 0.68rem; font-family: var(--mono); }
+
+  /* ===================== UPLOAD TAB ===================== */
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 10px;
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: #217346;
+    background: rgba(33,115,70,0.04);
+  }
+  .upload-zone-icon { font-size: 2rem; margin-bottom: 10px; }
+  .upload-zone-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; color: var(--text); }
+  .upload-zone-sub { font-size: 0.8rem; color: var(--text-muted); }
+  .sheet-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(33,115,70,0.08); border: 1px solid rgba(33,115,70,0.25);
+    border-radius: 6px; padding: 5px 10px; font-size: 0.78rem;
+    color: #065f46; font-weight: 500;
+  }
+  .sheet-chip-del {
+    cursor: pointer; opacity: 0.6; color: var(--red);
+    transition: opacity 0.15s;
+  }
+  .sheet-chip-del:hover { opacity: 1; }
+
+  /* ===================== GST MATCH SUB-ROW ===================== */
+  tr.gst-match-row td {
+    background: #f0fdf4;
+    border-bottom: 1px solid #bbf7d0;
+    padding: 3px 8px 4px 8px;
+    font-size: 0.71rem;
+    color: #166534;
+    font-family: var(--mono);
+  }
+  tr.gst-match-row td.gst-match-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .gst-match-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.69rem;
+    font-weight: 600;
+    color: #15803d;
+    white-space: nowrap;
+  }
+  .gst-match-field {
+    color: #166534;
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+  .gst-match-field span { color: #15803d; font-weight: 600; }
+  .gst-match-divider { color: #86efac; }
+
+  /* ===================== PER-SHEET GST/TDS ATTACHMENT ROWS ===================== */
+  .attach-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface);
+    margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .attach-row-label {
+    flex: 1; min-width: 180px; font-size: 0.84rem;
+    font-weight: 600; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .attach-row-label-icon { font-size: 1rem; }
+  .attach-slot {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.74rem; padding: 5px 10px; border-radius: 6px;
+    border: 1px dashed var(--border2); background: var(--bg);
+    cursor: pointer; transition: all 0.15s; color: var(--text-muted);
+    font-weight: 500; user-select: none;
+  }
+  .attach-slot:hover {
+    border-color: #217346; color: #065f46;
+    background: rgba(33,115,70,0.04);
+  }
+  .attach-slot.attached {
+    border-style: solid; background: rgba(33,115,70,0.08);
+    border-color: rgba(33,115,70,0.3); color: #065f46;
+  }
+  .attach-slot.attached.tds {
+    background: rgba(26,47,110,0.08);
+    border-color: rgba(26,47,110,0.3); color: #1a2f6e;
+  }
+  .attach-slot-fn {
+    max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; display: inline-block;
+  }
+  .attach-slot-x {
+    margin-left: 4px; opacity: 0.5; cursor: pointer;
+    font-size: 0.9rem; line-height: 1;
+  }
+  .attach-slot-x:hover { opacity: 1; color: var(--red); }
+
+  /* ===================== GST NON-FILER TABLE ===================== */
+  .nonfiler-row { background: rgba(239,68,68,0.04); }
+  .nonfiler-row:hover { background: rgba(239,68,68,0.09) !important; }
+
+  /* ===================== SECTION CARDS ===================== */
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .section-card-title {
+    font-weight: 700; font-size: 0.88rem; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .section-card-sub { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 14px; }
+
+  /* ===================== TAX CONFIRM MODAL ===================== */
+  .tax-modal-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px;
+    width: 500px; max-width: 96vw;
+    box-shadow: 0 28px 72px rgba(15,23,42,0.18);
+  }
+  .tax-modal-title { font-family: var(--display); font-size: 1rem; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .tax-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .tax-field label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 3px; }
+  .tax-field select, .tax-field input {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text);
+    font-size: 0.8rem; outline: none; font-family: var(--sans);
+  }
+  .tax-field select:focus, .tax-field input:focus { border-color: #217346; }
+
   .sheet-back-chip {
     display: flex; align-items: center; gap: 5px;
     padding: 3px 10px 3px 7px;
@@ -1017,6 +1267,9 @@
   </symbol>
   <symbol id="ic-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+  </symbol>
+  <symbol id="ic-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
   </symbol>
   <symbol id="ic-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
     <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
@@ -1086,7 +1339,7 @@
     <div class="logo" onclick="navigateDriveHome()" style="cursor:pointer" title="Go to My Drive">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
     </div>
-    <div class="wordmark">Alfaleus <span>Classifier</span></div>
+    <div class="wordmark">Alfaleus <span>Accounting</span></div>
     <div class="header-divider"></div>
     <div class="status-pills">
       <div class="pill ok" id="apiPill"><div class="dot"></div><span id="apiStatus">Checking...</span></div>
@@ -1123,6 +1376,12 @@
 </div>
 
 <!-- ===================== NAV TABS ===================== -->
+<!-- Upload Context (replaces old "Upload Sheets" + "GST / TDS" buttons).
+     The single "Upload Context" toolbar button opens a unified panel
+     where the user can attach any reference files — GST sheets, TDS
+     sheets, vendor lists, etc. — directly, without a separate GST/TDS
+     button. The AI classifier automatically uses these files for both
+     category classification and GST/TDS determination. -->
 <div class="nav-bar">
   <div class="nav-tab active" onclick="switchTab('transactions', this)">
     <svg class="icon" width="13" height="13"><use href="#ic-list"/></svg> Transactions
@@ -1173,7 +1432,35 @@
       <svg class="icon" width="13" height="13"><use href="#ic-zap"/></svg>
       Quick Review
     </button>
+    <div class="ctx-menu-wrap">
+      <button class="btn btn-secondary" id="ctxMenuBtn" onclick="toggleCtxMenu(event)" title="Add context for the classifier — either from an existing sheet, or by uploading a new file">
+        <svg class="icon" width="13" height="13"><use href="#ic-context"/></svg>
+        <span id="ctxMenuBtnLabel">Add Context</span>
+        <svg class="icon" width="10" height="10" style="margin-left:2px;opacity:0.55" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      <div class="ctx-menu-popup" id="ctxMenuPopup">
+        <div class="ctx-menu-item" id="ctxMenuAddFromSheet" onclick="ctxMenuPickFromSheet()">
+          <svg class="icon" width="14" height="14"><use href="#ic-sheet"/></svg>
+          <div class="ctx-menu-item-text">
+            <div class="ctx-menu-item-title">Add from sheet</div>
+            <div class="ctx-menu-item-sub" id="ctxMenuAddFromSheetSub">Pick tabs from a sheet to use as context</div>
+          </div>
+        </div>
+        <div class="ctx-menu-item" onclick="ctxMenuUploadFile()">
+          <svg class="icon" width="14" height="14"><use href="#ic-upload"/></svg>
+          <div class="ctx-menu-item-text">
+            <div class="ctx-menu-item-title">Upload file</div>
+            <div class="ctx-menu-item-sub">Upload a new Excel / CSV (GST, TDS, vendor lists, …)</div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="toolbar-sep"></div>
+    <button class="btn btn-secondary" id="itcMatchBtn" onclick="runItcMatch()" title="Match transactions against uploaded GSTR-2B sheets to determine ITC claim status">
+      <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      ITC Match
+      <span id="itcMatchBadge" style="display:none;background:#166534;color:#fff;border-radius:10px;padding:1px 6px;font-size:0.67rem;margin-left:3px"></span>
+    </button>
     <button class="btn btn-secondary" onclick="exportCSV()">
       <svg class="icon" width="13" height="13"><use href="#ic-download"/></svg>
       Export CSV
@@ -1221,22 +1508,31 @@
   <!-- Main grid -->
   <div class="main-grid">
     <div class="table-panel">
+      <!-- Excel-style formula bar -->
+      <div class="formula-bar" id="formulaBar">
+        <span class="formula-bar-label" id="formulaCell">A1</span>
+        <span class="formula-bar-content" id="formulaContent">Select a cell to see full narration</span>
+      </div>
       <table id="txnTable">
         <thead>
           <tr>
-            <th style="width:30px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
-            <th data-col="date">Date</th>
-            <th data-col="bank">Bank</th>
-            <th data-col="type">Type</th>
+            <th style="width:28px;min-width:28px;max-width:28px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+            <th style="width:36px;min-width:36px;max-width:36px;text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
+            <th style="width:90px;min-width:90px;max-width:90px;white-space:nowrap" data-col="date">Date</th>
+            <th style="width:76px;min-width:76px;max-width:76px" data-col="bank">Bank</th>
+            <th style="width:62px;min-width:62px;max-width:62px;text-align:center" data-col="type">Type</th>
             <th data-col="narration">Narration</th>
-            <th data-col="amount">Amount</th>
-            <th data-col="classification">Classification</th>
-            <th data-col="ref">Ref</th>
-            <th data-col="conf">Conf</th>
+            <th style="width:100px;min-width:100px;max-width:100px;text-align:right" data-col="amount">Amount (&#8377;)</th>
+            <th style="width:148px;min-width:148px;max-width:148px" data-col="classification">Category</th>
+            <th style="width:112px;min-width:112px;max-width:112px;text-align:center;background:#1c6b40 !important;color:#fff !important" data-col="gst">GST</th>
+            <th style="width:122px;min-width:122px;max-width:122px;text-align:center;background:#1a2f6e !important;color:#fff !important" data-col="tds">TDS</th>
+            <th style="width:108px;min-width:108px;max-width:108px" data-col="ref">Ref</th>
+            <th style="width:120px;min-width:120px;max-width:120px;text-align:center;background:#065f46 !important;color:#fff !important" data-col="itc">ITC Claim</th>
+            <th style="width:36px;min-width:36px;max-width:36px;text-align:center" data-col="conf">Conf</th>
           </tr>
         </thead>
         <tbody id="txnBody">
-          <tr><td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted)">
+          <tr><td colspan="12" style="text-align:center;padding:48px;color:var(--text-muted)">
             <div class="spinner" style="margin:0 auto 10px"></div><br>Loading transactions...
           </td></tr>
         </tbody>
@@ -1295,7 +1591,253 @@
   </div>
 </div>
 
-<!-- ===================== PROGRESS OVERLAY ===================== -->
+<!-- ===================== UPLOAD CONTEXT TAB ===================== -->
+<div class="tab-content" id="tab-upload">
+  <div style="padding:24px;max-width:860px">
+
+    <!-- Back to My Drive -->
+    <div style="margin-bottom:14px">
+      <button class="btn btn-ghost btn-sm" onclick="closeAuxPanel()" style="display:inline-flex;align-items:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+        Back to Classifier
+      </button>
+    </div>
+
+    <!-- Unified Context Upload -->
+    <div class="section-card">
+      <div class="section-card-title">
+        <svg class="icon" width="15" height="15"><use href="#ic-upload"/></svg>
+        Upload Context Files
+      </div>
+      <div class="section-card-sub">
+        Upload any reference sheets here — your <strong>GST (GSTR-2B)</strong>, <strong>TDS (Form 26AS)</strong>, vendor master, client list, or any other file.
+        The AI classifier will use these when classifying transactions — including determining whether GST and TDS apply, and in which direction.
+      </div>
+
+      <div class="upload-zone" id="contextDropZone"
+           onclick="document.getElementById('contextFileInput').click()"
+           ondrop="handleContextDrop(event)"
+           ondragover="handleDragOver(event)"
+           ondragleave="handleDragLeave(event)">
+        <input type="file" id="contextFileInput" multiple accept=".xlsx,.xls,.csv" style="display:none"
+               onchange="uploadContextFiles(this.files)">
+        <div class="upload-zone-icon">📎</div>
+        <div class="upload-zone-title">Drop context files here, or click to browse</div>
+        <div class="upload-zone-sub">Supports .xlsx, .xls, .csv — GST sheets, TDS sheets, vendor lists, etc. Multiple files OK.</div>
+      </div>
+
+      <div style="margin-top:14px" id="contextFilesList">
+        <!-- chips rendered by JS -->
+      </div>
+
+      <div id="contextUploadProgress" style="display:none;margin-top:10px;font-size:0.8rem;color:var(--text-muted)">Uploading…</div>
+
+      <div style="margin-top:14px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:0.78rem;color:var(--text-muted);line-height:1.65">
+        <strong style="color:var(--text-dim)">How it works:</strong> When you click <em>Classify All</em> or <em>Classify Selected</em>, the AI reads these context files alongside each transaction.
+        It uses them to determine the correct category, and also fills the <strong>GST</strong> and <strong>TDS</strong> columns in the sheet
+        (applicable or not, and whether incoming or outgoing).
+      </div>
+    </div>
+
+    <!-- Hidden inputs kept for legacy per-sheet GST/TDS backend compatibility -->
+    <input type="file" id="attachGstFileInput" accept=".xlsx,.xls" style="display:none"
+           onchange="handleAttachGstChosen(this.files[0])">
+    <input type="file" id="attachTdsFileInput" accept=".xlsx,.xls" style="display:none"
+           onchange="handleAttachTdsChosen(this.files[0])">
+    <div id="attachStatus" style="display:none"></div>
+    <div id="uploadedSheetsList" style="display:none"></div>
+    <div id="uploadProgress" style="display:none"></div>
+    <span id="combinedStatus" style="display:none"></span>
+  </div>
+</div>
+
+<!-- ===================== GST / TDS TAB ===================== -->
+<div class="tab-content" id="tab-gst">
+  <div style="padding:24px;max-width:1100px">
+
+    <!-- Back to My Drive -->
+    <div style="margin-bottom:14px">
+      <button class="btn btn-ghost btn-sm" onclick="closeAuxPanel()" style="display:inline-flex;align-items:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+        Back to My Drive
+      </button>
+    </div>
+
+    <!-- Controls -->
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="runTaxClassify()" id="taxClassifyBtn">
+        <svg class="icon" width="13" height="13"><use href="#ic-sparkle"/></svg>
+        Classify GST &amp; TDS with AI
+      </button>
+      <button class="btn btn-secondary" onclick="runNonFilerCheck()" id="nonFilerBtn">
+        <svg class="icon" width="13" height="13"><use href="#ic-alert"/></svg>
+        Find GST Non-Filers
+      </button>
+      <button class="btn btn-secondary" onclick="exportTaxCSV()">
+        <svg class="icon" width="13" height="13"><use href="#ic-download"/></svg>
+        Export Tax Report
+      </button>
+      <span style="font-size:0.78rem;color:var(--text-muted)" id="taxStatusMsg"></span>
+    </div>
+
+    <!-- Progress bar for tax classify -->
+    <div id="taxProgressBar" style="display:none;margin-bottom:14px">
+      <div class="progress-track"><div class="progress-fill" id="taxProgressFill" style="width:0%"></div></div>
+      <div class="progress-label" id="taxProgressLabel">Classifying…</div>
+    </div>
+
+    <!-- Summary stat cards -->
+    <div id="taxStatsBar" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px"></div>
+
+    <!-- Main tax table -->
+    <div style="overflow-x:auto;border:1px solid var(--xls-border);border-radius:8px">
+      <table id="taxTable" style="min-width:900px">
+        <thead>
+          <tr>
+            <th style="width:32px">#</th>
+            <th>Date</th>
+            <th>Narration</th>
+            <th>Amount (₹)</th>
+            <th>Category</th>
+            <th style="background:#1c6b40 !important">GST Applicable</th>
+            <th style="background:#1c6b40 !important">GST Direction</th>
+            <th style="background:#1c6b40 !important">Rate %</th>
+            <th style="background:#1a2f6e !important">TDS Applicable</th>
+            <th style="background:#1a2f6e !important">Section</th>
+            <th style="background:#1a2f6e !important">TDS Rate %</th>
+            <th style="width:70px">Action</th>
+          </tr>
+        </thead>
+        <tbody id="taxBody">
+          <tr><td colspan="12" style="text-align:center;padding:36px;color:var(--text-muted)">
+            Run "Classify GST &amp; TDS with AI" to analyse your transactions
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Non-filer results -->
+    <div id="nonFilerSection" style="display:none;margin-top:24px">
+      <div class="section-card">
+        <div class="section-card-title" style="color:var(--red)">
+          ⚠️ GST Non-Filers Detected
+        </div>
+        <div class="section-card-sub" id="nonFilerCount">Vendors in your transactions who did NOT file GST in the uploaded GSTR-2B sheet.</div>
+        <div style="overflow-x:auto;margin-top:12px">
+          <table id="nonFilerTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Narration / Vendor</th>
+                <th>Amount (₹)</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="nonFilerBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================== TAX CONFIRM MODAL ===================== -->
+<div class="overlay-bg" id="taxModalOverlay">
+  <div class="tax-modal-box">
+    <div class="tax-modal-title">
+      <svg class="icon" width="15" height="15"><use href="#ic-sparkle"/></svg>
+      Confirm Tax Classification
+    </div>
+    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:14px" id="taxModalNarr"></div>
+
+    <div style="font-size:0.75rem;font-weight:700;color:#217346;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em">GST</div>
+    <div class="tax-field-row">
+      <div class="tax-field">
+        <label>GST Applicable</label>
+        <select id="taxModalGstApplicable">
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+          <option value="reverse_charge">Reverse Charge</option>
+          <option value="exempt">Exempt</option>
+        </select>
+      </div>
+      <div class="tax-field">
+        <label>Direction</label>
+        <select id="taxModalGstDir">
+          <option value="out">↑ Out (collected)</option>
+          <option value="in">↓ In (ITC credit)</option>
+          <option value="">N/A</option>
+        </select>
+      </div>
+    </div>
+    <div class="tax-field-row">
+      <div class="tax-field">
+        <label>GST Rate %</label>
+        <select id="taxModalGstRate">
+          <option value="">— N/A —</option>
+          <option value="0">0%</option>
+          <option value="5">5%</option>
+          <option value="12">12%</option>
+          <option value="18">18%</option>
+          <option value="28">28%</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="font-size:0.75rem;font-weight:700;color:#1a2f6e;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.06em">TDS</div>
+    <div class="tax-field-row">
+      <div class="tax-field">
+        <label>TDS Applicable</label>
+        <select id="taxModalTdsApplicable">
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+      <div class="tax-field">
+        <label>Direction</label>
+        <select id="taxModalTdsDir">
+          <option value="out">↑ Out (we deduct)</option>
+          <option value="in">↓ In (they deduct)</option>
+          <option value="">N/A</option>
+        </select>
+      </div>
+    </div>
+    <div class="tax-field-row">
+      <div class="tax-field">
+        <label>TDS Section</label>
+        <select id="taxModalTdsSection">
+          <option value="">— None —</option>
+          <option value="192">192 — Salary</option>
+          <option value="194C">194C — Contractor (1/2%)</option>
+          <option value="194J">194J — Professional (10%)</option>
+          <option value="194I(a)">194I(a) — Rent Machinery (2%)</option>
+          <option value="194I(b)">194I(b) — Rent Land/Bldg (10%)</option>
+          <option value="194H">194H — Commission (5%)</option>
+          <option value="194Q">194Q — Purchase of Goods (0.1%)</option>
+          <option value="194A">194A — Interest (10%)</option>
+        </select>
+      </div>
+      <div class="tax-field">
+        <label>TDS Rate %</label>
+        <input type="text" id="taxModalTdsRate" placeholder="e.g. 2">
+      </div>
+    </div>
+
+    <div style="font-size:0.73rem;color:var(--text-muted);margin-bottom:14px" id="taxModalReasoning"></div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeTaxModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTaxConfirmation()">
+        <svg class="icon" width="12" height="12"><use href="#ic-check"/></svg>
+        Confirm &amp; Save
+      </button>
+    </div>
+  </div>
+</div>
+
+
 <div class="overlay-bg" id="progressOverlay">
   <div class="progress-box">
     <div class="progress-box-title">AI Classification Running</div>
@@ -1461,6 +2003,21 @@
         <div style="text-align:center;padding:28px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Loading spreadsheets...</div>
       </div>
       <div style="font-size:0.72rem;color:var(--text-muted)">Click a spreadsheet to attach it to this workspace node.</div>
+      <!-- Excel-upload alternative: lets the user attach a local .xlsx/.csv
+           instead of picking a Google Sheet. The hidden input is triggered
+           by the visible button; selection routes to _wsExcelFilePicked. -->
+      <div style="padding-top:10px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="font-size:0.78rem;color:var(--text-muted)">
+          Don't use Google Sheets? Upload an Excel or CSV file from your computer.
+        </div>
+        <input type="file" id="driveExcelFileInput" accept=".xlsx,.xls,.xlsm,.csv"
+               style="display:none" onchange="_wsExcelFilePicked(this)">
+        <button class="btn btn-secondary btn-sm"
+                onclick="document.getElementById('driveExcelFileInput').click()">
+          <svg class="icon" width="12" height="12"><use href="#ic-upload"/></svg>
+          Upload Excel instead
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -1500,6 +2057,27 @@
         Confirm Selection
       </button>
       <button class="btn btn-ghost btn-sm" onclick="closeContextPicker()">Skip</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CONTEXT SHEET VIEWER MODAL ===================== -->
+<div class="overlay-bg" id="ctxViewerOverlay">
+  <div class="picker-box" style="max-width:920px;width:92vw;max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:10px">
+      <div>
+        <div class="picker-title">
+          <svg class="icon" width="14" height="14" style="vertical-align:middle;margin-right:4px"><use href="#ic-sheet"/></svg>
+          <span id="ctxViewerTitle">Context Sheet</span>
+        </div>
+        <div id="ctxViewerSub" style="font-size:0.74rem;color:var(--text-muted);margin-top:2px"></div>
+      </div>
+      <button class="modal-close" onclick="closeContextSheetViewer()"><svg class="icon" width="16" height="16"><use href="#ic-x"/></svg></button>
+    </div>
+    <div class="picker-sub">These are the rows the classifier reads when matching transactions to this context sheet.</div>
+    <div id="ctxViewerBody" style="flex:1;overflow:auto;min-height:0"></div>
+    <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeContextSheetViewer()">Close</button>
     </div>
   </div>
 </div>
@@ -1619,12 +2197,119 @@ function renderContextChips(tabs) {
 }
 
 // ---- Tabs ----
-function switchTab(tab, el) {
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+//
+// Tab-state model (the bit that makes "Transactions ⇄ Learned Rules" work):
+//
+//   The transactions area can be in one of two sub-modes, tracked by
+//   window._txnViewMode:
+//     - 'drive_home' → the folder/sheet picker (#driveHomeView) is shown,
+//                      #tab-transactions is hidden inline.
+//     - 'classifier' → a specific sheet is loaded (#tab-transactions visible),
+//                      #driveHomeView hidden. The active sheet node id is
+//                      stored in window._lastClassifierNodeId so it can be
+//                      restored verbatim.
+//
+//   navigateDriveHome()   sets _txnViewMode='drive_home'.
+//   showClassifierView()  sets _txnViewMode='classifier' and records the node id.
+//
+//   When the user clicks the "Transactions" nav-tab after visiting Rules
+//   (or any aux panel), switchTab('transactions') *restores* the previous
+//   sub-mode instead of blindly unhiding #tab-transactions — which is what
+//   was causing the "tries to load some transactions" symptom.
+window._txnViewMode = 'drive_home';      // 'drive_home' | 'classifier'
+window._lastClassifierNodeId = null;     // node id when in classifier mode
+
+function _hideAllTabContents() {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('tab-' + tab).classList.add('active');
-  if (tab === 'rules') loadRules();
+}
+function _clearNavActive() {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+}
+
+function switchTab(tab, el) {
+  _clearNavActive();
+  _hideAllTabContents();
+  if (el) el.classList.add('active');
+
+  // Transactions is special: it shares the screen real-estate with the
+  // Drive Home view. Restore whichever sub-mode the user was last in.
+  if (tab === 'transactions') {
+    // Ensure no aux panel (upload/gst) leaks through.
+    const upT = document.getElementById('tab-upload');
+    const gsT = document.getElementById('tab-gst');
+    if (upT) upT.classList.remove('active');
+    if (gsT) gsT.classList.remove('active');
+
+    if (window._txnViewMode === 'classifier' && window._lastClassifierNodeId != null) {
+      // Restore the classifier view on the previously open sheet.
+      // Do NOT re-fetch transactions — they are already in allTransactions.
+      const txnTab = document.getElementById('tab-transactions');
+      if (txnTab) {
+        txnTab.classList.add('active');
+        txnTab.style.display = '';
+      }
+      const ctxWrap = document.getElementById('ctxChipsWrap');
+      if (ctxWrap) ctxWrap.style.display = '';
+      // Re-run showClassifierView to restore breadcrumb + pills correctly.
+      try { showClassifierView(window._lastClassifierNodeId); } catch (_) {}
+      const driveHome = document.getElementById('driveHomeView');
+      if (driveHome) driveHome.classList.remove('active');
+    } else {
+      // Default: go back to the folder view (My Drive).
+      // navigateDriveHome handles hiding #tab-transactions and showing the home.
+      try { navigateDriveHome(window._driveCurrentFolderId || null); } catch (_) {}
+    }
+    return;
+  }
+
+  // Non-transactions tabs (rules / upload / gst): hide the drive home,
+  // hide the transactions panel inline, and show the requested panel.
+  // Crucially we DO NOT touch _txnViewMode or _lastClassifierNodeId here,
+  // so coming back to Transactions restores the previous state exactly.
+  const driveHome = document.getElementById('driveHomeView');
+  if (driveHome) driveHome.classList.remove('active');
+
+  const txnTab = document.getElementById('tab-transactions');
+  if (txnTab) {
+    txnTab.classList.remove('active');
+    txnTab.style.display = 'none';
+  }
+  const ctxWrap = document.getElementById('ctxChipsWrap');
+  if (ctxWrap) ctxWrap.style.display = 'none';
+
+  // Hide the classifier-specific pills + back chip while on aux tabs.
+  const dp = document.getElementById('dataPill');     if (dp) dp.style.display = 'none';
+  const rp = document.getElementById('rulesPill');    if (rp) rp.style.display = 'none';
+  const cp = document.getElementById('ctxPill');      if (cp) cp.style.display = 'none';
+  const sb = document.getElementById('sheetBackChip');if (sb) sb.style.display = 'none';
+  const mbc = document.getElementById('mainBreadcrumb'); if (mbc) mbc.classList.remove('visible');
+
+  const target = document.getElementById('tab-' + tab);
+  if (target) target.classList.add('active');
+
+  if (tab === 'rules')  loadRules();
+  if (tab === 'upload') refreshUploadedSheetsList();
+  if (tab === 'gst')    { loadTaxClassifications().then(() => { if (taxTableData.length) renderTaxTable(); }); }
+}
+
+// --- Aux panel openers (Upload Sheets / GST / TDS) ---
+// Triggered from buttons inside the Drive Home toolbar, since these tabs
+// no longer live in the top nav bar. They behave like switchTab('upload')
+// / switchTab('gst') but without needing a nav-tab element to highlight.
+function openUploadSheetsPanel() {
+  switchTab('upload', null);
+  setTimeout(() => refreshContextFilesList(), 50);
+}
+function openGstPanel() {
+  switchTab('gst', null);
+}
+
+// Closes whichever aux panel (upload/gst) is showing and returns to the
+// transactions area in its previous sub-mode (drive home or classifier).
+function closeAuxPanel() {
+  // Re-activate the Transactions nav tab visually.
+  const txnNavTab = document.querySelector('.nav-tab[onclick*="\'transactions\'"]');
+  switchTab('transactions', txnNavTab);
 }
 
 // ---- Filters ----
@@ -1703,10 +2388,10 @@ function renderTable() {
 
   const tbody = document.getElementById('txnBody');
   if (pageIndices.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">No transactions match</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--text-muted)">No transactions match</td></tr>`;
     return;
   }
-  tbody.innerHTML = pageIndices.map(i => {
+  tbody.innerHTML = pageIndices.map((i, rowNum) => {
     const t = allTransactions[i];
     const res = classificationResults[i];
     const isReceipt = t.voucher_type === 'Receipt';
@@ -1741,8 +2426,24 @@ function renderTable() {
 
     const dupBadge = isDup ? ` <span class="badge badge-dup">${icon('ic-alert',9)} DUP</span>` : '';
     const confDot = res ? `<span class="conf-dot conf-${res.confidence}" title="${res.confidence}"></span>` : '—';
+
+    // ITC badge
+    const _itcKey = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+    const _itc = itcMatches[_itcKey];
+    let itcBadge;
+    if (!_itc) {
+      itcBadge = `<span style="color:var(--text-muted);font-size:0.72rem">—</span>`;
+    } else if (_itc.itc_status === 'reflected') {
+      const _conf = _itc.confidence === 'medium' ? ' itc-medium' : '';
+      const _tip = `${_itc.vendor_name} · Inv# ${_itc.invoice_no} · ${_itc.confidence} confidence`;
+      itcBadge = `<span class="itc-badge itc-reflected${_conf}" title="${escHtml(_tip)}">✓ Reflected</span>`;
+    } else if (_itc.itc_status === 'not_reflected') {
+      itcBadge = `<span class="itc-badge itc-not" title="Not found in GSTR-2B">✗ Not Reflected</span>`;
+    } else {
+      itcBadge = `<span style="color:var(--text-muted);font-size:0.72rem">—</span>`;
+    }
     const date = t.date.split(' ')[0];
-    const bank = t.particulars.replace('HDFC Bank','HDFC').replace('ICICI Bank - 0901 - Birac','ICICI Birac');
+    const bank = (t.source || t.particulars || '').replace('HDFC Bank','HDFC').replace('ICICI Bank - 0901 - Birac','ICICI Birac');
     const rowCls = [
       selectedRows.has(i) ? 'row-selected' : '',
       isDup ? 'row-dup' : '',
@@ -1751,17 +2452,99 @@ function renderTable() {
       decision === 'flagged' ? 'row-flagged' : '',
     ].filter(Boolean).join(' ');
 
+    // GST/TDS badge from taxClassifications store
+    const txnKey = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+    const tax = taxClassifications[txnKey];
+    let gstBadge, tdsBadge;
+    if (tax) {
+      const gstCls = tax.gst_applicable === 'no' ? 'gst-no' :
+                     tax.gst_applicable === 'reverse_charge' ? 'gst-rc' :
+                     tax.gst_direction === 'in' ? 'gst-in' : 'gst-out';
+      // Compute GST amount if rate is available
+      const rawAmt = parseFloat(String(t.gross_total).replace(/[^0-9.]/g,'')) || 0;
+      let gstAmt = '';
+      if (tax.gst_rate && rawAmt) {
+        const rate = parseFloat(tax.gst_rate);
+        if (!isNaN(rate)) {
+          // If amount already includes GST, back-calc: gst = total*rate/(100+rate)
+          const computed = rawAmt * rate / (100 + rate);
+          gstAmt = ' ₹' + computed.toFixed(0);
+        }
+      }
+      const gstArrow = tax.gst_applicable === 'no' ? '—' :
+                       tax.gst_applicable === 'reverse_charge' ? '⇄ RC' :
+                       tax.gst_direction === 'in'
+                         ? `↓ ${tax.gst_rate ? tax.gst_rate+'%'+gstAmt : 'ITC'}`
+                         : `↑ ${tax.gst_rate ? tax.gst_rate+'%'+gstAmt : 'GST'}`;
+      gstBadge = `<span class="gst-badge ${gstCls}" title="${tax.gst_applicable !== 'no' ? (tax.gst_direction === 'in' ? 'GST Credit (ITC)' : 'GST Collected') : 'No GST'}">${gstArrow}</span>`;
+
+      const tdsCls = tax.tds_applicable === 'no' ? 'tds-no' :
+                     tax.tds_direction === 'in' ? 'tds-in' : 'tds-out';
+      let tdsAmt = '';
+      if (tax.tds_rate && rawAmt) {
+        const trate = parseFloat(tax.tds_rate);
+        if (!isNaN(trate)) {
+          tdsAmt = ' ₹' + (rawAmt * trate / 100).toFixed(0);
+        }
+      }
+      const tdsArrow = tax.tds_applicable === 'no' ? '—' :
+                       tax.tds_direction === 'in'
+                         ? `↓ ${tax.tds_section || 'TDS'}${tdsAmt}`
+                         : `↑ ${tax.tds_section || 'TDS'}${tdsAmt}`;
+      tdsBadge = `<span class="tds-badge ${tdsCls}" title="${tax.tds_applicable !== 'no' ? (tax.tds_direction === 'in' ? 'TDS deducted by customer' : 'TDS deducted by us') : 'No TDS'}">${tdsArrow}</span>`;
+    } else {
+      gstBadge = `<span class="tax-pending">·</span>`;
+      tdsBadge = `<span class="tax-pending">·</span>`;
+    }
+
+    // GST working match sub-row: shown when a reference_id was matched from a GSTR-2B context sheet
+    let gstMatchRow = '';
+    if (res && res.reference_id && res.matched_detail && res.matched_detail !== 'Auto-classified' && res.matched_detail !== 'Auto-classified from learned feedback' && res.matched_detail !== 'User corrected' && res.matched_detail !== 'User corrected + learned') {
+      const colSpan = 13;
+      const refId = escHtml(res.reference_id);
+      // Use structured itcRow data if available, otherwise show matched_detail
+      const itcK = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+      const rowItc = itcMatches[itcK] || {};
+      const subVendor = rowItc.vendor_name || '';
+      const subDate   = rowItc.invoice_date || '';
+      const subVal    = rowItc.invoice_value || '';
+      const subIgst   = parseFloat(rowItc.igst)||0;
+      const subCgst   = parseFloat(rowItc.cgst)||0;
+      const subSgst   = parseFloat(rowItc.sgst)||0;
+      const subGst    = subIgst + subCgst + subSgst;
+      const gstParts  = [subIgst>0 ? `IGST ₹${subIgst}` : '', subCgst>0 ? `CGST ₹${subCgst}` : '', subSgst>0 ? `SGST ₹${subSgst}` : ''].filter(Boolean).join(' ');
+      const detailStr = subVendor
+        ? `${escHtml(subVendor)}${subDate ? ' · '+escHtml(subDate) : ''}${subVal ? ' · ₹'+escHtml(subVal) : ''}${gstParts ? ' · GST: '+escHtml(gstParts) : ''}`
+        : escHtml(res.matched_detail);
+      gstMatchRow = `<tr class="gst-match-row" onclick="selectRow(${i})">
+        <td colspan="${colSpan}" style="padding:2px 8px 3px 52px">
+          <span class="gst-match-label">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            Reflected in GSTR-2B
+          </span>
+          <span class="gst-match-divider">·</span>
+          <span class="gst-match-field">Inv# <span>${refId}</span></span>
+          <span class="gst-match-divider">·</span>
+          <span class="gst-match-field">${detailStr}</span>
+        </td>
+      </tr>`;
+    }
+
     return `<tr onclick="selectRow(${i})" ondblclick="resetRowDecision(${i}, event)" class="${rowCls}" id="row-${i}" title="${decision ? 'Double-click to reset review status' : ''}">
-      <td onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRowSelect(${i},this)" ${selectedRows.has(i)?'checked':''}></td>
-      <td style="white-space:nowrap;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim)">${date}</td>
-      <td style="font-size:0.74rem;color:var(--text-muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(bank)}</td>
-      <td>${typeBadge}</td>
-      <td class="narr-cell" title="${escHtml(t.narration)}">${escHtml(t.narration)}${dupBadge}</td>
-      <td class="amount-cell ${isReceipt?'receipt':'payment'}">${escHtml(t.gross_total)}</td>
-      <td>${classBadge}</td>
-      <td>${refBadge}</td>
-      <td>${confDot}</td>
-    </tr>`;
+      <td style="width:28px;padding:5px 4px;text-align:center" onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRowSelect(${i},this)" ${selectedRows.has(i)?'checked':''}></td>
+      <td class="row-num" style="width:36px;max-width:36px">${(currentPage-1)*pageSize + rowNum + 1}</td>
+      <td style="width:90px;max-width:90px;white-space:nowrap;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim)">${date}</td>
+      <td style="width:76px;max-width:76px;font-size:0.74rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(bank)}</td>
+      <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px">${typeBadge}</td>
+      <td class="narr-cell" title="${escHtml(t.narration)}" onclick="updateFormulaBar(${i},'${escHtml(date)}')">${escHtml(t.narration)}${dupBadge}</td>
+      <td class="amount-cell ${isReceipt?'receipt':'payment'}" style="width:100px;max-width:100px;text-align:right">${escHtml(t.gross_total)}</td>
+      <td style="width:148px;max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px">${classBadge}</td>
+      <td style="width:112px;max-width:112px;text-align:center;white-space:nowrap;padding:5px 6px">${gstBadge}</td>
+      <td style="width:122px;max-width:122px;text-align:center;white-space:nowrap;padding:5px 6px">${tdsBadge}</td>
+      <td style="width:108px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${refBadge}</td>
+      <td style="width:120px;max-width:120px;text-align:center;white-space:nowrap;padding:4px 6px">${itcBadge}</td>
+      <td style="width:36px;max-width:36px;text-align:center">${confDot}</td>
+    </tr>${gstMatchRow}`;
   }).join('');
 }
 
@@ -1822,6 +2605,184 @@ function selectRow(i) {
   renderDetailPanel(i);
 }
 
+// Builds the "Tax Treatment" block for the detail panel: GST and TDS
+// status, rate, computed amount, and any AI reasoning, all pulled from
+// the same taxClassifications store the table cells render from. Keyed
+// by date|narration[:80]|gross_total — same key the backend persists
+// under, so a re-uploaded sheet's tax info shows up here automatically.
+// Returns an empty string if the transaction isn't classified yet (the
+// panel just skips the section in that case — less clutter than an
+// empty placeholder).
+function renderTaxDetailHtml(t) {
+  if (!t) return '';
+  const txnKey = `${(t.date||'').slice(0,10)}|${(t.narration||'').slice(0,80)}|${t.gross_total}`;
+  const tax = taxClassifications[txnKey];
+
+  // Empty state — show a muted hint so the user knows the section exists
+  // but this row simply hasn't been tax-classified yet.
+  if (!tax) {
+    return `
+      <div class="detail-section">
+        <div class="detail-section-title">Tax Treatment</div>
+        <div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5">
+          Not classified yet. Run classification to populate GST &amp; TDS for this transaction.
+        </div>
+      </div>`;
+  }
+
+  const rawAmt = parseFloat(String(t.gross_total).replace(/[^0-9.]/g,'')) || 0;
+
+  // ── GST side ──
+  const gstApp = tax.gst_applicable || 'no';
+  const gstDir = tax.gst_direction  || '';
+  const gstRate = tax.gst_rate      || '';
+  let gstBadgeCls, gstBadgeText, gstDirLabel;
+  if (gstApp === 'no') {
+    gstBadgeCls = 'gst-no'; gstBadgeText = '— No GST'; gstDirLabel = '—';
+  } else if (gstApp === 'reverse_charge') {
+    gstBadgeCls = 'gst-rc'; gstBadgeText = '⇄ Reverse Charge';
+    gstDirLabel = 'Reverse Charge (RCM)';
+  } else if (gstDir === 'in') {
+    gstBadgeCls = 'gst-in';  gstBadgeText = `↓ ${gstRate ? gstRate + '%' : 'ITC'}`;
+    gstDirLabel = 'Inward — ITC Credit';
+  } else {
+    gstBadgeCls = 'gst-out'; gstBadgeText = `↑ ${gstRate ? gstRate + '%' : 'GST'}`;
+    gstDirLabel = 'Outward — GST Collected';
+  }
+  // GST is normally inclusive in bank-statement amounts, so back-calculate:
+  // component = total × rate / (100 + rate). We only show this when a rate
+  // is present and GST actually applies.
+  let gstAmtHtml = '<span style="color:var(--text-muted)">—</span>';
+  if (gstApp !== 'no' && gstApp !== 'reverse_charge' && gstRate && rawAmt) {
+    const rate = parseFloat(gstRate);
+    if (!isNaN(rate) && rate > 0) {
+      const gstComponent = rawAmt * rate / (100 + rate);
+      gstAmtHtml = `<span style="font-family:var(--mono);font-weight:600">₹${gstComponent.toFixed(2)}</span>`;
+    }
+  }
+
+  // ── TDS side ──
+  const tdsApp = tax.tds_applicable || 'no';
+  const tdsDir = tax.tds_direction  || '';
+  const tdsRate = tax.tds_rate      || '';
+  const tdsSection = tax.tds_section || '';
+  let tdsBadgeCls, tdsBadgeText, tdsDirLabel;
+  if (tdsApp === 'no') {
+    tdsBadgeCls = 'tds-no'; tdsBadgeText = '— No TDS'; tdsDirLabel = '—';
+  } else if (tdsDir === 'in') {
+    tdsBadgeCls = 'tds-in';
+    tdsBadgeText = `↓ ${tdsSection || 'TDS'}`;
+    tdsDirLabel = 'Deducted by customer (from our receipt)';
+  } else {
+    tdsBadgeCls = 'tds-out';
+    tdsBadgeText = `↑ ${tdsSection || 'TDS'}`;
+    tdsDirLabel = 'Deducted by us (from vendor payment)';
+  }
+  // TDS is a separate deduction, not embedded in the amount, so straight %.
+  let tdsAmtHtml = '<span style="color:var(--text-muted)">—</span>';
+  if (tdsApp !== 'no' && tdsRate && rawAmt) {
+    const tr = parseFloat(tdsRate);
+    if (!isNaN(tr) && tr > 0) {
+      const tdsComponent = rawAmt * tr / 100;
+      tdsAmtHtml = `<span style="font-family:var(--mono);font-weight:600">₹${tdsComponent.toFixed(2)}</span>`;
+    }
+  }
+
+  // Confirmed-by-user badge (set when the user saves from the tax modal).
+  const confirmedBadge = tax.confirmed
+    ? `<span style="font-size:0.62rem;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:0.06em;margin-left:6px">✓ Confirmed</span>`
+    : '';
+
+  // AI reasoning (carried forward from the classify call). Shown only when
+  // present so we don't ship an empty box when manually-edited rows lack it.
+  const reasoningHtml = tax.ai_reasoning ? `
+    <div class="detail-row" style="margin-top:10px">
+      <div class="detail-label">AI Reasoning</div>
+      <div style="font-size:0.74rem;color:var(--text-muted);line-height:1.55">${escHtml(tax.ai_reasoning)}</div>
+    </div>` : '';
+
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Tax Treatment ${confirmedBadge}</div>
+
+      <div class="detail-row" style="margin-bottom:12px">
+        <div class="detail-label" style="margin-bottom:5px">GST <span class="${gstBadgeCls} gst-badge" style="margin-left:6px">${escHtml(gstBadgeText)}</span></div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:0.76rem;margin-top:4px">
+          <div style="color:var(--text-muted)">Direction</div><div>${escHtml(gstDirLabel)}</div>
+          <div style="color:var(--text-muted)">Rate</div><div>${gstRate ? escHtml(gstRate) + '%' : '<span style="color:var(--text-muted)">—</span>'}</div>
+          <div style="color:var(--text-muted)">Tax Component</div><div>${gstAmtHtml}</div>
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label" style="margin-bottom:5px">TDS <span class="${tdsBadgeCls} tds-badge" style="margin-left:6px">${escHtml(tdsBadgeText)}</span></div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:0.76rem;margin-top:4px">
+          <div style="color:var(--text-muted)">Direction</div><div>${escHtml(tdsDirLabel)}</div>
+          <div style="color:var(--text-muted)">Section</div><div>${tdsSection ? escHtml(tdsSection) : '<span style="color:var(--text-muted)">—</span>'}</div>
+          <div style="color:var(--text-muted)">Rate</div><div>${tdsRate ? escHtml(tdsRate) + '%' : '<span style="color:var(--text-muted)">—</span>'}</div>
+          <div style="color:var(--text-muted)">Tax Component</div><div>${tdsAmtHtml}</div>
+        </div>
+      </div>
+
+      ${reasoningHtml}
+    </div>`;
+}
+
+function renderItcDetailHtml(t) {
+  const txnKey = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+  const itc = itcMatches[txnKey];
+  if (!itc) return '';
+
+  if (itc.itc_status === 'reflected') {
+    const confLabel = itc.confidence === 'high' ? '✓ High confidence' : '⚠ Medium confidence — verify';
+    const totalGst  = (parseFloat(itc.igst)||0) + (parseFloat(itc.cgst)||0) + (parseFloat(itc.sgst)||0);
+    const sigs = itc.signals || {};
+    const sigStr = [sigs.vendor && 'Vendor', sigs.amt && 'Amount', sigs.date && 'Date']
+                    .filter(Boolean).join(' + ');
+    return `<div class="itc-detail-box">
+      <div class="itc-title">✓ Reflected in GSTR-2B / Purchase Register</div>
+      <div class="itc-detail-row">
+        <span class="itc-detail-label">Invoice No</span>
+        <span class="itc-detail-value">${escHtml(itc.invoice_no)}</span>
+      </div>
+      <div class="itc-detail-row">
+        <span class="itc-detail-label">Vendor</span>
+        <span class="itc-detail-value">${escHtml(itc.vendor_name)}</span>
+      </div>
+      <div class="itc-detail-row">
+        <span class="itc-detail-label">Invoice Date</span>
+        <span class="itc-detail-value">${escHtml(itc.invoice_date)}</span>
+      </div>
+      <div class="itc-detail-row">
+        <span class="itc-detail-label">Invoice Value</span>
+        <span class="itc-detail-value">₹${escHtml(itc.invoice_value)}</span>
+      </div>
+      ${totalGst > 0 ? `<div class="itc-detail-row">
+        <span class="itc-detail-label">GST Breakdown</span>
+        <span class="itc-detail-value">${itc.igst > 0 ? 'IGST ₹'+itc.igst : ''} ${itc.cgst > 0 ? 'CGST ₹'+itc.cgst : ''} ${itc.sgst > 0 ? 'SGST ₹'+itc.sgst : ''} <strong>(Total ₹${totalGst.toFixed(2)})</strong></span>
+      </div>` : ''}
+      <div class="itc-detail-row">
+        <span class="itc-detail-label">Matched by</span>
+        <span class="itc-detail-value">${escHtml(sigStr)}</span>
+      </div>
+      <div class="itc-detail-row">
+        <span class="itc-detail-label">Confidence</span>
+        <span class="itc-detail-value">${escHtml(confLabel)}</span>
+      </div>
+      <div class="itc-detail-row">
+        <span class="itc-detail-label">Source</span>
+        <span class="itc-detail-value" style="font-size:0.7rem;color:var(--text-muted)">${escHtml(itc.source_sheet)}</span>
+      </div>
+    </div>`;
+  } else if (itc.itc_status === 'not_reflected') {
+    return `<div class="itc-not-box">
+      ✗ <strong>Not Reflected in GSTR-2B</strong> — No matching invoice found in uploaded purchase register context files.
+      GST ITC may not be claimable for this transaction.
+    </div>`;
+  }
+  return '';
+}
+
 function renderDetailPanel(i) {
   const t = allTransactions[i];
   const res = classificationResults[i];
@@ -1870,8 +2831,8 @@ function renderDetailPanel(i) {
     <div class="detail-section">
       <div class="detail-section-title">Transaction Details</div>
       <div class="detail-row">
-        <div class="detail-label">Bank</div>
-        <div class="detail-value">${escHtml(t.particulars)}</div>
+        <div class="detail-label">Bank / Source</div>
+        <div class="detail-value">${escHtml(t.source || t.particulars || '—')}</div>
       </div>
       <div class="detail-row">
         <div class="detail-label">Type</div>
@@ -1891,12 +2852,15 @@ function renderDetailPanel(i) {
       </div>
     </div>
 
+    ${renderTaxDetailHtml(t)}
+
     ${res ? `
     <div class="ai-result-box">
       <div class="ai-result-title">${icon('ic-sparkle',11)} AI Classification</div>
       <div class="ai-category">${escHtml(res.classification)}</div>
       ${res.reference_id ? `<div style="margin:5px 0"><span class="badge badge-ref">${icon('ic-link',9)} ${escHtml(res.reference_id)}</span></div>` : ''}
       ${res.matched_detail ? `<div style="font-size:0.76rem;margin:4px 0;color:var(--accent2);display:flex;align-items:center;gap:4px">${icon('ic-link',11)} ${escHtml(res.matched_detail)}</div>` : ''}
+      ${renderItcDetailHtml(t)}
       <div style="margin:5px 0;display:flex;align-items:center;gap:5px"><span class="conf-dot conf-${res.confidence}"></span><span style="font-size:0.72rem;color:var(--text-muted)">${res.confidence} confidence</span></div>
       <div class="ai-reasoning">${escHtml(res.reasoning)}</div>
     </div>
@@ -1933,11 +2897,13 @@ function renderDetailPanel(i) {
 function acceptClassification(i) {
   reviewDecisions[i] = 'accepted';
   renderTable(); renderDetailPanel(i); updateStats();
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
 }
 
 function flagClassification(i) {
   reviewDecisions[i] = 'flagged';
   renderTable(); renderDetailPanel(i); updateStats();
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
 }
 
 function resetRowDecision(i, event) {
@@ -1946,6 +2912,7 @@ function resetRowDecision(i, event) {
   delete reviewDecisions[i];
   renderTable(); renderDetailPanel(i); updateStats();
   showToast('Review status reset.');
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
 }
 
 async function submitFeedback(i) {
@@ -2058,11 +3025,13 @@ function renderReviewCard() {
 function reviewAccept() {
   const i = reviewQueue[reviewPos];
   reviewDecisions[i] = 'accepted'; reviewPos++; renderReviewCard();
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
 }
 function reviewReject() { document.getElementById('reviewCorrection').classList.add('show'); }
 function reviewFlag() {
   const i = reviewQueue[reviewPos];
   reviewDecisions[i] = 'flagged'; reviewPos++; renderReviewCard();
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
 }
 function reviewSkip() { reviewPos++; renderReviewCard(); }
 function reviewCancelCorrection() { document.getElementById('reviewCorrection').classList.remove('show'); }
@@ -2107,6 +3076,7 @@ async function _doReviewCorrection(i, corrected, shouldLearn, keyword) {
     });
   }
   reviewPos++; renderReviewCard();
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
 }
 
 function handleReviewKey(e) {
@@ -2123,8 +3093,14 @@ function handleReviewKey(e) {
 document.addEventListener('keydown', function(e) {
   if (document.getElementById('reviewOverlay').classList.contains('show')) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
-  if (selectedTxnIndex === null || !classificationResults[selectedTxnIndex]) return;
-  if (e.key === 'Enter') {
+  if (selectedTxnIndex === null) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault(); navigateRow(1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault(); navigateRow(-1);
+  } else if (!classificationResults[selectedTxnIndex]) {
+    return; // shortcuts below only apply to classified transactions
+  } else if (e.key === 'Enter') {
     e.preventDefault();
     acceptClassification(selectedTxnIndex);
     navigateRow(1);
@@ -2137,10 +3113,6 @@ document.addEventListener('keydown', function(e) {
     // Focus the feedback category select in detail panel
     const cat = document.getElementById('feedbackCat');
     if (cat) { cat.focus(); showToast('Select correct category, then Save Correction'); }
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault(); navigateRow(1);
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault(); navigateRow(-1);
   }
 });
 
@@ -2170,6 +3142,57 @@ async function classifySingle(i) {
   });
   const data = await res.json();
   if (data.result) { classificationResults[i] = data.result; renderTable(); renderDetailPanel(i); updateStats(); }
+}
+
+
+async function runItcMatch() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) {
+    alert('Please open a workspace sheet node first before running ITC Match.');
+    return;
+  }
+  const btn = document.getElementById('itcMatchBtn');
+  btn.disabled = true;
+  btn.innerHTML = btn.innerHTML.replace('ITC Match', 'Matching…');
+  try {
+    const res  = await fetch(`/api/workspace/nodes/${nodeId}/gst_itc_match`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    // Merge into store
+    Object.assign(itcMatches, data.matches || {});
+    // Update badge
+    const badge = document.getElementById('itcMatchBadge');
+    if (badge) {
+      badge.textContent = `${data.reflected} reflected`;
+      badge.style.display = '';
+    }
+    renderTable();
+    // Show summary toast
+    const msg = `ITC Match complete: ${data.reflected} reflected, ${data.not_reflected} not reflected out of ${data.saved} transactions.`;
+    showToast(msg, 'success');
+  } catch(e) {
+    showToast('ITC Match failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = btn.innerHTML.replace('Matching…', 'ITC Match');
+  }
+}
+
+async function loadItcMatches(nodeId) {
+  if (!nodeId) return;
+  try {
+    const res  = await fetch(`/api/workspace/nodes/${nodeId}/gst_itc_match`);
+    const data = await res.json();
+    if (res.ok && data.matches) {
+      Object.assign(itcMatches, data.matches);
+      const badge = document.getElementById('itcMatchBadge');
+      if (badge && data.reflected > 0) {
+        badge.textContent = `${data.reflected} reflected`;
+        badge.style.display = '';
+      }
+      if (Object.keys(data.matches).length > 0) renderTable();
+    }
+  } catch(e) { /* silent — ITC data is optional */ }
 }
 
 async function classifyAll() {
@@ -2343,6 +3366,23 @@ const classifyViaStream = function classifyViaStream(indices) {
             if (r.original_index !== undefined) {
               classificationResults[r.original_index] = r;
             }
+            // Auto-populate GST/TDS if the classify endpoint returned tax fields
+            if (r.gst_applicable || r.tds_applicable) {
+              const t = allTransactions[r.original_index];
+              if (t) {
+                const txnKey = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+                taxClassifications[txnKey] = {
+                  gst_applicable: r.gst_applicable || 'no',
+                  gst_direction:  r.gst_direction  || '',
+                  gst_rate:       r.gst_rate        || '',
+                  tds_applicable: r.tds_applicable  || 'no',
+                  tds_direction:  r.tds_direction   || '',
+                  tds_section:    r.tds_section     || '',
+                  tds_rate:       r.tds_rate        || '',
+                  reasoning:      r.reasoning       || '',
+                };
+              }
+            }
           });
 
           // Flash sub-bar to 100% to signal a sub-batch landed
@@ -2369,6 +3409,17 @@ const classifyViaStream = function classifyViaStream(indices) {
         }
 
         if (event.done) {
+          // Absorb ITC match results sent alongside the done event
+          if (event.itc_matches && typeof event.itc_matches === 'object') {
+            Object.assign(itcMatches, event.itc_matches);
+            const reflected = event.itc_reflected || 0;
+            const badge = document.getElementById('itcMatchBadge');
+            if (badge) {
+              badge.textContent = `${reflected} reflected`;
+              badge.style.display = reflected > 0 ? '' : 'none';
+            }
+            renderTable(); // re-render so ITC badges appear immediately
+          }
           cleanup();
           document.getElementById('progressSubFill').style.width = completed > 0 ? '100%' : '0%';
           await sleep(400);
@@ -2396,14 +3447,86 @@ function toggleSelectAll(cb) {
 
 // ---- Export ----
 function exportCSV() {
-  const rows = [['Date','Particulars','Voucher Type','Voucher No','Narration','Gross Total',
-    'AI Classification','Reference ID','Matched Detail','Confidence','Reasoning','Review Decision','Duplicate Flag']];
+  // Column headers — core transaction + tax fields
+  const COLS = ['Date','Particulars','Voucher Type','Voucher No','Narration','Gross Total',
+    'AI Classification','Reference ID','Confidence','Reasoning','Review Decision','Duplicate Flag',
+    'GST Applicable','GST Direction','GST Rate (%)','GST Component (₹)',
+    'TDS Applicable','TDS Direction','TDS Section','TDS Rate (%)','TDS Component (₹)',
+    'ITC Claim Status','ITC Confidence'];
+  const NCOLS = COLS.length;
+
+  // Sub-row header (indented label + GST working fields, same width as main row)
+  // Columns 0-4 are used for the label + GST data; rest blank
+  const rows = [COLS];
+
   allTransactions.forEach((t, i) => {
-    const res = classificationResults[i] || {};
-    rows.push([t.date,t.particulars,t.voucher_type,t.voucher_no,t.narration,t.gross_total,
-      res.classification||'',res.reference_id||'',res.matched_detail||'',res.confidence||'',
-      res.reasoning||'',reviewDecisions[i]||'',duplicatesMap[String(i)]?'YES':'']);
+    const res     = classificationResults[i] || {};
+    const txnKey  = `${(t.date||'').slice(0,10)}|${(t.narration||'').slice(0,80)}|${t.gross_total}`;
+    const tax     = taxClassifications[txnKey] || {};
+    const rawAmt  = parseFloat(String(t.gross_total).replace(/[^0-9.]/g,'')) || 0;
+    const itcRow  = itcMatches[txnKey] || {};
+
+    // GST component (inclusive back-calc)
+    let gstComp = '';
+    if (tax.gst_applicable && tax.gst_applicable !== 'no'
+        && tax.gst_applicable !== 'reverse_charge' && tax.gst_rate && rawAmt) {
+      const r = parseFloat(tax.gst_rate);
+      if (!isNaN(r) && r > 0) gstComp = (rawAmt * r / (100 + r)).toFixed(2);
+    }
+    // TDS component
+    let tdsComp = '';
+    if (tax.tds_applicable && tax.tds_applicable !== 'no' && tax.tds_rate && rawAmt) {
+      const r = parseFloat(tax.tds_rate);
+      if (!isNaN(r) && r > 0) tdsComp = (rawAmt * r / 100).toFixed(2);
+    }
+
+    const itcStatus = itcRow.itc_status || '';
+    const itcConf   = itcRow.confidence || '';
+
+    // ── Main transaction row ──────────────────────────────────────────────
+    rows.push([
+      t.date, t.particulars, t.voucher_type, t.voucher_no, t.narration, t.gross_total,
+      res.classification||'', res.reference_id||'', res.confidence||'',
+      res.reasoning||'', reviewDecisions[i]||'', duplicatesMap[String(i)]?'YES':'',
+      tax.gst_applicable||'', tax.gst_direction||'', tax.gst_rate||'', gstComp,
+      tax.tds_applicable||'', tax.tds_direction||'', tax.tds_section||'', tax.tds_rate||'', tdsComp,
+      itcStatus, itcConf,
+    ]);
+
+    // ── GST Working sub-row: only when a GSTR-2B match was found ─────────
+    const hasItc = itcRow.itc_status === 'reflected' && itcRow.invoice_no;
+    if (hasItc) {
+      const igst  = parseFloat(itcRow.igst||0);
+      const cgst  = parseFloat(itcRow.cgst||0);
+      const sgst  = parseFloat(itcRow.sgst||0);
+      const total = (igst + cgst + sgst).toFixed(2);
+      const gstBreakdown = [
+        igst > 0 ? `IGST ₹${igst}` : '',
+        cgst > 0 ? `CGST ₹${cgst}` : '',
+        sgst > 0 ? `SGST ₹${sgst}` : '',
+      ].filter(Boolean).join(' | ');
+
+      // Build a readable sub-row:
+      // Col 0: marker
+      // Col 1: Vendor name
+      // Col 2: Invoice No
+      // Col 3: Invoice Date
+      // Col 4: Invoice Value
+      // Col 5: GST breakdown
+      // Col 6: Source sheet
+      // Remaining cols: blank (so it's clearly a sub-row, not a transaction)
+      const subRow = new Array(NCOLS).fill('');
+      subRow[0]  = '  ↳ GST Working';
+      subRow[1]  = itcRow.vendor_name   || '';
+      subRow[2]  = `Inv# ${itcRow.invoice_no}`;
+      subRow[3]  = itcRow.invoice_date  || '';
+      subRow[4]  = itcRow.invoice_value ? `₹${itcRow.invoice_value}` : '';
+      subRow[5]  = gstBreakdown ? `GST: ${gstBreakdown} (Total ₹${total})` : '';
+      subRow[6]  = itcRow.source_sheet  || '';
+      rows.push(subRow);
+    }
   });
+
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
@@ -2487,15 +3610,20 @@ document.getElementById('kwModalOverlay').addEventListener('click', function(e) 
 document.getElementById('kwInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmKwModal(); });
 
 // ======== Context Picker helpers (shared) ========
-function openContextPicker(tabs) {
-  selectedContextTabs = new Set();
+function openContextPicker(tabs, preselected) {
+  // `preselected` (optional array) lets the caller seed which tabs are
+  // already chosen — used by the "Edit context sheets" flow on an
+  // already-linked sheet so existing selections stay highlighted.
+  const pre = Array.isArray(preselected) ? preselected : [];
+  selectedContextTabs = new Set(pre.filter(t => tabs.includes(t)));
   const list = document.getElementById('contextPickerList');
-  list.innerHTML = tabs.map(t =>
-    `<div class="tab-item" id="ctxitem-${escHtml(t)}" onclick="toggleContextTab('${escHtml(t).replace(/'/g,"\\'")}', this)">
+  list.innerHTML = tabs.map(t => {
+    const sel = selectedContextTabs.has(t) ? ' selected' : '';
+    return `<div class="tab-item${sel}" id="ctxitem-${escHtml(t)}" onclick="toggleContextTab('${escHtml(t).replace(/'/g,"\\'")}', this)">
       ${icon('ic-sheet',13)} ${escHtml(t)}
       <span class="tab-check">${icon('ic-check',13)}</span>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
   document.getElementById('contextPickerOverlay').classList.add('show');
   document.getElementById('contextPickerList').dataset.tabs = JSON.stringify(tabs);
 }
@@ -2524,6 +3652,9 @@ function toggleSelectAllContext() {
 
 function closeContextPicker() {
   document.getElementById('contextPickerOverlay').classList.remove('show');
+  // Drop any pending workspace-flow callback so a Skip/Cancel doesn't
+  // fire on the next legitimate context-picker invocation.
+  _wsContextConfirmCallback = null;
 }
 
 function closeTabPicker() {
@@ -2533,6 +3664,10 @@ function closeTabPicker() {
 
 document.getElementById('tabPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeTabPicker(); });
 document.getElementById('contextPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeContextPicker(); });
+(function(){
+  const cv = document.getElementById('ctxViewerOverlay');
+  if (cv) cv.addEventListener('click', function(e){ if (e.target === this) closeContextSheetViewer(); });
+})();
 
 // ======== Google Drive internal helpers ========
 async function openDriveModal() {
@@ -2649,7 +3784,7 @@ function _wsRenderLevel(parentId, depth) {
       ? `<svg class="icon ws-node-icon" width="13" height="13" style="color:var(--yellow)"><use href="#ic-layers"/></svg>`
       : `<svg class="icon ws-node-icon" width="13" height="13" style="color:var(--accent2)"><use href="#ic-sheet"/></svg>`;
 
-    const attachedBadge = (node.node_type === 'sheet' && node.sheet_id)
+    const attachedBadge = (node.node_type === 'sheet' && (node.sheet_id || node.excel_file_id))
       ? `<span style="font-size:0.6rem;background:var(--accent2-dim);color:var(--accent2);padding:1px 5px;border-radius:10px;margin-left:2px">✓</span>`
       : '';
 
@@ -2657,6 +3792,7 @@ function _wsRenderLevel(parentId, depth) {
       <div class="ws-node-actions">
         ${isFolder ? `<button class="ws-node-btn" title="New subfolder" onclick="event.stopPropagation();wsPromptNewFolder(${node.id})">📁+</button>
         <button class="ws-node-btn" title="Attach sheet here" onclick="event.stopPropagation();wsAttachSheet(${node.id})">📎</button>` : ''}
+        ${(!isFolder && (node.sheet_id || node.excel_file_id)) ? `<button class="ws-node-btn" title="Edit context sheets" onclick="event.stopPropagation();wsEditContextTabs(${node.id})">🧩</button>` : ''}
         <button class="ws-node-btn" title="Rename" onclick="event.stopPropagation();wsRenameNode(${node.id})">✏️</button>
         <button class="ws-node-btn danger" title="Delete" onclick="event.stopPropagation();wsDeleteNode(${node.id})">🗑</button>
       </div>`;
@@ -2745,7 +3881,7 @@ function wsSelectNode(id) {
                 ? `<svg class="icon" width="13" height="13" style="color:var(--yellow)"><use href="#ic-layers"/></svg>`
                 : `<svg class="icon" width="13" height="13" style="color:var(--accent2)"><use href="#ic-sheet"/></svg>`}
               ${escHtml(c.name)}
-              ${c.node_type === 'sheet' && c.sheet_id
+              ${c.node_type === 'sheet' && (c.sheet_id || c.excel_file_id)
                 ? `<span style="margin-left:auto;font-size:0.7rem;color:var(--accent2)">📎 ${escHtml(c.sheet_name)} › ${escHtml(c.tab_name)}</span>`
                 : c.node_type === 'sheet' ? `<span style="margin-left:auto;font-size:0.7rem;color:var(--text-muted)">No sheet attached</span>` : ''}
             </div>`).join('')}
@@ -2760,23 +3896,73 @@ function wsSelectNode(id) {
 }
 
 function wsRenderSheetPane(node) {
-  const hasSheet = !!(node.sheet_id && node.tab_name);
+  // A node is "attached" if it has either a Google Sheet id or an uploaded Excel id.
+  const isExcel = (node.source_type === 'excel');
+  const hasSheet = !!(node.tab_name && (node.sheet_id || node.excel_file_id));
   const ctxTabs = node.context_tabs || [];
+  const ctxTabsHtml = ctxTabs.length > 0
+    ? `<div style="margin-top:10px">
+         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin-bottom:5px">
+           Google Sheet Context Tabs (${ctxTabs.length}) — click to view
+         </div>
+         <div style="display:flex;gap:6px;flex-wrap:wrap">
+           ${ctxTabs.map(t => `
+             <button class="btn btn-ghost btn-sm ws-ctx-chip"
+                     style="padding:4px 10px;font-size:0.74rem;border:1px solid var(--accent2-dim);color:var(--accent2);background:rgba(0,0,0,0.02)"
+                     onclick="event.stopPropagation();openContextSheetViewer(${node.id}, '${escHtml(t).replace(/'/g,"\\'")}')"
+                     title="View contents of '${escHtml(t)}'">
+               ${icon('ic-sheet',11)} ${escHtml(t)}
+             </button>`).join('')}
+         </div>
+       </div>`
+    : `<div style="margin-top:10px;font-size:0.74rem;color:var(--text-muted);font-style:italic">
+         No Google Sheet context tabs added yet.
+       </div>`;
+  // Uploaded-files section is async-populated by wsLoadContextFiles, which
+  // re-renders the inner container below once the GET returns.
+  const uploadedFilesHtml = `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)">
+          Uploaded Context Files
+        </div>
+        <div style="display:flex;gap:6px">
+          <input type="file" id="wsCtxFileInput-${node.id}" multiple
+                 accept=".xlsx,.xls,.xlsm,.csv"
+                 style="display:none"
+                 onchange="wsUploadContextFiles(${node.id}, this)">
+          <button class="btn btn-secondary btn-sm"
+                  onclick="document.getElementById('wsCtxFileInput-${node.id}').click()">
+            ${icon('ic-upload',11)} Upload Files
+          </button>
+        </div>
+      </div>
+      <div id="wsCtxFilesContainer-${node.id}" style="font-size:0.74rem;color:var(--text-muted);font-style:italic">
+        Loading uploaded files…
+      </div>
+    </div>`;
+  // Kick off the async load; safe to call before the container exists in
+  // the DOM because the function double-checks before writing.
+  setTimeout(() => wsLoadContextFiles(node.id), 0);
   return `
     <div>
-      <div class="ws-section-label">Attached Sheet</div>
+      <div class="ws-section-label">${isExcel ? 'Attached Excel File' : 'Attached Sheet'}</div>
       ${hasSheet ? `
         <div class="ws-attached-box">
-          <div class="ws-attached-title">✓ Sheet Attached</div>
-          <div class="ws-attached-name">${escHtml(node.sheet_name)}</div>
+          <div class="ws-attached-title">${isExcel ? '✓ Excel File Attached' : '✓ Sheet Attached'}</div>
+          <div class="ws-attached-name">${isExcel ? '📄 ' : ''}${escHtml(node.sheet_name)}</div>
           <div style="font-size:0.78rem;color:var(--text-muted)">Tab: <strong>${escHtml(node.tab_name)}</strong></div>
-          ${ctxTabs.length > 0 ? `<div style="font-size:0.75rem;margin-top:6px;color:var(--accent2)">Context tabs: ${ctxTabs.map(escHtml).join(', ')}</div>` : ''}
+          ${ctxTabsHtml}
+          ${uploadedFilesHtml}
           <div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="wsOpenClassifier(${node.id})">
               ${icon('ic-sparkle',12)} Open Classifier
             </button>
+            <button class="btn btn-secondary btn-sm" onclick="wsEditContextTabs(${node.id})">
+              ${icon('ic-context',12)} ${ctxTabs.length > 0 ? 'Edit' : 'Add'} ${isExcel ? 'Excel Tab' : 'Google Sheet'} Context
+            </button>
             <button class="btn btn-secondary btn-sm" onclick="wsAttachSheet(${node.id})">
-              ${icon('ic-refresh',12)} Change Sheet
+              ${icon('ic-refresh',12)} Change ${isExcel ? 'File' : 'Sheet'}
             </button>
           </div>
         </div>
@@ -2784,7 +3970,7 @@ function wsRenderSheetPane(node) {
         <div style="padding:16px;border:2px dashed var(--border);border-radius:10px;text-align:center;color:var(--text-muted);font-size:0.82rem">
           No sheet attached yet.<br>
           <button class="btn btn-primary" style="margin-top:10px" onclick="wsAttachSheet(${node.id})">
-            ${icon('ic-drive',12)} Attach Google Sheet
+            ${icon('ic-drive',12)} Attach Google Sheet or Excel
           </button>
         </div>
       `}
@@ -2854,6 +4040,10 @@ let _wsPendingAttachNodeId = null;
 let _wsPendingSheetId = null;
 let _wsPendingSheetName = null;
 let _wsPendingAllTabs = [];
+// Tracks whether the in-flight attach is for a Google Sheet ('gsheet') or
+// an uploaded Excel ('excel'). Set by the picker / file-upload handlers.
+let _wsPendingSource = 'gsheet';
+let _wsPendingExcelFileId = null;
 
 async function wsAttachSheet(nodeId) {
   // If it's a folder node, first create a sheet-type child node
@@ -2882,6 +4072,8 @@ async function wsAttachSheet(nodeId) {
 async function _wsDriveSheetPicked(sheetId, sheetName) {
   closeDriveModal();
   if (!_wsPendingAttachNodeId) return;
+  _wsPendingSource = 'gsheet';
+  _wsPendingExcelFileId = null;
   _wsPendingSheetId = sheetId;
   _wsPendingSheetName = sheetName;
   // Show tab picker overlay
@@ -2907,6 +4099,74 @@ async function _wsDriveSheetPicked(sheetId, sheetName) {
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Excel-source attach flow.
+// Triggered by the "Upload Excel instead" button in the Drive modal.
+// 1) Uploads the file to the workspace node's excel-source endpoint.
+// 2) Closes the drive modal, opens the existing tab picker overlay
+//    populated with the tabs found in the uploaded file.
+// 3) The user picks a transaction tab → wsConfirmTabForAttach runs the
+//    same flow as Google Sheets, ending in _wsFinishAttach which knows
+//    to PATCH the node with source_type='excel'.
+// ──────────────────────────────────────────────────────────────────────
+async function _wsExcelFilePicked(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  // Reset so picking the same file twice still fires the change event.
+  try { inputEl.value = ''; } catch(e) {}
+  if (!file) return;
+  if (!_wsPendingAttachNodeId) {
+    showToast('No workspace node selected to attach to.');
+    return;
+  }
+  closeDriveModal();
+
+  // Show tab picker in a loading state while we upload + parse.
+  const overlay = document.getElementById('tabPickerOverlay');
+  const tabList = document.getElementById('tabPickerList');
+  overlay.classList.add('show');
+  tabList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div><br>Uploading & parsing ${escHtml(file.name)}…</div>`;
+
+  const fd = new FormData();
+  fd.append('file', file);
+  let data;
+  try {
+    const res = await fetch(`/api/workspace/nodes/${_wsPendingAttachNodeId}/upload_excel_source`, {
+      method: 'POST', body: fd
+    });
+    data = await res.json();
+    if (!res.ok || !data.ok) {
+      tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem;padding:12px">
+        Upload failed: ${escHtml(data && data.error || 'unknown error')}
+      </div>`;
+      return;
+    }
+  } catch (e) {
+    tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem;padding:12px">Upload error: ${escHtml(String(e))}</div>`;
+    return;
+  }
+
+  // Wire pending-attach state for the existing tab-confirm flow.
+  _wsPendingSource = 'excel';
+  _wsPendingExcelFileId = data.excel_file_id;
+  _wsPendingSheetId = '';                       // not a gsheet
+  _wsPendingSheetName = data.filename;          // shown as the "sheet name" in UI
+  _wsPendingAllTabs = (data.tabs || []).map(t => t.name);
+
+  if (_wsPendingAllTabs.length === 0) {
+    tabList.innerHTML = `<div style="color:var(--red);font-size:0.82rem;padding:12px">No readable tabs found in this file.</div>`;
+    return;
+  }
+
+  // Render tabs with a row-count hint so the user can spot the right one.
+  tabList.innerHTML = data.tabs.map(t => `
+    <div class="tab-item" onclick="wsConfirmTabForAttach('${escHtml(t.name).replace(/'/g,"\\'")}')">
+      ${icon('ic-sheet',13)}
+      <span style="flex:1;min-width:0">${escHtml(t.name)}</span>
+      <span style="font-size:0.72rem;color:var(--text-muted)">${t.row_count} rows · ${t.col_count} cols</span>
+    </div>
+  `).join('');
+}
+
 async function wsConfirmTabForAttach(tabName) {
   closeTabPicker();
   // Context picker
@@ -2926,28 +4186,533 @@ let _wsContextConfirmCallback = null;
 
 async function _wsFinishAttach(tabName, ctxTabs) {
   const nodeId = _wsPendingAttachNodeId;
+  // Payload differs depending on which source we're attaching.
+  // For excel: source_type='excel', excel_file_id set, sheet_id cleared.
+  // For gsheet: source_type='gsheet', sheet_id/sheet_name set.
+  const payload = {
+    tab_name: tabName,
+    context_tabs: ctxTabs,
+    source_type: _wsPendingSource || 'gsheet',
+  };
+  if (_wsPendingSource === 'excel') {
+    payload.excel_file_id = _wsPendingExcelFileId;
+    payload.sheet_id      = '';                          // not a gsheet
+    payload.sheet_name    = _wsPendingSheetName || '';   // = filename
+  } else {
+    payload.sheet_id      = _wsPendingSheetId;
+    payload.sheet_name    = _wsPendingSheetName;
+    payload.excel_file_id = null;
+  }
   const res = await fetch(`/api/workspace/nodes/${nodeId}`, {
     method: 'PATCH', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      sheet_id: _wsPendingSheetId,
-      sheet_name: _wsPendingSheetName,
-      tab_name: tabName,
-      context_tabs: ctxTabs
-    })
+    body: JSON.stringify(payload)
   });
   const data = await res.json();
   if (data.node) {
     const idx = wsNodes.findIndex(n => n.id === nodeId);
     if (idx >= 0) wsNodes[idx] = data.node;
   }
+  const wasExcel = (_wsPendingSource === 'excel');
+  const attachedName = _wsPendingSheetName || '';
+  // Reset pending state.
   _wsPendingAttachNodeId = null;
+  _wsPendingSource = 'gsheet';
+  _wsPendingExcelFileId = null;
+  _wsPendingSheetId = null;
+  _wsPendingSheetName = null;
   wsRenderTree();
   wsSelectNode(nodeId);
   // If we were attaching from drive home view (not the workspace modal), refresh it
   if (!document.getElementById('workspaceModalOverlay').classList.contains('show')) {
     renderDriveHome(window._driveCurrentFolderId);
   }
-  showToast(`Sheet attached: ${_wsPendingSheetName} › ${tabName}`);
+  showToast(`${wasExcel ? 'Excel' : 'Sheet'} attached: ${attachedName} › ${tabName}`);
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Edit context sheets on a node that ALREADY has a sheet attached.
+// Fetches the spreadsheet's tab list, opens the context picker with
+// existing selections preselected, and PATCHes the new selection back
+// to the node. Works from both the workspace modal and the drive home.
+// ──────────────────────────────────────────────────────────────────────
+async function wsEditContextTabs(nodeId) {
+  const node = wsGetNode(nodeId);
+  // Allow if the node has either a Google Sheet attached OR an Excel file attached.
+  const hasAttachment = !!(node && node.node_type === 'sheet'
+                           && (node.sheet_id || node.excel_file_id));
+  if (!hasAttachment) {
+    showToast('Attach a sheet first before adding context.');
+    return;
+  }
+  // Show a quick loading toast while we fetch tabs.
+  showToast('Loading worksheet tabs…');
+  let payload;
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/worksheets`);
+    payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || 'Failed to load tabs');
+  } catch (e) {
+    showToast('Could not load tabs: ' + (e.message || e));
+    return;
+  }
+  const allTabs = payload.tabs || [];
+  const primary = payload.primary_tab || node.tab_name || '';
+  const existingCtx = payload.context_tabs || node.context_tabs || [];
+  // Don't offer the primary tab as a context tab.
+  const otherTabs = allTabs.filter(t => t !== primary);
+  if (otherTabs.length === 0) {
+    showToast('This spreadsheet has no other tabs to use as context.');
+    return;
+  }
+  openContextPicker(otherTabs, existingCtx);
+  // Hook the confirm callback so the shared confirmContextSelection
+  // routes the selection back here instead of the legacy active-sheet flow.
+  _wsContextConfirmCallback = async (ctxTabs) => {
+    try {
+      const res = await fetch(`/api/workspace/nodes/${nodeId}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ context_tabs: ctxTabs })
+      });
+      const data = await res.json();
+      if (data.node) {
+        const idx = wsNodes.findIndex(n => n.id === nodeId);
+        if (idx >= 0) wsNodes[idx] = data.node;
+        wsRenderTree();
+        wsSelectNode(nodeId);
+        if (!document.getElementById('workspaceModalOverlay').classList.contains('show')) {
+          renderDriveHome(window._driveCurrentFolderId);
+        }
+        // Keep the classifier-toolbar "Add/Edit Context" button in sync.
+        refreshClassifierCtxBtn();
+        showToast(`Context sheets updated (${ctxTabs.length} selected)`);
+      } else {
+        showToast('Update failed: ' + (data.error || 'unknown error'));
+      }
+    } catch (e) {
+      showToast('Update failed: ' + (e.message || e));
+    }
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Classifier-toolbar shortcut: edit context sheets for the currently
+// open classifier node (window._wsCurrentNodeId). Falls back to a hint
+// if no node is active.
+// ──────────────────────────────────────────────────────────────────────
+function classifierEditContext() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) {
+    showToast('Open a sheet from your workspace first.');
+    return;
+  }
+  const node = wsGetNode(nodeId);
+  if (!node || (!node.sheet_id && !node.excel_file_id)) {
+    showToast('No sheet is attached to this classifier yet.');
+    return;
+  }
+  wsEditContextTabs(nodeId);
+}
+
+// Keeps the merged Context toolbar button's label in sync with the
+// current node's context-tab count: "Add Context" when empty,
+// "Context (N)" when some are linked. N counts both Google Sheet context
+// tabs and selected tabs from any uploaded context files. The button
+// itself is always visible (since "Upload file" works without an active
+// node) — only the "Add from sheet" menu item depends on a node.
+// Safe to call any time — does nothing if the button isn't in the DOM yet.
+function refreshClassifierCtxBtn() {
+  const btn   = document.getElementById('ctxMenuBtn');
+  const label = document.getElementById('ctxMenuBtnLabel');
+  if (!btn || !label) return;
+
+  const nodeId = window._wsCurrentNodeId;
+  const node = nodeId ? wsGetNode(nodeId) : null;
+  const nodeReady = !!(node && node.node_type === 'sheet'
+                       && (node.sheet_id || node.excel_file_id));
+
+  // Button is always shown (always-on Upload file path). Label reflects
+  // context-tab count if a node is open, otherwise plain "Add Context".
+  btn.style.display = '';
+  if (nodeReady) {
+    const gsTabsCount = (node.context_tabs || []).length;
+    const uploadedFiles = (window._wsCtxFilesByNode || {})[nodeId] || [];
+    const uploadedTabsCount = uploadedFiles.reduce(
+      (sum, f) => sum + ((f.selected_tabs || []).length), 0);
+    const total = gsTabsCount + uploadedTabsCount;
+    label.textContent = total > 0 ? `Context (${total})` : 'Add Context';
+  } else {
+    label.textContent = 'Add Context';
+  }
+
+  // Sync the "Add from sheet" menu item's disabled state and helper text.
+  const item = document.getElementById('ctxMenuAddFromSheet');
+  const sub  = document.getElementById('ctxMenuAddFromSheetSub');
+  if (item) {
+    if (nodeReady) {
+      item.classList.remove('disabled');
+      item.removeAttribute('title');
+      if (sub) sub.textContent = 'Pick tabs from a sheet to use as context';
+    } else {
+      item.classList.add('disabled');
+      item.setAttribute('title', 'Open a sheet from your workspace first');
+      if (sub) sub.textContent = 'Open a sheet from your workspace first';
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Merged Context menu — opens the popup that lets the user either pick
+// context tabs from a sheet ("Add from sheet") or upload a new file
+// ("Upload file"). Same two flows that used to live in two separate
+// toolbar buttons, now consolidated since they target the same feature.
+// ──────────────────────────────────────────────────────────────────────
+function toggleCtxMenu(e) {
+  e.stopPropagation();
+  // Refresh disabled state every time we open, in case the active node changed.
+  refreshClassifierCtxBtn();
+  const popup = document.getElementById('ctxMenuPopup');
+  if (!popup) return;
+  const isOpen = popup.classList.contains('show');
+  // Close any other open popups (column manager, etc.) for consistency.
+  document.querySelectorAll('.col-manager-popup.show, .ctx-menu-popup.show')
+          .forEach(p => p.classList.remove('show'));
+  if (!isOpen) popup.classList.add('show');
+}
+
+function closeCtxMenu() {
+  const popup = document.getElementById('ctxMenuPopup');
+  if (popup) popup.classList.remove('show');
+}
+
+function ctxMenuPickFromSheet() {
+  const item = document.getElementById('ctxMenuAddFromSheet');
+  if (item && item.classList.contains('disabled')) {
+    // Same toast the old Add Context button used to show, so the user
+    // still gets a clear hint when this path isn't available yet.
+    showToast('Open a sheet from your workspace first.');
+    return;
+  }
+  closeCtxMenu();
+  classifierEditContext();
+}
+
+function ctxMenuUploadFile() {
+  closeCtxMenu();
+  openUploadSheetsPanel();
+}
+
+// Click-outside closes the context menu (matches the column manager's behavior).
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.ctx-menu-wrap')) closeCtxMenu();
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// Context Sheet Viewer — fetches a context tab's rows from the backend
+// and renders them in a modal so the user can see exactly what data
+// the classifier is using as reference.
+// ──────────────────────────────────────────────────────────────────────
+async function openContextSheetViewer(nodeId, tabName) {
+  const overlay = document.getElementById('ctxViewerOverlay');
+  if (!overlay) return;
+  const titleEl = document.getElementById('ctxViewerTitle');
+  const subEl   = document.getElementById('ctxViewerSub');
+  const bodyEl  = document.getElementById('ctxViewerBody');
+  const node = wsGetNode(nodeId);
+  titleEl.textContent = tabName;
+  subEl.textContent = node ? `from "${node.sheet_name}"` : '';
+  bodyEl.innerHTML = `
+    <div style="text-align:center;padding:40px;color:var(--text-muted)">
+      <div class="spinner" style="margin:0 auto 10px"></div>
+      Loading context sheet…
+    </div>`;
+  overlay.classList.add('show');
+  window._ctxViewerCurrent = { nodeId, tabName };
+  try {
+    const res = await fetch(
+      `/api/workspace/nodes/${nodeId}/context_tab_data?tab=${encodeURIComponent(tabName)}&limit=500`
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load');
+    renderContextSheetViewer(data);
+  } catch (e) {
+    bodyEl.innerHTML = `
+      <div style="padding:20px;color:var(--red);font-size:0.85rem">
+        Failed to load: ${escHtml(String(e.message || e))}
+      </div>`;
+  }
+}
+
+function renderContextSheetViewer(data) {
+  const bodyEl = document.getElementById('ctxViewerBody');
+  const headers = data.headers || [];
+  const rows = data.rows || [];
+  if (headers.length === 0 && rows.length === 0) {
+    bodyEl.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-muted)">This tab is empty.</div>`;
+    return;
+  }
+  const truncatedNote = data.truncated
+    ? `<div style="padding:6px 10px;background:var(--yellow-dim,#fff3cd);color:var(--yellow,#856404);font-size:0.74rem;border-radius:6px;margin-bottom:8px">
+         Showing first ${data.limit} rows of ${data.total_rows} total — large sheets are truncated for display.
+       </div>`
+    : '';
+  const statsLine = `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:8px">
+      ${rows.length} row${rows.length === 1 ? '' : 's'} · ${headers.length} column${headers.length === 1 ? '' : 's'}
+    </div>`;
+  const thead = `<thead><tr>
+      <th style="position:sticky;top:0;background:var(--bg-elev,#f5f5f5);padding:6px 8px;text-align:left;font-size:0.7rem;color:var(--text-muted);border-bottom:1px solid var(--border);width:40px">#</th>
+      ${headers.map(h => `<th style="position:sticky;top:0;background:var(--bg-elev,#f5f5f5);padding:6px 8px;text-align:left;font-size:0.74rem;border-bottom:1px solid var(--border);white-space:nowrap">${escHtml(h)}</th>`).join('')}
+    </tr></thead>`;
+  const tbody = `<tbody>${rows.map((r, i) => `
+      <tr>
+        <td style="padding:5px 8px;font-size:0.72rem;color:var(--text-muted);border-bottom:1px solid var(--border-soft,#eee)">${i + 1}</td>
+        ${headers.map((_, ci) => `<td style="padding:5px 8px;font-size:0.78rem;border-bottom:1px solid var(--border-soft,#eee);white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(r[ci] ?? '')}">${escHtml(r[ci] ?? '')}</td>`).join('')}
+      </tr>`).join('')}</tbody>`;
+  bodyEl.innerHTML = `
+    ${truncatedNote}
+    ${statsLine}
+    <div style="overflow:auto;max-height:60vh;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-family:inherit">
+        ${thead}${tbody}
+      </table>
+    </div>`;
+}
+
+function closeContextSheetViewer() {
+  const overlay = document.getElementById('ctxViewerOverlay');
+  if (overlay) overlay.classList.remove('show');
+  window._ctxViewerCurrent = null;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Uploaded Context Files — per-node Excel / CSV files that supplement
+// the Google Sheet context tabs. Each file may have multiple tabs and
+// each tab is individually toggleable as classifier context.
+// ══════════════════════════════════════════════════════════════════════
+
+// Per-node cache so we can re-render without re-fetching, and so the
+// classifier toolbar button can count uploaded-context tabs.
+window._wsCtxFilesByNode = window._wsCtxFilesByNode || {};
+
+async function wsLoadContextFiles(nodeId) {
+  const container = document.getElementById(`wsCtxFilesContainer-${nodeId}`);
+  if (!container) return;  // pane re-rendered; nothing to populate.
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/context_files`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load');
+    window._wsCtxFilesByNode[nodeId] = data.files || [];
+    wsRenderContextFilesList(nodeId);
+    // Keep the classifier toolbar's context count badge in sync.
+    refreshClassifierCtxBtn();
+  } catch (e) {
+    container.innerHTML = `<div style="color:var(--red);font-size:0.78rem">
+      Failed to load: ${escHtml(String(e.message || e))}
+    </div>`;
+  }
+}
+
+// Cache-only variant — fetches uploaded context files into
+// _wsCtxFilesByNode without touching any DOM container. Useful when
+// the user is in the classifier view (no sheet detail pane in DOM) but
+// the toolbar still needs an accurate context-tab count.
+async function wsLoadContextFilesSilent(nodeId) {
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/context_files`);
+    const data = await res.json();
+    if (!res.ok) return;
+    window._wsCtxFilesByNode[nodeId] = data.files || [];
+    refreshClassifierCtxBtn();
+  } catch (_) { /* swallow — best-effort */ }
+}
+
+function wsRenderContextFilesList(nodeId) {
+  const container = document.getElementById(`wsCtxFilesContainer-${nodeId}`);
+  if (!container) return;
+  const files = window._wsCtxFilesByNode[nodeId] || [];
+  if (files.length === 0) {
+    container.innerHTML = `
+      <div style="font-size:0.74rem;color:var(--text-muted);font-style:italic;padding:6px 0">
+        No files uploaded yet. Use “Upload Files” to add Excel or CSV files
+        as classifier context — multi-tab files supported.
+      </div>`;
+    return;
+  }
+  container.innerHTML = files.map(f => wsRenderContextFileRow(nodeId, f)).join('');
+}
+
+function wsRenderContextFileRow(nodeId, file) {
+  const tabsHtml = (file.tabs || []).map(t => {
+    const checked = t.selected ? 'checked' : '';
+    const trunc = t.truncated
+      ? ` <span style="color:var(--yellow,#b8860b);font-size:0.66rem" title="Stored truncated due to size limit">⚠ truncated</span>`
+      : '';
+    return `
+      <div class="ws-ctxfile-tab" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:0.76rem">
+          <input type="checkbox" ${checked}
+                 onchange="wsToggleContextFileTab(${nodeId}, ${file.id}, '${escHtml(t.tab_name).replace(/'/g,"\\'")}', this.checked)">
+          <span style="color:${t.selected ? 'var(--accent2)' : 'var(--text-muted)'};font-weight:${t.selected ? '500' : '400'}">
+            ${escHtml(t.tab_name)}
+          </span>
+          <span style="color:var(--text-muted);font-size:0.7rem">
+            · ${t.row_count} row${t.row_count === 1 ? '' : 's'} · ${t.col_count} col${t.col_count === 1 ? '' : 's'}${trunc}
+          </span>
+        </label>
+        <button class="btn btn-ghost btn-sm"
+                style="padding:2px 8px;font-size:0.7rem"
+                onclick="openContextFileViewer(${nodeId}, ${file.id}, '${escHtml(t.tab_name).replace(/'/g,"\\'")}')"
+                title="View contents of '${escHtml(t.tab_name)}'">
+          View
+        </button>
+      </div>`;
+  }).join('');
+  const selCount = (file.selected_tabs || []).length;
+  const totalTabs = (file.tabs || []).length;
+  return `
+    <div class="ws-ctxfile-row" data-file-id="${file.id}"
+         style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;background:rgba(0,0,0,0.015)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1">
+          ${icon('ic-file',12)}
+          <span style="font-size:0.82rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                title="${escHtml(file.filename)}">${escHtml(file.filename)}</span>
+          <span style="font-size:0.7rem;color:var(--text-muted);white-space:nowrap">
+            · ${selCount}/${totalTabs} tab${totalTabs === 1 ? '' : 's'} selected
+          </span>
+        </div>
+        <button class="btn btn-ghost btn-sm"
+                style="padding:2px 8px;font-size:0.7rem;color:var(--red,#c53030)"
+                onclick="wsDeleteContextFile(${nodeId}, ${file.id})"
+                title="Remove this file">
+          ✕ Remove
+        </button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px;margin-left:4px">
+        ${tabsHtml}
+      </div>
+    </div>`;
+}
+
+async function wsUploadContextFiles(nodeId, inputEl) {
+  if (!inputEl || !inputEl.files || inputEl.files.length === 0) return;
+  const container = document.getElementById(`wsCtxFilesContainer-${nodeId}`);
+  // Pre-flight UI: show uploading state without wiping out existing list.
+  const filesToUpload = Array.from(inputEl.files);
+  const uploadingNote = document.createElement('div');
+  uploadingNote.style.cssText = 'padding:6px 8px;background:var(--accent-dim,#eef);color:var(--accent);border-radius:6px;font-size:0.76rem;margin-bottom:6px';
+  uploadingNote.innerHTML = `<span class="spinner" style="display:inline-block;width:11px;height:11px;border-width:2px;vertical-align:-2px;margin-right:6px"></span>
+    Uploading ${filesToUpload.length} file${filesToUpload.length === 1 ? '' : 's'}…`;
+  if (container) container.prepend(uploadingNote);
+
+  const fd = new FormData();
+  filesToUpload.forEach(f => fd.append('files', f));
+  inputEl.value = '';  // reset the file input so the same file can be re-uploaded later.
+
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/context_files`, {
+      method: 'POST', body: fd
+    });
+    const data = await res.json();
+    uploadingNote.remove();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    const upCount = (data.uploaded || []).length;
+    const errCount = (data.errors || []).length;
+    if (upCount > 0) {
+      showToast(`Uploaded ${upCount} file${upCount === 1 ? '' : 's'}` +
+                (errCount > 0 ? ` (${errCount} skipped)` : ''));
+    }
+    if (errCount > 0 && upCount === 0) {
+      const msg = data.errors.map(e => `${e.filename}: ${e.error}`).join('\n');
+      alert('Could not parse uploaded file(s):\n\n' + msg);
+    } else if (errCount > 0) {
+      console.warn('Context file upload errors:', data.errors);
+    }
+    await wsLoadContextFiles(nodeId);
+  } catch (e) {
+    uploadingNote.remove();
+    showToast('Upload failed: ' + (e.message || e));
+  }
+}
+
+async function wsToggleContextFileTab(nodeId, fileId, tabName, isSelected) {
+  // Optimistically update local cache and send a PATCH with the new
+  // selected_tabs array.
+  const files = window._wsCtxFilesByNode[nodeId] || [];
+  const file = files.find(f => f.id === fileId);
+  if (!file) return;
+  const set = new Set(file.selected_tabs || []);
+  if (isSelected) set.add(tabName); else set.delete(tabName);
+  const next = Array.from(set);
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/context_files/${fileId}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ selected_tabs: next })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Update failed');
+    // Replace cache entry with server-confirmed shape and re-render row.
+    const idx = files.findIndex(f => f.id === fileId);
+    if (idx >= 0) files[idx] = data.file;
+    wsRenderContextFilesList(nodeId);
+    refreshClassifierCtxBtn();
+  } catch (e) {
+    showToast('Could not update: ' + (e.message || e));
+    // Re-render from cache to reset the checkbox state visually.
+    wsRenderContextFilesList(nodeId);
+  }
+}
+
+async function wsDeleteContextFile(nodeId, fileId) {
+  const files = window._wsCtxFilesByNode[nodeId] || [];
+  const file = files.find(f => f.id === fileId);
+  const name = file ? file.filename : 'this file';
+  if (!confirm(`Remove "${name}" from this node's context?\nThe file's data will be deleted from storage.`)) return;
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/context_files/${fileId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Delete failed');
+    window._wsCtxFilesByNode[nodeId] = files.filter(f => f.id !== fileId);
+    wsRenderContextFilesList(nodeId);
+    refreshClassifierCtxBtn();
+    showToast(`Removed: ${name}`);
+  } catch (e) {
+    showToast('Delete failed: ' + (e.message || e));
+  }
+}
+
+// Reuse the same modal as the Google-Sheet context viewer, but fetch
+// from the uploaded-files endpoint instead.
+async function openContextFileViewer(nodeId, fileId, tabName) {
+  const overlay = document.getElementById('ctxViewerOverlay');
+  if (!overlay) return;
+  const titleEl = document.getElementById('ctxViewerTitle');
+  const subEl   = document.getElementById('ctxViewerSub');
+  const bodyEl  = document.getElementById('ctxViewerBody');
+  const files = window._wsCtxFilesByNode[nodeId] || [];
+  const file = files.find(f => f.id === fileId);
+  titleEl.textContent = tabName;
+  subEl.textContent = file ? `from uploaded file "${file.filename}"` : '';
+  bodyEl.innerHTML = `
+    <div style="text-align:center;padding:40px;color:var(--text-muted)">
+      <div class="spinner" style="margin:0 auto 10px"></div>
+      Loading context sheet…
+    </div>`;
+  overlay.classList.add('show');
+  try {
+    const res = await fetch(
+      `/api/workspace/nodes/${nodeId}/context_files/${fileId}/tab_data?tab=${encodeURIComponent(tabName)}&limit=500`
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load');
+    renderContextSheetViewer(data);
+  } catch (e) {
+    bodyEl.innerHTML = `
+      <div style="padding:20px;color:var(--red);font-size:0.85rem">
+        Failed to load: ${escHtml(String(e.message || e))}
+      </div>`;
+  }
 }
 
 // Override confirmContextSelection to support workspace flow
@@ -2979,20 +4744,30 @@ async function wsOpenClassifier(nodeId) {
 
   // Show classifier view with breadcrumb
   showClassifierView(nodeId);
+  loadItcMatches(nodeId);
 
   // Set the active workspace node globally so classify/data routes use it
   window._wsCurrentNodeId = nodeId;
+  itcMatches = {}; // reset ITC store for new node
+  // Sync the "Add/Edit Context" toolbar button to this node.
+  refreshClassifierCtxBtn();
 
   // Load transactions for this node
   document.querySelector('.table-panel') && (document.querySelector('.table-panel').innerHTML =
     `<table id="txnTable"><thead><tr>
       <th style="width:30px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+      <th style="width:32px;text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
       <th data-col="date">Date</th><th data-col="bank">Bank</th><th data-col="type">Type</th>
       <th data-col="narration">Narration</th><th data-col="amount">Amount</th>
-      <th data-col="classification">Classification</th><th data-col="ref">Ref</th><th data-col="conf">Conf</th>
+      <th data-col="classification">Classification</th>
+      <th style="text-align:center;background:#1c6b40 !important;color:#fff !important" data-col="gst">GST</th>
+      <th style="text-align:center;background:#1a2f6e !important;color:#fff !important" data-col="tds">TDS</th>
+      <th data-col="ref">Ref</th>
+      <th style="width:120px;min-width:120px;max-width:120px;text-align:center;background:#065f46 !important;color:#fff !important" data-col="itc">ITC Claim</th>
+      <th data-col="conf">Conf</th>
     </tr></thead>
     <tbody id="txnBody">
-      <tr><td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted)">
+      <tr><td colspan="13" style="text-align:center;padding:48px;color:var(--text-muted)">
         <div class="spinner" style="margin:0 auto 10px"></div><br>
         Loading <strong>${escHtml(node.tab_name)}</strong> from <strong>${escHtml(node.sheet_name)}</strong>...
       </td></tr>
@@ -3054,6 +4829,8 @@ async function wsOpenClassifier(nodeId) {
 
     renderTable(); updateStats();
     showToast(`Loaded ${allTransactions.length} transactions from "${node.tab_name}".`);
+    // Refresh the Upload Context button badge
+    try { await wsLoadContextFilesSilent(nodeId); refreshUploadContextBtn(); } catch(_) {}
   } catch(e) {
     showToast('Failed to load: ' + String(e));
   }
@@ -3070,11 +4847,26 @@ async function navigateDriveHome(folderId) {
   folderId = (folderId === undefined) ? null : folderId;
   window._driveCurrentFolderId = folderId;
 
+  // Remember that the transactions area is currently in folder/drive-home mode,
+  // so that switching to Rules and back returns here (not to a stale txn list).
+  window._txnViewMode = 'drive_home';
+
   // Show drive home, hide classifier
   document.getElementById('driveHomeView').classList.add('active');
   document.getElementById('tab-transactions').style.display = 'none';
+  document.getElementById('tab-transactions').classList.remove('active');
   document.getElementById('mainBreadcrumb').classList.remove('visible');
   document.getElementById('ctxChipsWrap').style.display = 'none';
+
+  // If an aux panel (upload/gst) was open, close it.
+  const upT = document.getElementById('tab-upload'); if (upT) upT.classList.remove('active');
+  const gsT = document.getElementById('tab-gst');    if (gsT) gsT.classList.remove('active');
+
+  // Make sure the Transactions nav-tab is highlighted while we're on home —
+  // home is conceptually part of the Transactions area.
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const txnNavTab = document.querySelector('.nav-tab[onclick*="\'transactions\'"]');
+  if (txnNavTab) txnNavTab.classList.add('active');
 
   // Hide classifier-specific pills and sheet chip
   document.getElementById('dataPill').style.display = 'none';
@@ -3167,7 +4959,7 @@ function renderDriveHome(folderId) {
 
 function driveItemHTML(node) {
   const isFolder = node.node_type === 'folder';
-  const hasSheet = isFolder ? false : !!(node.sheet_id && node.tab_name);
+  const hasSheet = isFolder ? false : !!(node.tab_name && (node.sheet_id || node.excel_file_id));
 
   const iconHTML = isFolder
     ? `<div class="drive-item-icon folder-icon">
@@ -3181,13 +4973,17 @@ function driveItemHTML(node) {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
       </div>`;
 
+  const ctxCount = (node.context_tabs || []).length;
+  const ctxBadge = (!isFolder && hasSheet && ctxCount > 0)
+    ? ` <span style="color:var(--accent2);font-weight:500">· ${ctxCount} context</span>`
+    : '';
   const metaHTML = isFolder
     ? `<div class="drive-item-meta">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         ${wsChildren(node.id).length} item${wsChildren(node.id).length !== 1 ? 's' : ''}
       </div>`
     : hasSheet
-    ? `<div class="drive-item-attached">📎 ${escHtml(node.tab_name)}</div>`
+    ? `<div class="drive-item-attached">📎 ${escHtml(node.tab_name)}${ctxBadge}</div>`
     : `<div class="drive-item-meta" style="color:var(--text-muted);font-style:italic">No sheet attached</div>`;
 
   const onClick = isFolder
@@ -3199,6 +4995,7 @@ function driveItemHTML(node) {
   const actionsHTML = `
     <div class="drive-item-actions" onclick="event.stopPropagation()">
       ${!isFolder ? `<button class="drive-item-action-btn" title="Attach / change sheet" onclick="driveAttachSheet(${node.id})">📎</button>` : ''}
+      ${!isFolder && hasSheet ? `<button class="drive-item-action-btn" title="Edit context sheets" onclick="wsEditContextTabs(${node.id})">🧩</button>` : ''}
       <button class="drive-item-action-btn" title="Rename" onclick="driveRenameNode(${node.id})">✏️</button>
       <button class="drive-item-action-btn danger" title="Delete" onclick="driveDeleteNode(${node.id})">🗑</button>
     </div>`;
@@ -3279,10 +5076,26 @@ async function driveAttachSheet(nodeId) {
 }
 
 function showClassifierView(nodeId) {
+  // Remember we're in classifier mode on this specific sheet node, so that
+  // a round-trip through Rules (or any aux panel) and back lands us here
+  // again without re-fetching transactions.
+  window._txnViewMode = 'classifier';
+  window._lastClassifierNodeId = nodeId;
+
   // Hide drive home, show classifier
   document.getElementById('driveHomeView').classList.remove('active');
   document.getElementById('tab-transactions').style.display = '';
+  document.getElementById('tab-transactions').classList.add('active');
   document.getElementById('ctxChipsWrap').style.display = '';
+
+  // If an aux panel (upload/gst) was open, close it.
+  const upT = document.getElementById('tab-upload'); if (upT) upT.classList.remove('active');
+  const gsT = document.getElementById('tab-gst');    if (gsT) gsT.classList.remove('active');
+
+  // Make sure the Transactions nav-tab is highlighted.
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const txnNavTab = document.querySelector('.nav-tab[onclick*="\'transactions\'"]');
+  if (txnNavTab) txnNavTab.classList.add('active');
 
   // Show classifier-specific pills
   document.getElementById('dataPill').style.display = '';
@@ -3315,6 +5128,19 @@ function showClassifierView(nodeId) {
     })
   ].join('');
   bc.classList.add('visible');
+
+  // Keep the classifier-toolbar context button in sync with this node.
+  // Covers both fresh opens and round-trip restores via _lastClassifierNodeId.
+  window._wsCurrentNodeId = nodeId;
+  try { refreshClassifierCtxBtn(); } catch (_) {}
+  // Ensure the uploaded-context-files cache is populated for this node so
+  // the toolbar button label reflects them even before the user opens the
+  // sheet detail pane.
+  try {
+    if (typeof wsLoadContextFilesSilent === 'function') {
+      wsLoadContextFilesSilent(nodeId);
+    }
+  } catch (_) {}
 }
 
 function _wsDriveSheetPickedAndRefreshDrive() {
@@ -3404,13 +5230,17 @@ function closeTabPicker() {
 // ======== Column Manager ========
 const COL_DEFS = [
   { key: 'check',          label: '☑ Select',        defaultW: 30,  hideable: false },
+  { key: 'rownum',         label: '#',                defaultW: 36,  hideable: false },
   { key: 'date',           label: 'Date',             defaultW: 90,  hideable: true },
   { key: 'bank',           label: 'Bank',             defaultW: 110, hideable: true },
   { key: 'type',           label: 'Type',             defaultW: 70,  hideable: true },
   { key: 'narration',      label: 'Narration',        defaultW: 260, hideable: true },
   { key: 'amount',         label: 'Amount',           defaultW: 100, hideable: true },
   { key: 'classification', label: 'Classification',   defaultW: 160, hideable: true },
+  { key: 'gst',           label: 'GST',              defaultW: 112, hideable: true },
+  { key: 'tds',           label: 'TDS',              defaultW: 122, hideable: true },
   { key: 'ref',            label: 'Ref',              defaultW: 90,  hideable: true },
+  { key: 'itc',            label: 'ITC Claim',         defaultW: 120, hideable: true },
   { key: 'conf',           label: 'Conf',             defaultW: 50,  hideable: true },
 ];
 
@@ -3524,6 +5354,418 @@ async function logoutUser() {
 
 loadUser();
 init();
-applyColStyles();</script>
+applyColStyles();
+
+// ============================================================
+// Tax classifications store (keyed by txn_key)
+// ============================================================
+let taxClassifications = {};
+
+async function loadTaxClassifications() {
+  try {
+    const r = await fetch('/api/tax/classifications');
+    const d = await r.json();
+    taxClassifications = {};
+    for (const row of (d.classifications || [])) {
+      taxClassifications[row.txn_key] = row;
+    }
+  } catch(e) { console.warn('loadTaxClassifications', e); }
+}
+
+// ============================================================
+// Formula bar
+// ============================================================
+function updateFormulaBar(idx, dateStr) {
+  const t = allTransactions[idx];
+  if (!t) return;
+  document.getElementById('formulaCell').textContent = `Row ${idx+1}`;
+  document.getElementById('formulaContent').textContent = t.narration || '';
+}
+
+// ============================================================
+// Drag helpers (used by upload zones)
+// ============================================================
+function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+// ============================================================
+// UPLOAD CONTEXT TAB — unified context file management
+// Context files are stored on the active workspace node via
+// /api/workspace/nodes/:id/context_files
+// ============================================================
+
+function handleContextDrop(e) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  uploadContextFiles(e.dataTransfer.files);
+}
+
+async function uploadContextFiles(files) {
+  if (!files || !files.length) return;
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) {
+    showToast('Open a sheet from your workspace first, then upload context files.');
+    return;
+  }
+  const prog = document.getElementById('contextUploadProgress');
+  prog.style.display = '';
+  prog.textContent = `Uploading ${files.length} file(s)…`;
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      const n = (d.uploaded || []).length;
+      prog.textContent = `✓ Uploaded ${n} file(s)`;
+      setTimeout(() => { prog.style.display = 'none'; }, 2500);
+      // Refresh context files both in the panel and the toolbar badge
+      await wsLoadContextFiles(nodeId);
+      refreshClassifierCtxBtn();
+      // Show the updated badge on the Upload Context button
+      refreshUploadContextBtn();
+    } else {
+      prog.textContent = `Error: ${d.error || 'upload failed'}`;
+    }
+  } catch(e) { prog.textContent = `Error: ${e.message}`; }
+}
+
+async function refreshContextFilesList() {
+  const nodeId = window._wsCurrentNodeId;
+  const container = document.getElementById('contextFilesList');
+  if (!container) return;
+  if (!nodeId) {
+    container.innerHTML = `<div style="font-size:0.78rem;color:var(--text-muted)">Open a sheet first to see its context files.</div>`;
+    return;
+  }
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files`);
+    const d = await r.json();
+    const files = d.files || [];
+    window._wsCtxFilesByNode = window._wsCtxFilesByNode || {};
+    window._wsCtxFilesByNode[nodeId] = files;
+    if (!files.length) {
+      container.innerHTML = `<div style="font-size:0.78rem;color:var(--text-muted);padding:6px 0">No context files uploaded yet.</div>`;
+    } else {
+      container.innerHTML = files.map(f => {
+        const selCount = (f.selected_tabs || []).length;
+        const totalTabs = (f.tabs || []).length;
+        const tabsHtml = (f.tabs || []).map(t => {
+          const checked = t.selected ? 'checked' : '';
+          return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:0.77rem;transition:background 0.1s" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background='transparent'">
+            <input type="checkbox" ${checked} style="accent-color:var(--accent2);cursor:pointer"
+              onchange="toggleCtxPanelTab(${nodeId},${f.id},'${escHtml(t.tab_name).replace(/'/g,"\\'")}',this.checked)">
+            <span style="flex:1;color:${t.selected?'var(--text)':'var(--text-muted)'};font-weight:${t.selected?'500':'400'}">${escHtml(t.tab_name)}</span>
+            <span style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap">${t.row_count} rows</span>
+            <button onclick="event.preventDefault();openContextFileViewer(${nodeId},${f.id},'${escHtml(t.tab_name).replace(/'/g,"\\'")}')" 
+              style="background:none;border:1px solid var(--border);border-radius:5px;padding:2px 8px;font-size:0.68rem;color:var(--text-muted);cursor:pointer;white-space:nowrap"
+              onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" 
+              onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
+              View
+            </button>
+          </label>`;
+        }).join('');
+
+        const statusColor = selCount === totalTabs ? 'var(--accent2)' : selCount > 0 ? 'var(--yellow)' : 'var(--text-muted)';
+        const statusText  = selCount === totalTabs ? `All ${totalTabs} tabs active` : selCount > 0 ? `${selCount} of ${totalTabs} tabs active` : `No tabs active`;
+
+        return `<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px;background:var(--surface)">
+          <!-- File header row -->
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)">
+            <svg class="icon" width="14" height="14" style="color:var(--accent2);flex-shrink:0"><use href="#ic-file"/></svg>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.83rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(f.filename)}">${escHtml(f.filename)}</div>
+              <div style="font-size:0.7rem;color:${statusColor};margin-top:1px">${statusText}</div>
+            </div>
+            <button onclick="deleteContextFileFromPanel(${nodeId},${f.id})"
+              style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:4px 10px;font-size:0.72rem;color:var(--red);cursor:pointer;white-space:nowrap;flex-shrink:0"
+              onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+              ✕ Remove
+            </button>
+          </div>
+          <!-- Tabs list -->
+          <div style="padding:6px 6px">${tabsHtml}</div>
+        </div>`;
+      }).join('');
+    }
+    refreshUploadContextBtn();
+  } catch(e) {
+    container.innerHTML = `<div style="font-size:0.78rem;color:var(--red)">Failed to load: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function toggleCtxPanelTab(nodeId, fileId, tabName, isSelected) {
+  const files = (window._wsCtxFilesByNode || {})[nodeId] || [];
+  const file = files.find(f => f.id === fileId);
+  if (!file) return;
+  const set = new Set(file.selected_tabs || []);
+  if (isSelected) set.add(tabName); else set.delete(tabName);
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files/${fileId}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ selected_tabs: Array.from(set) })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Update failed');
+    const idx = files.findIndex(f => f.id === fileId);
+    if (idx >= 0) files[idx] = d.file;
+    window._wsCtxFilesByNode[nodeId] = files;
+    refreshContextFilesList();
+    refreshClassifierCtxBtn();
+    refreshUploadContextBtn();
+  } catch(e) {
+    showToast('Could not update: ' + (e.message || e));
+    refreshContextFilesList();
+  }
+}
+
+async function deleteContextFileFromPanel(nodeId, fileId) {
+  if (!confirm('Remove this context file?')) return;
+  await fetch(`/api/workspace/nodes/${nodeId}/context_files/${fileId}`, { method: 'DELETE' });
+  await refreshContextFilesList();
+  refreshClassifierCtxBtn();
+  refreshUploadContextBtn();
+}
+
+// After the toolbar merge, "Upload Context" no longer has its own
+// button — its label is folded into the merged Context button driven
+// by refreshClassifierCtxBtn(). This shim preserves the old name so
+// existing callers (file upload/delete handlers) keep working.
+function refreshUploadContextBtn() {
+  refreshClassifierCtxBtn();
+}
+
+
+
+// Legacy stubs so existing code that references old upload functions doesn't crash
+function refreshUploadedSheetsList() { return refreshContextFilesList(); }
+function uploadExpenseSheets() {}
+function loadCombinedTransactions() {}
+function deleteUploadedSheet() {}
+function refreshSheetAttachments() {}
+function handleExpenseDrop(e) { e.preventDefault(); }
+
+// ============================================================
+// GST / TDS TAB
+// ============================================================
+let taxTableData = []; // [{...txn, ...tax_result}]
+let _taxModalIdx = -1;
+
+async function runTaxClassify() {
+  if (!allTransactions.length) {
+    alert('No transactions loaded. Load transactions first (Upload Sheets or Google Drive).');
+    return;
+  }
+  const btn = document.getElementById('taxClassifyBtn');
+  const msg = document.getElementById('taxStatusMsg');
+  const prog = document.getElementById('taxProgressBar');
+  const fill = document.getElementById('taxProgressFill');
+  const lbl  = document.getElementById('taxProgressLabel');
+  btn.disabled = true;
+  prog.style.display = '';
+  msg.textContent = 'Sending to Gemini AI…';
+
+  // Send in batches of 50 and collect
+  const batchSize = 50;
+  let allResults = [];
+  for (let start = 0; start < allTransactions.length; start += batchSize) {
+    const batch = allTransactions.slice(start, start + batchSize);
+    const pct = Math.round((start / allTransactions.length) * 100);
+    fill.style.width = pct + '%';
+    lbl.textContent = `${start} / ${allTransactions.length}`;
+    try {
+      const r = await fetch('/api/tax/classify', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ transactions: batch })
+      });
+      const d = await r.json();
+      if (d.results) {
+        allResults = allResults.concat(d.results.map((res, i) => ({
+          ...allTransactions[start + i],
+          ...res,
+          _txnIdx: start + i
+        })));
+      }
+    } catch(e) { console.warn('tax batch error', e); }
+  }
+  fill.style.width = '100%';
+  lbl.textContent = `✓ ${allResults.length} transactions classified`;
+  setTimeout(() => { prog.style.display = 'none'; }, 2000);
+  btn.disabled = false;
+  taxTableData = allResults;
+  // Also reload tax classifications from DB
+  await loadTaxClassifications();
+  renderTaxTable();
+  renderTaxStats();
+  msg.textContent = `✓ Done — ${allResults.length} transactions`;
+  // Re-render main table so GST/TDS badges appear
+  renderTable();
+}
+
+function renderTaxTable() {
+  const tbody = document.getElementById('taxBody');
+  if (!taxTableData.length) {
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text-muted)">No results yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = taxTableData.map((row, i) => {
+    const gstApplicable = row.gst_applicable || 'no';
+    const gstDir = row.gst_direction || '';
+    const gstRate = row.gst_rate || '';
+    const tdsApplicable = row.tds_applicable || 'no';
+    const tdsDir = row.tds_direction || '';
+    const tdsSection = row.tds_section || '';
+    const tdsRate = row.tds_rate || '';
+
+    const gstCls = gstApplicable === 'no' ? 'gst-no' :
+                   gstApplicable === 'reverse_charge' ? 'gst-rc' :
+                   gstDir === 'in' ? 'gst-in' : 'gst-out';
+    const tdsCls = tdsApplicable === 'no' ? 'tds-no' :
+                   tdsDir === 'in' ? 'tds-in' : 'tds-out';
+
+    const gstLabel = gstApplicable === 'no' ? 'No' :
+                     gstApplicable === 'reverse_charge' ? 'Rev. Charge' :
+                     gstApplicable === 'exempt' ? 'Exempt' : 'Yes';
+    const gstDirLabel = !gstDir ? '—' : gstDir === 'in' ? '↓ ITC In' : '↑ Collect Out';
+    const tdsDirLabel = !tdsDir ? '—' : tdsDir === 'in' ? '↓ Deducted by cust' : '↑ We deduct';
+
+    return `<tr class="${gstApplicable !== 'no' || tdsApplicable !== 'no' ? '' : ''}">
+      <td class="row-num">${i+1}</td>
+      <td style="white-space:nowrap;font-family:var(--mono);font-size:0.73rem">${escHtml((row.date||'').slice(0,10))}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.76rem" title="${escHtml(row.narration||'')}">${escHtml(row.narration||'')}</td>
+      <td style="font-family:var(--mono);text-align:right">${escHtml(row.gross_total||'')}</td>
+      <td style="font-size:0.74rem;color:var(--text-muted)">${escHtml(row.classification||'—')}</td>
+      <td><span class="gst-badge ${gstCls}">${gstLabel}</span></td>
+      <td style="font-size:0.74rem">${gstDirLabel}</td>
+      <td style="font-family:var(--mono);font-size:0.76rem">${gstRate ? gstRate+'%' : '—'}</td>
+      <td><span class="tds-badge ${tdsCls}">${tdsApplicable === 'no' ? 'No' : 'Yes'}</span></td>
+      <td style="font-size:0.74rem">${escHtml(tdsSection||'—')}</td>
+      <td style="font-family:var(--mono);font-size:0.76rem">${tdsRate ? tdsRate+'%' : '—'}</td>
+      <td><button class="btn btn-secondary btn-xs" onclick="openTaxModal(${i})" title="Edit / Confirm">✎</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderTaxStats() {
+  const data = taxTableData;
+  const gstOut = data.filter(r => r.gst_applicable !== 'no' && r.gst_direction === 'out').length;
+  const gstIn  = data.filter(r => r.gst_applicable !== 'no' && r.gst_direction === 'in').length;
+  const gstRC  = data.filter(r => r.gst_applicable === 'reverse_charge').length;
+  const tdsOut = data.filter(r => r.tds_applicable !== 'no' && r.tds_direction === 'out').length;
+  const tdsIn  = data.filter(r => r.tds_applicable !== 'no' && r.tds_direction === 'in').length;
+  document.getElementById('taxStatsBar').innerHTML = `
+    <div class="stat-card"><div class="stat-num" style="color:#065f46">${gstOut}</div><div class="stat-lbl">GST ↑ Out</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:#1e3a8a">${gstIn}</div><div class="stat-lbl">GST ↓ ITC In</div></div>
+    ${gstRC ? `<div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${gstRC}</div><div class="stat-lbl">Reverse Charge</div></div>` : ''}
+    <div class="stat-card"><div class="stat-num" style="color:#991b1b">${tdsOut}</div><div class="stat-lbl">TDS ↑ Deducted</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:#4c1d95">${tdsIn}</div><div class="stat-lbl">TDS ↓ Received</div></div>
+  `;
+}
+
+async function runNonFilerCheck() {
+  if (!allTransactions.length) {
+    alert('No transactions loaded.');
+    return;
+  }
+  const btn = document.getElementById('nonFilerBtn');
+  const msg = document.getElementById('taxStatusMsg');
+  btn.disabled = true;
+  msg.textContent = 'Checking GST non-filers…';
+  try {
+    const r = await fetch('/api/tax/gst_nonfilers', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ transactions: allTransactions })
+    });
+    const d = await r.json();
+    if (d.error) { msg.textContent = `Error: ${d.error}`; btn.disabled = false; return; }
+    const nf = d.nonfilers || [];
+    msg.textContent = `✓ Found ${nf.length} possible non-filers`;
+    const section = document.getElementById('nonFilerSection');
+    section.style.display = nf.length ? '' : 'none';
+    document.getElementById('nonFilerCount').textContent =
+      `${nf.length} vendor(s) found in your transactions but absent from the uploaded GSTR-2B sheet. Consider verifying before continuing business.`;
+    document.getElementById('nonFilerBody').innerHTML = nf.map((row, i) => `
+      <tr class="nonfiler-row">
+        <td class="row-num">${i+1}</td>
+        <td style="white-space:nowrap;font-family:var(--mono);font-size:0.73rem">${escHtml(row.date||'')}</td>
+        <td style="font-size:0.76rem">${escHtml(row.narration||'')}</td>
+        <td style="font-family:var(--mono);text-align:right">${escHtml(row.gross_total||'')}</td>
+        <td style="font-size:0.74rem;color:var(--red)">${escHtml(row.reason||'')}</td>
+      </tr>`).join('');
+  } catch(e) { msg.textContent = `Error: ${e.message}`; }
+  btn.disabled = false;
+}
+
+function exportTaxCSV() {
+  if (!taxTableData.length) { alert('No tax data to export. Run classification first.'); return; }
+  const header = ['Date','Narration','Amount','Category','GST Applicable','GST Direction','GST Rate','TDS Applicable','TDS Section','TDS Rate','AI Reasoning'];
+  const rows = taxTableData.map(r => [
+    r.date||'', r.narration||'', r.gross_total||'', r.classification||'',
+    r.gst_applicable||'', r.gst_direction||'', r.gst_rate||'',
+    r.tds_applicable||'', r.tds_section||'', r.tds_rate||'',
+    (r.reasoning||'').replace(/,/g,'/')
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'alfaleus_tax_report.csv';
+  a.click();
+}
+
+// Tax modal
+function openTaxModal(idx) {
+  _taxModalIdx = idx;
+  const row = taxTableData[idx];
+  document.getElementById('taxModalNarr').textContent = `${(row.date||'').slice(0,10)} | ${row.narration||''} | ₹${row.gross_total||''}`;
+  document.getElementById('taxModalGstApplicable').value = row.gst_applicable || 'no';
+  document.getElementById('taxModalGstDir').value = row.gst_direction || '';
+  document.getElementById('taxModalGstRate').value = row.gst_rate || '';
+  document.getElementById('taxModalTdsApplicable').value = row.tds_applicable || 'no';
+  document.getElementById('taxModalTdsDir').value = row.tds_direction || '';
+  document.getElementById('taxModalTdsSection').value = row.tds_section || '';
+  document.getElementById('taxModalTdsRate').value = row.tds_rate || '';
+  document.getElementById('taxModalReasoning').textContent = row.reasoning ? `AI: ${row.reasoning}` : '';
+  document.getElementById('taxModalOverlay').classList.add('show');
+}
+
+function closeTaxModal() {
+  document.getElementById('taxModalOverlay').classList.remove('show');
+  _taxModalIdx = -1;
+}
+
+async function saveTaxConfirmation() {
+  if (_taxModalIdx < 0) return;
+  const row = taxTableData[_taxModalIdx];
+  const txnKey = `${(row.date||'').slice(0,10)}|${(row.narration||'').slice(0,80)}|${row.gross_total||''}`;
+  const payload = {
+    txn_key: txnKey,
+    gst_applicable: document.getElementById('taxModalGstApplicable').value,
+    gst_direction:  document.getElementById('taxModalGstDir').value,
+    gst_rate:       document.getElementById('taxModalGstRate').value,
+    tds_applicable: document.getElementById('taxModalTdsApplicable').value,
+    tds_direction:  document.getElementById('taxModalTdsDir').value,
+    tds_section:    document.getElementById('taxModalTdsSection').value,
+    tds_rate:       document.getElementById('taxModalTdsRate').value,
+    ai_reasoning:   row.reasoning || '',
+    confirmed: 1
+  };
+  await fetch('/api/tax/classifications', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  // Update local store
+  Object.assign(taxTableData[_taxModalIdx], payload);
+  taxClassifications[txnKey] = payload;
+  closeTaxModal();
+  renderTaxTable();
+  renderTable(); // refresh GST/TDS badges in main table
+}
+
+// Load tax classifications on init
+loadTaxClassifications();
+</script>
 </body>
 </html>
