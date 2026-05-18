@@ -1339,6 +1339,9 @@
   <symbol id="ic-comment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
   </symbol>
+  <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+  </symbol>
   <symbol id="ic-google" viewBox="0 0 24 24">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -3624,18 +3627,33 @@ document.getElementById('kwModalOverlay').addEventListener('click', function(e) 
 document.getElementById('kwInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmKwModal(); });
 
 // ======== Context Picker helpers (shared) ========
-function openContextPicker(tabs, preselected) {
+// Tracks the workspace node whose tabs are shown in the context picker,
+// so per-tab preview buttons can call openContextSheetViewer.
+let _wsContextPickerNodeId = null;
+
+function openContextPicker(tabs, preselected, nodeId) {
   // `preselected` (optional array) lets the caller seed which tabs are
   // already chosen — used by the "Edit context sheets" flow on an
   // already-linked sheet so existing selections stay highlighted.
   const pre = Array.isArray(preselected) ? preselected : [];
   selectedContextTabs = new Set(pre.filter(t => tabs.includes(t)));
+  _wsContextPickerNodeId = nodeId || null;
   const list = document.getElementById('contextPickerList');
   list.innerHTML = tabs.map(t => {
     const sel = selectedContextTabs.has(t) ? ' selected' : '';
-    return `<div class="tab-item${sel}" id="ctxitem-${escHtml(t)}" onclick="toggleContextTab('${escHtml(t).replace(/'/g,"\\'")}', this)">
-      ${icon('ic-sheet',13)} ${escHtml(t)}
-      <span class="tab-check">${icon('ic-check',13)}</span>
+    const previewBtn = _wsContextPickerNodeId
+      ? `<button class="btn btn-ghost btn-sm"
+               style="padding:1px 7px;font-size:0.68rem;margin-left:auto;flex-shrink:0;border:1px solid var(--border)"
+               title="Preview data in '${escHtml(t)}'"
+               onclick="event.stopPropagation();openContextSheetViewer(${_wsContextPickerNodeId},'${escHtml(t).replace(/'/g,"\\'")}')">
+           ${icon('ic-eye',11)} Preview
+         </button>`
+      : '';
+    return `<div class="tab-item${sel}" id="ctxitem-${escHtml(t)}" onclick="toggleContextTab('${escHtml(t).replace(/'/g,"\\'")}', this)"
+                 style="display:flex;align-items:center;gap:8px">
+      ${icon('ic-sheet',13)} <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${escHtml(t)}</span>
+      ${previewBtn}
+      <span class="tab-check" style="flex-shrink:0">${icon('ic-check',13)}</span>
     </div>`;
   }).join('');
   document.getElementById('contextPickerOverlay').classList.add('show');
@@ -4278,7 +4296,7 @@ async function wsEditContextTabs(nodeId) {
     showToast('This spreadsheet has no other tabs to use as context.');
     return;
   }
-  openContextPicker(otherTabs, existingCtx);
+  openContextPicker(otherTabs, existingCtx, nodeId);
   // Hook the confirm callback so the shared confirmContextSelection
   // routes the selection back here instead of the legacy active-sheet flow.
   _wsContextConfirmCallback = async (ctxTabs) => {

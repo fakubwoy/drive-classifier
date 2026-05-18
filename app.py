@@ -2862,6 +2862,110 @@ def workspace_excel_tab_data(node_id):
     })
 
 
+@app.route("/api/workspace/nodes/<int:node_id>/primary_tab_data", methods=["GET"])
+@login_required
+def workspace_primary_tab_data(node_id):
+    """Return rows of the primary (transaction) tab for a node — supports both
+    Google Sheet (gsheet) and uploaded Excel (excel) sources.  Used by the
+    'View Data' button in the workspace node detail pane."""
+    uid   = current_user_id()
+    limit = int(request.args.get("limit", "500"))
+    limit = max(1, min(limit, 5000))
+
+    conn = get_db()
+    c    = conn.cursor()
+    c.execute("SELECT * FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    node = c.fetchone()
+    conn.close()
+    if not node:
+        return jsonify({"error": "not found"}), 404
+
+    tab         = (node["tab_name"] or "").strip()
+    source_type = (node["source_type"] if "source_type" in node.keys() else None) or "gsheet"
+
+    # ── Excel source ──────────────────────────────────────────────────────
+    if source_type == "excel":
+        excel_id = node["excel_file_id"] if "excel_file_id" in node.keys() else None
+        if not excel_id:
+            return jsonify({"error": "No excel file attached"}), 400
+        row = _get_excel_file(int(excel_id), uid)
+        if not row:
+            return jsonify({"error": "Excel file missing"}), 404
+        try:
+            parsed = json.loads(row["parsed_json"] or "{}")
+        except Exception:
+            parsed = {}
+        payload = parsed.get(tab)
+        if payload is None:
+            for k, v in parsed.items():
+                if str(k).strip().lower() == tab.strip().lower():
+                    payload = v
+                    tab = k
+                    break
+        if payload is None:
+            # Fall back to first available tab
+            if parsed:
+                tab, payload = next(iter(parsed.items()))
+            else:
+                return jsonify({"error": "tab not found in Excel file"}), 404
+        headers   = payload.get("headers", []) or []
+        data_rows = payload.get("rows", []) or []
+        total     = payload.get("total_rows", len(data_rows))
+        truncated = len(data_rows) > limit
+        if truncated:
+            data_rows = data_rows[:limit]
+        return jsonify({
+            "tab":        tab,
+            "headers":    headers,
+            "rows":       data_rows,
+            "total_rows": total,
+            "truncated":  truncated or bool(payload.get("truncated", False)),
+            "limit":      limit,
+            "source_type": "excel",
+            "filename":   row.get("filename", ""),
+        })
+
+    # ── Google Sheet source ───────────────────────────────────────────────
+    sheet_id = (node["sheet_id"] or "").strip()
+    if not sheet_id:
+        return jsonify({"error": "No sheet attached to this node"}), 400
+    if not tab:
+        return jsonify({"error": "No primary tab configured for this node"}), 400
+
+    tokens_str = get_setting("oauth_tokens")
+    if not tokens_str:
+        return jsonify({"error": "not_connected"}), 401
+    try:
+        import gspread
+        creds  = _refresh_oauth_creds(json.loads(tokens_str))
+        client = gspread.authorize(creds)
+        sh     = client.open_by_key(sheet_id)
+        ws     = sh.worksheet(tab)
+        all_rows = ws.get_all_values()
+        if not all_rows:
+            return jsonify({"tab": tab, "headers": [], "rows": [],
+                            "total_rows": 0, "truncated": False,
+                            "source_type": "gsheet"})
+        headers   = [str(h).strip() for h in all_rows[0]]
+        data_rows = all_rows[1:]
+        total     = len(data_rows)
+        truncated = total > limit
+        if truncated:
+            data_rows = data_rows[:limit]
+        return jsonify({
+            "tab":        tab,
+            "headers":    headers,
+            "rows":       data_rows,
+            "total_rows": total,
+            "truncated":  truncated,
+            "limit":      limit,
+            "source_type": "gsheet",
+            "sheet_name": node.get("sheet_name", ""),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/workspace/nodes/<int:node_id>/load_transactions", methods=["GET"])
 @login_required
 def workspace_load_node_transactions(node_id):
