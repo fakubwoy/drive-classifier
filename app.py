@@ -165,21 +165,38 @@ def init_db():
     # ── per-node classifications (scoped to user + node) ─────────────────────
     c.execute("""
         CREATE TABLE IF NOT EXISTS node_classifications (
-            id              SERIAL PRIMARY KEY,
-            user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            node_id         INTEGER NOT NULL REFERENCES workspace_nodes(id) ON DELETE CASCADE,
-            txn_key         TEXT NOT NULL,
-            classification  TEXT,
-            reference_id    TEXT DEFAULT '',
-            matched_detail  TEXT DEFAULT '',
-            confidence      TEXT DEFAULT 'high',
-            reasoning       TEXT DEFAULT '',
-            review_decision TEXT DEFAULT '',
-            created_at      TIMESTAMPTZ DEFAULT NOW(),
-            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            id                  SERIAL PRIMARY KEY,
+            user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            node_id             INTEGER NOT NULL REFERENCES workspace_nodes(id) ON DELETE CASCADE,
+            txn_key             TEXT NOT NULL,
+            classification      TEXT,
+            subclassification   TEXT DEFAULT '',
+            party_name          TEXT DEFAULT '',
+            transaction_type    TEXT DEFAULT 'indirect',
+            reference_id        TEXT DEFAULT '',
+            matched_detail      TEXT DEFAULT '',
+            confidence          TEXT DEFAULT 'high',
+            reasoning           TEXT DEFAULT '',
+            review_decision     TEXT DEFAULT '',
+            direct_product_name TEXT DEFAULT '',
+            direct_quantity     TEXT DEFAULT '',
+            created_at          TIMESTAMPTZ DEFAULT NOW(),
+            updated_at          TIMESTAMPTZ DEFAULT NOW(),
             UNIQUE(user_id, node_id, txn_key)
         )
     """)
+    # Migrations for new columns
+    for _col_def in [
+        "ADD COLUMN IF NOT EXISTS subclassification TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS party_name TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS transaction_type TEXT DEFAULT 'indirect'",
+        "ADD COLUMN IF NOT EXISTS direct_product_name TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS direct_quantity TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS is_asset INTEGER DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS is_refund INTEGER DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS refund_vendor TEXT DEFAULT ''",
+    ]:
+        c.execute(f"ALTER TABLE node_classifications {_col_def}")
 
     # ── account-wide classification cache (scoped to user, NOT node) ─────────
     # Mirrors tax_classifications: keyed by (user_id, txn_key) only, with no
@@ -191,17 +208,22 @@ def init_db():
     # fallback when a sheet has no per-node row for a given txn_key.
     c.execute("""
         CREATE TABLE IF NOT EXISTS account_classifications (
-            id              SERIAL PRIMARY KEY,
-            user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            txn_key         TEXT NOT NULL,
-            classification  TEXT,
-            reference_id    TEXT DEFAULT '',
-            matched_detail  TEXT DEFAULT '',
-            confidence      TEXT DEFAULT 'high',
-            reasoning       TEXT DEFAULT '',
-            review_decision TEXT DEFAULT '',
-            created_at      TIMESTAMPTZ DEFAULT NOW(),
-            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+            id                  SERIAL PRIMARY KEY,
+            user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            txn_key             TEXT NOT NULL,
+            classification      TEXT,
+            subclassification   TEXT DEFAULT '',
+            party_name          TEXT DEFAULT '',
+            transaction_type    TEXT DEFAULT 'indirect',
+            reference_id        TEXT DEFAULT '',
+            matched_detail      TEXT DEFAULT '',
+            confidence          TEXT DEFAULT 'high',
+            reasoning           TEXT DEFAULT '',
+            review_decision     TEXT DEFAULT '',
+            direct_product_name TEXT DEFAULT '',
+            direct_quantity     TEXT DEFAULT '',
+            created_at          TIMESTAMPTZ DEFAULT NOW(),
+            updated_at          TIMESTAMPTZ DEFAULT NOW(),
             UNIQUE(user_id, txn_key)
         )
     """)
@@ -209,6 +231,18 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_account_classifications_user
         ON account_classifications(user_id)
     """)
+    # Migrations for new columns on account_classifications
+    for _col_def2 in [
+        "ADD COLUMN IF NOT EXISTS subclassification TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS party_name TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS transaction_type TEXT DEFAULT 'indirect'",
+        "ADD COLUMN IF NOT EXISTS direct_product_name TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS direct_quantity TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS is_asset INTEGER DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS is_refund INTEGER DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS refund_vendor TEXT DEFAULT ''",
+    ]:
+        c.execute(f"ALTER TABLE account_classifications {_col_def2}")
 
     # ── uploaded excel sheets (per user, multi-sheet combine) ─────────────
     c.execute("""
@@ -238,9 +272,15 @@ def init_db():
             file_data       BYTEA,
             parsed_json     TEXT NOT NULL DEFAULT '{}',
             selected_tabs   TEXT NOT NULL DEFAULT '[]',
+            source_label    TEXT NOT NULL DEFAULT '',
             row_count_total INTEGER DEFAULT 0,
             created_at      TIMESTAMPTZ DEFAULT NOW()
         )
+    """)
+    # Migration: add source_label if missing from older installs
+    c.execute("""
+        ALTER TABLE node_context_files
+        ADD COLUMN IF NOT EXISTS source_label TEXT NOT NULL DEFAULT ''
     """)
     c.execute("""
         CREATE INDEX IF NOT EXISTS idx_node_context_files_user_node
@@ -923,11 +963,32 @@ RULE-B1 LARGE UNMATCHED RECEIPTS: For incoming receipts (positive amounts) above
 TRANSACTIONS:
 {batch_json}
 
+For each transaction also provide:
+- subclassification: a more granular sub-category label within the main classification. Examples:
+  * "Office/Admin Expense" → subclassification could be "Stationery", "Fuel", "Coworking", "Software Subscription", "Utilities", etc.
+  * "Business Travel/Logistics" → "Flight", "Hotel", "Cab", "Per Diem", etc.
+  * "Device Payment Receipt" → "Headset", "Tablet", "Carry Case", "Lens", "Lens Holder", etc.
+  Keep it short (1-3 words). Use "" if no meaningful subclassification applies.
+
+- party_name: the vendor or party name extracted from the narration. Strip bank routing codes (UPI, NEFT, IMPS, HDFC, ICICI, etc.) and extract the actual company/person name. Examples:
+  * "UPI-123456-BLUEDART EXPRESS-HDFC" → "BlueDart Express"
+  * "NEFT/IMPS TO AWFIS SPACE SOLUTIONS" → "Awfis Space Solutions"
+  * "HOTEL GRAND HYATT MUMBAI" → "Grand Hyatt Mumbai"
+  * "SALARY RAHUL SHARMA" → "Rahul Sharma"
+  Use "" if no identifiable party name exists.
+
+- transaction_type: classify as "direct" or "indirect":
+  * "direct": the transaction relates directly to the core product/service business — purchasing inventory (headsets, tablets, carry cases, lenses, lens holders), courier/shipping of products, sales receipts from customers for devices, device payment receipts
+  * "indirect": everything else — office expenses, admin costs, travel, salaries, taxes, bank charges, marketing, software subscriptions, etc.
+
 Return a JSON array (same length, same order):
 [
   {{
     "idx": <same idx>,
     "classification": "<category>",
+    "subclassification": "<sub-category or empty>",
+    "party_name": "<vendor/party name or empty>",
+    "transaction_type": "direct|indirect",
     "reference_id": "<the exact value from the [REF] column of the matched context sheet row — NOT a vendor name, bank name, or narration text. Empty string if no row was matched>",
     "matched_detail": "<what was matched>",
     "confidence": "high|medium|low",
@@ -1478,6 +1539,364 @@ def delete_rule(rule_id):
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+@app.route("/api/feedback/rules", methods=["POST"])
+@login_required
+def create_rule():
+    """Manually create a learned rule via the Rules UI."""
+    uid  = current_user_id()
+    data = request.json or {}
+    pattern        = (data.get("pattern") or "").strip()
+    classification = (data.get("classification") or "").strip()
+    if not pattern or not classification:
+        return jsonify({"error": "pattern and classification required"}), 400
+    conn = get_db()
+    c    = conn.cursor()
+    c.execute("""
+        INSERT INTO learned_rules (user_id, narration_pattern, classification)
+        VALUES (%s, %s, %s)
+        ON CONFLICT DO NOTHING
+        RETURNING id, narration_pattern, classification, created_at
+    """, (uid, pattern.upper(), classification))
+    row = c.fetchone()
+    conn.commit()
+    conn.close()
+    if row:
+        return jsonify({"ok": True, "rule": {"id": row["id"], "pattern": row["narration_pattern"],
+                                              "classification": row["classification"],
+                                              "created_at": str(row["created_at"])}})
+    return jsonify({"ok": True, "rule": None})
+
+
+# ── Asset classification ──────────────────────────────────────────────────────
+
+_ASSET_THRESHOLD = 5000.0  # ₹5000 — items above this that are non-consumable are assets
+
+_CONSUMABLE_KEYWORDS = {
+    'SALARY', 'PAYROLL', 'REIMBURSE', 'REIMBURSEMENT', 'FUEL', 'PETROL',
+    'FOOD', 'MEAL', 'CHAI', 'TEA', 'COFFEE', 'STATIONARY', 'STATIONERY',
+    'PAPER', 'PEN', 'STAMP', 'POSTAGE', 'MOBILE BILL', 'BROADBAND',
+    'ELECTRICITY', 'WATER', 'RENT', 'TAX', 'CBDT', 'GST', 'TDS',
+    'INSURANCE PREMIUM', 'MARKETING', 'ADVERTISEMENT', 'SUBSCRIPTION',
+    'MAINTENANCE', 'REPAIR', 'SERVICE CHARGE', 'BANK CHARGE', 'INTEREST',
+}
+
+_ASSET_KEYWORDS = {
+    '3D PRINTER', 'PRINTER', 'LAPTOP', 'COMPUTER', 'SERVER', 'MONITOR',
+    'CAMERA', 'SCANNER', 'PROJECTOR', 'TABLET', 'MACHINERY', 'EQUIPMENT',
+    'VEHICLE', 'MOTORCYCLE', 'CAR', 'TRUCK', 'FURNITURE', 'AC', 'AIR COND',
+    'REFRIGERATOR', 'GENERATOR', 'INVERTER', 'UPS', 'PHONE', 'MOBILE',
+    'DEVICE', 'INSTRUMENT', 'TOOL', 'MICROSCOPE', 'SLIT LAMP', 'OCT',
+    'OPHTHALM', 'MACHINE', 'ROBOT', 'DRONE', 'LENS', 'LENS DISPLAY',
+    'HEADSET', 'VR', 'DISPLAY', 'SCREEN', 'FIXTURE', 'FITTING',
+    'INSTALLATION', 'SOLAR', 'PUMP', 'COMPRESSOR',
+}
+
+
+def auto_classify_asset(narration: str, gross_total: str, voucher_type: str) -> bool:
+    """Return True if transaction looks like a capital asset purchase (non-consumable >₹5000)."""
+    if voucher_type.strip().lower() != 'payment':
+        return False
+    try:
+        amt = float(str(gross_total).replace(',', '').strip())
+    except Exception:
+        return False
+    if amt < _ASSET_THRESHOLD:
+        return False
+    narr_upper = str(narration).upper()
+    # Skip consumable / opex signals
+    for kw in _CONSUMABLE_KEYWORDS:
+        if kw in narr_upper:
+            return False
+    # Look for asset keywords
+    for kw in _ASSET_KEYWORDS:
+        if kw in narr_upper:
+            return True
+    return False
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/set_asset", methods=["POST"])
+@login_required
+def workspace_set_asset(node_id):
+    """Manually toggle is_asset for a transaction in a node."""
+    uid  = current_user_id()
+    data = request.json or {}
+    txn_key  = data.get("txn_key", "")
+    is_asset = int(bool(data.get("is_asset", False)))
+    if not txn_key:
+        return jsonify({"error": "txn_key required"}), 400
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    c.execute("""
+        UPDATE node_classifications SET is_asset=%s, updated_at=NOW()
+        WHERE user_id=%s AND node_id=%s AND txn_key=%s
+    """, (is_asset, uid, node_id, txn_key))
+    c.execute("""
+        UPDATE account_classifications SET is_asset=%s, updated_at=NOW()
+        WHERE user_id=%s AND txn_key=%s
+    """, (is_asset, uid, txn_key))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "is_asset": is_asset})
+
+
+# ── Refund Detection ──────────────────────────────────────────────────────────
+
+_REFUND_VENDORS = [
+    'AMAZON', 'AMZN', 'FLIPKART', 'MAKEMYTRIP', 'MMT', 'GOIBIBO',
+    'SWIGGY', 'ZOMATO', 'MEESHO', 'MYNTRA', 'SNAPDEAL', 'PAYTM MALL',
+    'NYKAA', 'BIGBASKET', 'BLINKIT', 'ZEPTO', 'FIRSTCRY', 'AJIO',
+    'CLEARTRIP', 'YATRA', 'EASEMYTRIP', 'BOOKING', 'OYEN', 'IXIGO',
+    'PHONEPE', 'PAYUFLI', 'RAZORPAY', 'CASHFREE', 'PAYU', 'CCAVENUE',
+    'INSTAMOJO', 'EASEBUZZ',
+]
+
+_REFUND_NARRATION_SIGNALS = ['REFUND', 'REVERSAL', 'REVERSE', 'CASHBACK', 'CREDIT NOTE',
+                              'RETURN', 'REIMBURS', 'UPIRET', 'PHONEPE REVERSE']
+
+
+def detect_refunds(transactions_df):
+    """
+    Detect refund transactions.
+    Returns a dict: {row_index: {"is_refund": True, "refund_vendor": str}}
+    
+    A transaction is flagged as refund if:
+    1. Narration contains explicit refund/reversal keywords, OR
+    2. It's a Receipt from a known ecommerce/payment vendor (typically payments come first, refunds come back)
+    """
+    refunds = {}
+    for i, (_, row) in enumerate(transactions_df.iterrows()):
+        narr = str(row.get('Narration', '')).upper()
+        voucher = str(row.get('Voucher Type', '')).strip()
+
+        # Direct refund signal in narration
+        for sig in _REFUND_NARRATION_SIGNALS:
+            if sig in narr:
+                vendor = _extract_refund_vendor(narr)
+                refunds[i] = {"is_refund": True, "refund_vendor": vendor}
+                break
+        else:
+            # Receipt from known ecommerce vendor (UPIRET patterns, payment gateway credits)
+            if voucher == 'Receipt':
+                for vendor_kw in _REFUND_VENDORS:
+                    if vendor_kw in narr:
+                        refunds[i] = {"is_refund": True, "refund_vendor": vendor_kw.title()}
+                        break
+
+    return refunds
+
+
+def _extract_refund_vendor(narr: str) -> str:
+    """Try to extract the vendor name from a refund narration."""
+    for vendor_kw in _REFUND_VENDORS:
+        if vendor_kw in narr:
+            return vendor_kw.title()
+    # Fall back to first meaningful token
+    tokens = [t for t in narr.split() if len(t) > 3]
+    return tokens[0].title() if tokens else ''
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/set_refund", methods=["POST"])
+@login_required
+def workspace_set_refund(node_id):
+    """Manually toggle is_refund for a transaction."""
+    uid  = current_user_id()
+    data = request.json or {}
+    txn_key      = data.get("txn_key", "")
+    is_refund    = int(bool(data.get("is_refund", False)))
+    refund_vendor = data.get("refund_vendor", "")
+    if not txn_key:
+        return jsonify({"error": "txn_key required"}), 400
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    c.execute("""
+        UPDATE node_classifications SET is_refund=%s, refund_vendor=%s, updated_at=NOW()
+        WHERE user_id=%s AND node_id=%s AND txn_key=%s
+    """, (is_refund, refund_vendor, uid, node_id, txn_key))
+    c.execute("""
+        UPDATE account_classifications SET is_refund=%s, refund_vendor=%s, updated_at=NOW()
+        WHERE user_id=%s AND txn_key=%s
+    """, (is_refund, refund_vendor, uid, txn_key))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "is_refund": is_refund, "refund_vendor": refund_vendor})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/detect_refunds", methods=["POST"])
+@login_required
+def workspace_detect_refunds(node_id):
+    """Run auto refund detection on all transactions for a node."""
+    uid  = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    node = c.fetchone()
+    conn.close()
+    if not node:
+        return jsonify({"error": "not found"}), 404
+    try:
+        source_type = (node['source_type'] if 'source_type' in node.keys() else None) or 'gsheet'
+        if source_type == 'excel':
+            excel_id = node['excel_file_id'] if 'excel_file_id' in node.keys() else None
+            if not excel_id:
+                return jsonify({"error": "No Excel file attached"}), 400
+            transactions = load_excel_source_tab(int(excel_id), node['tab_name'], uid)
+        else:
+            tokens_str = get_setting('oauth_tokens', user_id=uid)
+            if not tokens_str:
+                return jsonify({'error': 'not_connected'}), 401
+            transactions = load_from_gsheets_oauth(node['sheet_id'], node['tab_name'], json.loads(tokens_str))
+
+        refunds = detect_refunds(transactions)
+
+        # Persist refund flags
+        conn = get_db()
+        c = conn.cursor()
+        txn_rows = list(transactions.iterrows())
+        for idx, rflag in refunds.items():
+            if idx >= len(txn_rows):
+                continue
+            _, row = txn_rows[idx]
+            txn_key = (f"{str(row.get('Date',''))[:10]}"
+                       f"|{str(row.get('Narration',''))[:80]}"
+                       f"|{str(row.get('Gross Total',''))}")
+            if not txn_key.replace('|', '').strip():
+                continue
+            c.execute("""
+                UPDATE node_classifications SET is_refund=1, refund_vendor=%s, updated_at=NOW()
+                WHERE user_id=%s AND node_id=%s AND txn_key=%s
+            """, (rflag['refund_vendor'], uid, node_id, txn_key))
+            c.execute("""
+                UPDATE account_classifications SET is_refund=1, refund_vendor=%s, updated_at=NOW()
+                WHERE user_id=%s AND txn_key=%s
+            """, (rflag['refund_vendor'], uid, txn_key))
+        conn.commit()
+        conn.close()
+        # Return index → flag mapping so frontend can update UI
+        return jsonify({"ok": True, "refunds": {str(k): v for k, v in refunds.items()}, "total": len(refunds)})
+    except Exception as e:
+        log.exception("detect_refunds error")
+        return jsonify({"error": str(e)}), 500
+
+
+# ── GST/TDS sheet data after classification ───────────────────────────────────
+
+@app.route("/api/workspace/nodes/<int:node_id>/gst_sheet_data", methods=["GET"])
+@login_required
+def workspace_gst_sheet_data(node_id):
+    """Return GST-classified transactions as matched/unmatched for the GST sheets view."""
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+
+    # Get all node classifications
+    c.execute("""
+        SELECT nc.txn_key, nc.classification, tc.gst_applicable, tc.gst_direction, tc.gst_rate,
+               tc.tds_applicable, tc.tds_section, tc.tds_rate, nc.confidence, nc.reference_id
+        FROM node_classifications nc
+        LEFT JOIN tax_classifications tc ON tc.user_id = nc.user_id AND tc.txn_key = nc.txn_key
+        WHERE nc.node_id=%s AND nc.user_id=%s
+    """, (node_id, uid))
+    rows = c.fetchall()
+    conn.close()
+
+    matched = []
+    unmatched = []
+    for r in rows:
+        rec = dict(r)
+        parts = (r['txn_key'] or '').split('|')
+        rec['date'] = parts[0] if len(parts) > 0 else ''
+        rec['narration'] = parts[1] if len(parts) > 1 else ''
+        rec['gross_total'] = parts[2] if len(parts) > 2 else ''
+        # Build field-match summary for the GST row
+        matched_fields = []
+        unmatched_fields = []
+        if rec.get('classification'): matched_fields.append('Category')
+        else: unmatched_fields.append('Category')
+        if rec.get('gst_applicable') and rec['gst_applicable'] != 'no': matched_fields.append('GST Applicable')
+        else: unmatched_fields.append('GST Applicable')
+        if rec.get('gst_direction'): matched_fields.append('Direction')
+        else: unmatched_fields.append('Direction')
+        if rec.get('gst_rate'): matched_fields.append('Rate')
+        else: unmatched_fields.append('Rate')
+        if rec.get('reference_id'): matched_fields.append('Invoice/Ref ID')
+        else: unmatched_fields.append('Invoice/Ref ID')
+        rec['matched_fields'] = matched_fields
+        rec['unmatched_fields'] = unmatched_fields
+        if r['gst_applicable'] and r['gst_applicable'] != 'no':
+            matched.append(rec)
+        else:
+            unmatched.append(rec)
+
+    return jsonify({"matched": matched, "unmatched": unmatched,
+                    "matched_count": len(matched), "unmatched_count": len(unmatched)})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/tds_sheet_data", methods=["GET"])
+@login_required
+def workspace_tds_sheet_data(node_id):
+    """Return TDS-classified transactions as matched/unmatched for the TDS sheets view."""
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+
+    c.execute("""
+        SELECT nc.txn_key, nc.classification, tc.gst_applicable, tc.gst_direction,
+               tc.tds_applicable, tc.tds_direction, tc.tds_section, tc.tds_rate, nc.confidence
+        FROM node_classifications nc
+        LEFT JOIN tax_classifications tc ON tc.user_id = nc.user_id AND tc.txn_key = nc.txn_key
+        WHERE nc.node_id=%s AND nc.user_id=%s
+    """, (node_id, uid))
+    rows = c.fetchall()
+    conn.close()
+
+    matched = []
+    unmatched = []
+    for r in rows:
+        rec = dict(r)
+        parts = (r['txn_key'] or '').split('|')
+        rec['date'] = parts[0] if len(parts) > 0 else ''
+        rec['narration'] = parts[1] if len(parts) > 1 else ''
+        rec['gross_total'] = parts[2] if len(parts) > 2 else ''
+        # Build field-match summary for the TDS row
+        matched_fields = []
+        unmatched_fields = []
+        if rec.get('classification'): matched_fields.append('Category')
+        else: unmatched_fields.append('Category')
+        if rec.get('tds_applicable') and rec['tds_applicable'] != 'no': matched_fields.append('TDS Applicable')
+        else: unmatched_fields.append('TDS Applicable')
+        if rec.get('tds_direction'): matched_fields.append('Direction')
+        else: unmatched_fields.append('Direction')
+        if rec.get('tds_section'): matched_fields.append('Section')
+        else: unmatched_fields.append('Section')
+        if rec.get('tds_rate'): matched_fields.append('Rate')
+        else: unmatched_fields.append('Rate')
+        rec['matched_fields'] = matched_fields
+        rec['unmatched_fields'] = unmatched_fields
+        if r['tds_applicable'] and r['tds_applicable'] != 'no':
+            matched.append(rec)
+        else:
+            unmatched.append(rec)
+
+    return jsonify({"matched": matched, "unmatched": unmatched,
+                    "matched_count": len(matched), "unmatched_count": len(unmatched)})
 
 
 @app.route("/api/status")
@@ -2260,12 +2679,17 @@ def _ctx_file_to_dict(row, include_data=False):
             "selected":   tab_name in selected,
             "truncated":  bool(payload.get("truncated", False)),
         })
+    try:
+        source_label = row["source_label"] or ""
+    except (KeyError, IndexError):
+        source_label = ""
     out = {
         "id":              row["id"],
         "filename":        row["filename"],
         "row_count_total": row["row_count_total"],
         "tabs":            tabs_summary,
         "selected_tabs":   selected,
+        "source_label":    source_label,
         "created_at":      str(row["created_at"]),
     }
     if include_data:
@@ -2283,7 +2707,7 @@ def workspace_list_context_files(node_id):
     if not c.fetchone():
         conn.close()
         return jsonify({"error": "not found"}), 404
-    c.execute("""SELECT id, filename, parsed_json, selected_tabs, row_count_total, created_at
+    c.execute("""SELECT id, filename, parsed_json, selected_tabs, source_label, row_count_total, created_at
                  FROM node_context_files
                  WHERE user_id=%s AND node_id=%s
                  ORDER BY created_at DESC""", (uid, node_id))
@@ -2309,6 +2733,9 @@ def workspace_upload_context_files(node_id):
 
     saved = []
     errors = []
+    # source_label can be passed as a form field to tag which bottom-panel
+    # tab this file belongs to (gst / tds / sales / invoices / bank / '').
+    source_label = (request.form.get("source_label") or "").strip()
     for f in files:
         if not f.filename:
             continue
@@ -2325,11 +2752,11 @@ def workspace_upload_context_files(node_id):
         selected = list(tabs_dict.keys())
         c.execute("""
             INSERT INTO node_context_files
-              (user_id, node_id, filename, file_data, parsed_json, selected_tabs, row_count_total)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING id, filename, parsed_json, selected_tabs, row_count_total, created_at
+              (user_id, node_id, filename, file_data, parsed_json, selected_tabs, source_label, row_count_total)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, filename, parsed_json, selected_tabs, source_label, row_count_total, created_at
         """, (uid, node_id, f.filename, psycopg2.Binary(raw),
-              json.dumps(tabs_dict), json.dumps(selected), total))
+              json.dumps(tabs_dict), json.dumps(selected), source_label, total))
         row = c.fetchone()
         saved.append(_ctx_file_to_dict(row))
     conn.commit()
@@ -2349,7 +2776,7 @@ def workspace_update_context_file(node_id, file_id):
 
     conn = get_db()
     c = conn.cursor()
-    c.execute("""SELECT id, parsed_json FROM node_context_files
+    c.execute("""SELECT id, parsed_json, source_label FROM node_context_files
                  WHERE id=%s AND user_id=%s AND node_id=%s""", (file_id, uid, node_id))
     row = c.fetchone()
     if not row:
@@ -2363,7 +2790,7 @@ def workspace_update_context_file(node_id, file_id):
     valid_tabs = [t for t in data["selected_tabs"] if t in parsed]
     c.execute("""UPDATE node_context_files SET selected_tabs=%s
                  WHERE id=%s AND user_id=%s AND node_id=%s
-                 RETURNING id, filename, parsed_json, selected_tabs, row_count_total, created_at""",
+                 RETURNING id, filename, parsed_json, selected_tabs, source_label, row_count_total, created_at""",
               (json.dumps(valid_tabs), file_id, uid, node_id))
     updated = c.fetchone()
     conn.commit()
@@ -2446,7 +2873,7 @@ def load_node_uploaded_context(node_id: int, user_id: int):
     into the existing context_sheets list with no other changes."""
     conn = get_db()
     c = conn.cursor()
-    c.execute("""SELECT id, filename, parsed_json, selected_tabs
+    c.execute("""SELECT id, filename, parsed_json, selected_tabs, source_label
                  FROM node_context_files
                  WHERE user_id=%s AND node_id=%s""", (user_id, node_id))
     rows = c.fetchall()
@@ -2492,7 +2919,12 @@ def workspace_get_classifications(node_id):
         conn.close()
         return jsonify({"error": "not found"}), 404
     c.execute("""
-        SELECT txn_key, classification, reference_id, matched_detail, confidence, reasoning, review_decision
+        SELECT txn_key, classification, subclassification, party_name, transaction_type,
+               reference_id, matched_detail, confidence, reasoning, review_decision,
+               direct_product_name, direct_quantity,
+               COALESCE(is_asset, 0) as is_asset,
+               COALESCE(is_refund, 0) as is_refund,
+               COALESCE(refund_vendor, '') as refund_vendor
         FROM node_classifications WHERE node_id=%s AND user_id=%s
     """, (node_id, uid))
     node_rows = c.fetchall()
@@ -2503,7 +2935,12 @@ def workspace_get_classifications(node_id):
     # of starting blank — same persistence behavior tax_classifications
     # already provides for GST/TDS.
     c.execute("""
-        SELECT txn_key, classification, reference_id, matched_detail, confidence, reasoning, review_decision
+        SELECT txn_key, classification, subclassification, party_name, transaction_type,
+               reference_id, matched_detail, confidence, reasoning, review_decision,
+               direct_product_name, direct_quantity,
+               COALESCE(is_asset, 0) as is_asset,
+               COALESCE(is_refund, 0) as is_refund,
+               COALESCE(refund_vendor, '') as refund_vendor
         FROM account_classifications WHERE user_id=%s
     """, (uid,))
     # Filter out empty/degenerate keys defensively — they can't match a
@@ -2551,48 +2988,84 @@ def workspace_save_classifications(node_id):
             continue
         c.execute("""
             INSERT INTO node_classifications
-              (user_id, node_id, txn_key, classification, reference_id, matched_detail, confidence, reasoning, review_decision, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
+              (user_id, node_id, txn_key, classification, subclassification, party_name, transaction_type,
+               reference_id, matched_detail, confidence, reasoning, review_decision,
+               direct_product_name, direct_quantity, is_asset, is_refund, refund_vendor, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
             ON CONFLICT (user_id, node_id, txn_key) DO UPDATE SET
-              classification  = EXCLUDED.classification,
-              reference_id    = EXCLUDED.reference_id,
-              matched_detail  = EXCLUDED.matched_detail,
-              confidence      = EXCLUDED.confidence,
-              reasoning       = EXCLUDED.reasoning,
-              review_decision = EXCLUDED.review_decision,
-              updated_at      = NOW()
+              classification      = EXCLUDED.classification,
+              subclassification   = EXCLUDED.subclassification,
+              party_name          = EXCLUDED.party_name,
+              transaction_type    = EXCLUDED.transaction_type,
+              reference_id        = EXCLUDED.reference_id,
+              matched_detail      = EXCLUDED.matched_detail,
+              confidence          = EXCLUDED.confidence,
+              reasoning           = EXCLUDED.reasoning,
+              review_decision     = EXCLUDED.review_decision,
+              direct_product_name = EXCLUDED.direct_product_name,
+              direct_quantity     = EXCLUDED.direct_quantity,
+              is_asset            = EXCLUDED.is_asset,
+              is_refund           = EXCLUDED.is_refund,
+              refund_vendor       = EXCLUDED.refund_vendor,
+              updated_at          = NOW()
         """, (uid, node_id,
               key,
               rec.get("classification",""),
+              rec.get("subclassification",""),
+              rec.get("party_name",""),
+              rec.get("transaction_type","indirect"),
               rec.get("reference_id",""),
               rec.get("matched_detail",""),
               rec.get("confidence","high"),
               rec.get("reasoning",""),
-              rec.get("review_decision","")))
+              rec.get("review_decision",""),
+              rec.get("direct_product_name",""),
+              rec.get("direct_quantity",""),
+              int(bool(rec.get("is_asset", False))),
+              int(bool(rec.get("is_refund", False))),
+              rec.get("refund_vendor","")))
         # Mirror to the account-wide cache so this classification persists
         # across node deletes, sheet re-uploads, and node recreations. Same
         # txn_key shape, same fields — node_classifications stays the
         # authoritative per-sheet record, this is a recovery cache.
         c.execute("""
             INSERT INTO account_classifications
-              (user_id, txn_key, classification, reference_id, matched_detail, confidence, reasoning, review_decision, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s, NOW())
+              (user_id, txn_key, classification, subclassification, party_name, transaction_type,
+               reference_id, matched_detail, confidence, reasoning, review_decision,
+               direct_product_name, direct_quantity, is_asset, is_refund, refund_vendor, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
             ON CONFLICT (user_id, txn_key) DO UPDATE SET
-              classification  = EXCLUDED.classification,
-              reference_id    = EXCLUDED.reference_id,
-              matched_detail  = EXCLUDED.matched_detail,
-              confidence      = EXCLUDED.confidence,
-              reasoning       = EXCLUDED.reasoning,
-              review_decision = EXCLUDED.review_decision,
-              updated_at      = NOW()
+              classification      = EXCLUDED.classification,
+              subclassification   = EXCLUDED.subclassification,
+              party_name          = EXCLUDED.party_name,
+              transaction_type    = EXCLUDED.transaction_type,
+              reference_id        = EXCLUDED.reference_id,
+              matched_detail      = EXCLUDED.matched_detail,
+              confidence          = EXCLUDED.confidence,
+              reasoning           = EXCLUDED.reasoning,
+              review_decision     = EXCLUDED.review_decision,
+              direct_product_name = EXCLUDED.direct_product_name,
+              direct_quantity     = EXCLUDED.direct_quantity,
+              is_asset            = EXCLUDED.is_asset,
+              is_refund           = EXCLUDED.is_refund,
+              refund_vendor       = EXCLUDED.refund_vendor,
+              updated_at          = NOW()
         """, (uid,
               key,
               rec.get("classification",""),
+              rec.get("subclassification",""),
+              rec.get("party_name",""),
+              rec.get("transaction_type","indirect"),
               rec.get("reference_id",""),
               rec.get("matched_detail",""),
               rec.get("confidence","high"),
               rec.get("reasoning",""),
-              rec.get("review_decision","")))
+              rec.get("review_decision",""),
+              rec.get("direct_product_name",""),
+              rec.get("direct_quantity",""),
+              int(bool(rec.get("is_asset", False))),
+              int(bool(rec.get("is_refund", False))),
+              rec.get("refund_vendor","")))
     conn.commit()
     conn.close()
     saved = len(records) - skipped
@@ -2601,6 +3074,42 @@ def workspace_save_classifications(node_id):
         resp["skipped_empty_keys"] = skipped
     return jsonify(resp)
 
+
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/direct_txn_detail", methods=["POST"])
+@login_required
+def workspace_save_direct_txn_detail(node_id):
+    """Save product name, quantity for a direct transaction. Also updates transaction_type."""
+    uid  = current_user_id()
+    data = request.json or {}
+    txn_key = data.get("txn_key", "")
+    if not txn_key:
+        return jsonify({"error": "txn_key required"}), 400
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    product_name = data.get("direct_product_name", "")
+    quantity     = data.get("direct_quantity", "")
+    txn_type     = data.get("transaction_type", "direct")
+    # Update node_classifications
+    c.execute("""
+        UPDATE node_classifications
+        SET direct_product_name=%s, direct_quantity=%s, transaction_type=%s, updated_at=NOW()
+        WHERE user_id=%s AND node_id=%s AND txn_key=%s
+    """, (product_name, quantity, txn_type, uid, node_id, txn_key))
+    # Also update account_classifications fallback
+    c.execute("""
+        UPDATE account_classifications
+        SET direct_product_name=%s, direct_quantity=%s, transaction_type=%s, updated_at=NOW()
+        WHERE user_id=%s AND txn_key=%s
+    """, (product_name, quantity, txn_type, uid, txn_key))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 # ════════════════════════════════════════════════════════════════════════
 # Excel-source helpers for workspace nodes.
@@ -3114,12 +3623,48 @@ def workspace_classify_stream(node_id):
             completed = 0
             all_output = []  # accumulate for server-side auto-persist
 
+            # Pre-compute refund flags for the full subset so every streamed batch
+            # result is enriched with is_asset / is_refund before reaching the frontend.
+            try:
+                _refund_flags_stream = detect_refunds(subset)  # {subset_row_idx: {...}}
+            except Exception as _rfe:
+                log.warning("Pre-stream refund detection failed (non-fatal): %s", _rfe)
+                _refund_flags_stream = {}
+            _subset_rows = list(subset.iterrows())
+
             for batch_results in _classify_transactions_stream(subset, context_sheets, uid):
                 output = []
                 for res in batch_results:
                     if res and "idx" in res:
                         original_idx = req_indices[res["idx"]]
-                        output.append({"original_index": original_idx, **res})
+                        subset_idx   = res["idx"]
+
+                        # Asset classification
+                        if subset_idx < len(_subset_rows):
+                            _, _srow = _subset_rows[subset_idx]
+                            try:
+                                _is_asset = auto_classify_asset(
+                                    str(_srow.get("Narration", "")),
+                                    str(_srow.get("Gross Total", "")),
+                                    str(_srow.get("Voucher Type", "")),
+                                )
+                            except Exception:
+                                _is_asset = False
+                        else:
+                            _is_asset = False
+
+                        # Refund detection
+                        _rflag        = _refund_flags_stream.get(subset_idx, {})
+                        _is_refund    = bool(_rflag.get("is_refund", False))
+                        _rfund_vendor = _rflag.get("refund_vendor", "")
+
+                        output.append({
+                            "original_index": original_idx,
+                            "is_asset":       _is_asset,
+                            "is_refund":      _is_refund,
+                            "refund_vendor":  _rfund_vendor,
+                            **res,
+                        })
                 completed += len(output)
                 all_output.extend(output)
                 yield f"data: {json.dumps({'results': output, 'done': False, 'completed': completed, 'total': total})}\n\n"
@@ -3133,6 +3678,16 @@ def workspace_classify_stream(node_id):
                     # Build a txn_key->row lookup so we can key by the same formula
                     # the frontend uses: date[:10]|narration[:80]|gross_total
                     txn_rows = list(transactions.iterrows())
+
+                    # ── Asset & Refund detection on the full transaction set ────────
+                    # detect_refunds works on the whole DataFrame; auto_classify_asset
+                    # is per-row, so we call both here and merge into the persist loop.
+                    try:
+                        refund_flags = detect_refunds(transactions)  # {row_idx: {is_refund, refund_vendor}}
+                    except Exception as _re:
+                        log.warning("Auto refund detection failed (non-fatal): %s", _re)
+                        refund_flags = {}
+
                     conn2 = get_db()
                     c2 = conn2.cursor()
                     for item in all_output:
@@ -3145,42 +3700,80 @@ def workspace_classify_stream(node_id):
                                    f"|{str(row.get('Gross Total',''))}")
                         if not txn_key.replace("|", "").strip():
                             continue
-                        cls  = item.get("classification", "")
-                        ref  = item.get("reference_id", "")
-                        det  = item.get("matched_detail", "")
-                        conf = item.get("confidence", "high")
-                        rsn  = item.get("reasoning", "")
+                        cls   = item.get("classification", "")
+                        subcls= item.get("subclassification", "")
+                        party = item.get("party_name", "")
+                        txtyp = item.get("transaction_type", "indirect")
+                        ref   = item.get("reference_id", "")
+                        det   = item.get("matched_detail", "")
+                        conf  = item.get("confidence", "high")
+                        rsn   = item.get("reasoning", "")
+
+                        # ── Asset classification ──────────────────────────────────
+                        try:
+                            is_asset = int(auto_classify_asset(
+                                str(row.get("Narration", "")),
+                                str(row.get("Gross Total", "")),
+                                str(row.get("Voucher Type", "")),
+                            ))
+                        except Exception:
+                            is_asset = 0
+
+                        # ── Refund detection ──────────────────────────────────────
+                        rflag        = refund_flags.get(oi, {})
+                        is_refund    = int(bool(rflag.get("is_refund", False)))
+                        refund_vendor = rflag.get("refund_vendor", "")
+
                         # node_classifications (per-node authoritative)
                         c2.execute("""
                             INSERT INTO node_classifications
-                              (user_id, node_id, txn_key, classification, reference_id,
-                               matched_detail, confidence, reasoning, review_decision, updated_at)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'',NOW())
+                              (user_id, node_id, txn_key, classification, subclassification,
+                               party_name, transaction_type, reference_id,
+                               matched_detail, confidence, reasoning, review_decision,
+                               is_asset, is_refund, refund_vendor, updated_at)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,NOW())
                             ON CONFLICT (user_id, node_id, txn_key) DO UPDATE SET
-                              classification  = EXCLUDED.classification,
-                              reference_id    = EXCLUDED.reference_id,
-                              matched_detail  = EXCLUDED.matched_detail,
-                              confidence      = EXCLUDED.confidence,
-                              reasoning       = EXCLUDED.reasoning,
-                              updated_at      = NOW()
-                        """, (uid, node_id, txn_key, cls, ref, det, conf, rsn))
+                              classification    = EXCLUDED.classification,
+                              subclassification = EXCLUDED.subclassification,
+                              party_name        = EXCLUDED.party_name,
+                              transaction_type  = EXCLUDED.transaction_type,
+                              reference_id      = EXCLUDED.reference_id,
+                              matched_detail    = EXCLUDED.matched_detail,
+                              confidence        = EXCLUDED.confidence,
+                              reasoning         = EXCLUDED.reasoning,
+                              is_asset          = EXCLUDED.is_asset,
+                              is_refund         = EXCLUDED.is_refund,
+                              refund_vendor     = EXCLUDED.refund_vendor,
+                              updated_at        = NOW()
+                        """, (uid, node_id, txn_key, cls, subcls, party, txtyp, ref, det, conf, rsn,
+                              is_asset, is_refund, refund_vendor))
                         # account_classifications (cross-node fallback cache)
                         c2.execute("""
                             INSERT INTO account_classifications
-                              (user_id, txn_key, classification, reference_id,
-                               matched_detail, confidence, reasoning, review_decision, updated_at)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,'',NOW())
+                              (user_id, txn_key, classification, subclassification,
+                               party_name, transaction_type, reference_id,
+                               matched_detail, confidence, reasoning, review_decision,
+                               is_asset, is_refund, refund_vendor, updated_at)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,NOW())
                             ON CONFLICT (user_id, txn_key) DO UPDATE SET
-                              classification  = EXCLUDED.classification,
-                              reference_id    = EXCLUDED.reference_id,
-                              matched_detail  = EXCLUDED.matched_detail,
-                              confidence      = EXCLUDED.confidence,
-                              reasoning       = EXCLUDED.reasoning,
-                              updated_at      = NOW()
-                        """, (uid, txn_key, cls, ref, det, conf, rsn))
+                              classification    = EXCLUDED.classification,
+                              subclassification = EXCLUDED.subclassification,
+                              party_name        = EXCLUDED.party_name,
+                              transaction_type  = EXCLUDED.transaction_type,
+                              reference_id      = EXCLUDED.reference_id,
+                              matched_detail    = EXCLUDED.matched_detail,
+                              confidence        = EXCLUDED.confidence,
+                              reasoning         = EXCLUDED.reasoning,
+                              is_asset          = EXCLUDED.is_asset,
+                              is_refund         = EXCLUDED.is_refund,
+                              refund_vendor     = EXCLUDED.refund_vendor,
+                              updated_at        = NOW()
+                        """, (uid, txn_key, cls, subcls, party, txtyp, ref, det, conf, rsn,
+                              is_asset, is_refund, refund_vendor))
                     conn2.commit()
                     conn2.close()
-                    log.info("Auto-persisted %d classifications for node %s", len(all_output), node_id)
+                    log.info("Auto-persisted %d classifications (with asset/refund flags) for node %s",
+                             len(all_output), node_id)
                 except Exception as persist_err:
                     log.warning("Auto-persist classifications failed (non-fatal): %s", persist_err)
 

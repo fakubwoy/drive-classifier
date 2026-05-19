@@ -233,6 +233,24 @@
     display: flex; flex-direction: column; gap: 3px;
     min-width: 110px;
   }
+  .stat-card.clickable {
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    user-select: none;
+  }
+  .stat-card.clickable:hover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    transform: translateY(-1px);
+  }
+  .stat-card.clickable.stat-active {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.18);
+  }
+  .stat-card.clickable.stat-active .stat-lbl {
+    color: var(--accent);
+  }
   .stat-num { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; line-height: 1; }
   .stat-lbl { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 
@@ -240,14 +258,14 @@
   .main-grid {
     display: grid;
     grid-template-columns: 1fr 340px;
-    min-height: calc(100vh - 180px);
+    min-height: calc(100vh - 280px);
   }
 
   /* ===================== TABLE ===================== */
   .table-panel { overflow: auto; padding-bottom: 60px; }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  #txnTable { min-width: 900px; table-layout: fixed; }
+  #txnTable { min-width: 1200px; table-layout: fixed; }
   thead th {
     background: var(--surface);
     color: var(--text-muted);
@@ -258,6 +276,8 @@
     border-bottom: 1px solid var(--border);
     position: sticky; top: 0; z-index: 2;
     white-space: nowrap;
+    user-select: none;
+    overflow: visible;
   }
   tbody tr {
     border-bottom: 1px solid var(--border);
@@ -829,7 +849,79 @@
   .context-chips-wrap { display: none; }
   .context-chips-wrap.visible { display: flex; align-items: center; gap: 6px; padding: 6px 24px; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); }
 
-  /* ===================== COLUMN MANAGER ===================== */
+  /* ===================== COLUMN RESIZE HANDLE ===================== */
+  thead th { position: relative !important; }
+  .col-resize-handle {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 10;
+    user-select: none;
+    background: transparent;
+  }
+  .col-resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 20%; bottom: 20%;
+    left: 50%; transform: translateX(-50%);
+    width: 2px;
+    border-radius: 2px;
+    background: transparent;
+    transition: background 0.1s;
+  }
+  .col-resize-handle:hover::after,
+  .col-resize-handle.resizing::after {
+    background: var(--accent);
+  }
+  thead th.sortable { cursor: pointer; }
+  thead th.sortable:hover { background: rgba(5,150,105,0.13) !important; color: #047857 !important; }
+  .sort-indicator { margin-left: 4px; font-size: 0.65rem; opacity: 0.7; }
+  thead th.sort-asc .sort-indicator::after  { content: ' ▲'; }
+  thead th.sort-desc .sort-indicator::after { content: ' ▼'; }
+  thead th:not(.sort-asc):not(.sort-desc) .sort-indicator::after { content: ' ⇅'; opacity: 0.4; }
+
+
+  /* ===================== INLINE CLASSIFICATION PILL EDITOR ===================== */
+  .pill-edit-wrap { position: relative; display: inline-block; }
+  .pill-edit-dropdown {
+    display: none; position: fixed;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px;
+    min-width: 230px; max-height: 320px;
+    box-shadow: 0 12px 36px rgba(15,23,42,0.18);
+    z-index: 999; overflow-y: auto;
+  }
+  .pill-edit-dropdown.show { display: block; }
+  .pill-edit-search {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text);
+    font-size: 0.78rem; outline: none; font-family: var(--sans); margin-bottom: 6px;
+  }
+  .pill-edit-search:focus { border-color: var(--accent); }
+  .pill-edit-option {
+    padding: 5px 9px; border-radius: 6px; cursor: pointer;
+    font-size: 0.76rem; color: var(--text-dim); transition: background 0.1s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pill-edit-option:hover, .pill-edit-option.focused { background: var(--accent-dim); color: var(--accent); }
+  .pill-edit-option.current { font-weight: 700; color: var(--accent); }
+  .pill-edit-custom-row {
+    display: flex; gap: 5px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border);
+  }
+  .pill-edit-custom-input {
+    flex: 1; padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg); color: var(--text);
+    font-size: 0.76rem; outline: none; font-family: var(--sans);
+  }
+  .pill-edit-custom-input:focus { border-color: var(--accent2); }
+  .pill-edit-custom-btn {
+    padding: 5px 9px; border-radius: 6px; border: 1px solid var(--accent2);
+    background: var(--accent2-dim); color: var(--accent2);
+    font-size: 0.72rem; cursor: pointer; white-space: nowrap; font-weight: 600;
+  }
+  .pill-edit-custom-btn:hover { background: var(--accent2); color: #fff; }
+
   .col-manager-wrap { position: relative; }
   .col-manager-popup {
     display: none; position: absolute; z-index: 300;
@@ -1266,6 +1358,206 @@
   .sheet-back-chip span {
     overflow: hidden; text-overflow: ellipsis;
   }
+
+  /* ===================== BOTTOM PANEL ===================== */
+  #bottomPanel {
+    /* Hidden by default — only shown in sheet/classifier view */
+    display: none;
+    flex-direction: column;
+    border-top: 2px solid var(--border);
+    background: var(--surface);
+    /* Collapsed = just the tab bar height (36px) */
+    height: 36px;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 45;
+    box-shadow: 0 -2px 12px rgba(15,23,42,0.08);
+    transition: height 0.18s cubic-bezier(0.4,0,0.2,1);
+    overflow: hidden;
+  }
+  #bottomPanel.visible {
+    display: flex;
+  }
+  /* Expanded state — shows full panel content */
+  #bottomPanel.expanded {
+    height: 320px;
+  }
+  /* Spacer keeps page content from being obscured */
+  #bottomPanelSpacer {
+    height: 0;
+    transition: height 0.18s cubic-bezier(0.4,0,0.2,1);
+    flex-shrink: 0;
+  }
+  #bottomPanelSpacer.panel-visible {
+    height: 36px;
+  }
+  #bottomPanelSpacer.expanded { height: 320px; }
+
+  .bottom-panel-resize {
+    position: absolute; top: -4px; left: 0; right: 0; height: 8px;
+    cursor: ns-resize; z-index: 10;
+    display: none; /* only shown when expanded */
+  }
+  #bottomPanel.expanded .bottom-panel-resize { display: block; }
+  .bottom-panel-resize:hover::after {
+    content: ''; position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 2px; background: var(--accent); border-radius: 2px;
+  }
+  .bottom-tab-bar {
+    display: flex; align-items: stretch;
+    background: var(--surface2); border-bottom: 1px solid var(--border);
+    padding: 0 8px; gap: 0; flex-shrink: 0; height: 36px;
+    overflow-x: auto;
+  }
+  .bottom-tab-bar::-webkit-scrollbar { height: 3px; }
+  .bottom-tab {
+    display: flex; align-items: center; gap: 5px;
+    padding: 0 13px; font-size: 0.78rem; font-weight: 600;
+    color: var(--text-muted); cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: all 0.14s;
+    user-select: none; flex-shrink: 0; height: 100%;
+    border-right: 1px solid var(--border);
+  }
+  .bottom-tab:first-child { border-left: 1px solid var(--border); }
+  .bottom-tab:hover { color: var(--text-dim); background: var(--surface); }
+  /* Active tab when panel is expanded */
+  .bottom-tab.open { color: var(--accent); border-bottom-color: var(--accent); background: var(--surface); }
+  .bottom-tab .btab-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    background: var(--accent-dim); color: var(--accent);
+    border-radius: 8px; font-size: 0.66rem; font-weight: 700;
+  }
+  .bottom-tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+  .bottom-tab-panel.active { display: flex; }
+  .bottom-panel-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 16px; }
+
+  /* Sub-tabs inside bank statements */
+  .bp-subtab-bar {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 16px 0; flex-wrap: wrap; flex-shrink: 0; border-bottom: 1px solid var(--border);
+  }
+  .bp-subtab {
+    display: flex; align-items: center; gap: 5px;
+    padding: 5px 12px; font-size: 0.75rem; font-weight: 600;
+    border-radius: 6px 6px 0 0; border: 1px solid transparent;
+    border-bottom: none; cursor: pointer; color: var(--text-muted);
+    background: var(--surface2); transition: all 0.12s;
+    margin-bottom: -1px; position: relative;
+  }
+  .bp-subtab:hover { color: var(--text); background: var(--surface3); }
+  .bp-subtab.active {
+    color: var(--accent); background: var(--surface);
+    border-color: var(--border); border-bottom-color: var(--surface);
+    z-index: 1;
+  }
+  .bp-subtab .subtab-del {
+    width: 14px; height: 14px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 0.6rem; opacity: 0.5;
+    transition: all 0.12s; flex-shrink: 0;
+  }
+  .bp-subtab .subtab-del:hover { background: rgba(239,68,68,0.15); color: var(--red); opacity: 1; }
+  .bp-subtab-add {
+    padding: 5px 9px; font-size: 0.75rem; border-radius: 6px 6px 0 0;
+    background: transparent; border: 1px dashed var(--border2); border-bottom: none;
+    cursor: pointer; color: var(--text-muted); display: flex; align-items: center; gap: 4px;
+    transition: all 0.12s; margin-bottom: -1px;
+  }
+  .bp-subtab-add:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+  /* Upload drop zone compact */
+  .bp-upload-zone {
+    border: 2px dashed var(--border2); border-radius: 8px;
+    padding: 20px 18px; text-align: center; cursor: pointer;
+    transition: all 0.2s; background: var(--surface2);
+    display: flex; align-items: center; gap: 12px; justify-content: center;
+  }
+  .bp-upload-zone:hover, .bp-upload-zone.drag-over {
+    border-color: var(--accent); background: var(--accent-dim);
+  }
+  .bp-upload-zone-text { font-size: 0.82rem; }
+  .bp-upload-zone-title { font-weight: 600; color: var(--text); }
+  .bp-upload-zone-sub { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
+
+  /* Bank statement mini-table */
+  .bp-table-wrap { overflow-x: auto; border: 1px solid var(--xls-border); border-radius: 6px; }
+  .bp-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+  .bp-table thead th {
+    background: var(--xls-header-bg) !important; color: var(--xls-header-fg) !important;
+    padding: 5px 9px; font-size: 0.68rem; white-space: nowrap;
+    border: 1px solid rgba(255,255,255,0.15) !important; position: sticky; top: 0; z-index: 2;
+  }
+  .bp-table tbody td { padding: 4px 9px; border: 1px solid var(--xls-border); }
+  .bp-table tbody tr:nth-child(even) { background: var(--xls-row-alt); }
+  .bp-table tbody tr:hover { background: #e8f5ed !important; }
+
+  /* File chip row */
+  .bp-file-chip {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;
+    font-size: 0.8rem;
+  }
+  .bp-file-chip-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bp-file-chip-meta { font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; }
+  .bp-file-chip-del {
+    background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 5px; padding: 2px 8px; font-size: 0.7rem; color: var(--red);
+    cursor: pointer; flex-shrink: 0; transition: background 0.12s;
+  }
+  .bp-file-chip-del:hover { background: rgba(239,68,68,0.2); }
+
+  /* Parties tab */
+  .parties-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;
+  }
+  /* Party link in table */
+  .party-link {
+    display: inline-block;
+    font-size: 0.73rem; font-weight: 500;
+    color: var(--accent); cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 108px;
+    text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px;
+    transition: color 0.12s;
+  }
+  .party-link:hover { color: #1d4ed8; }
+
+  /* Direct transaction panel */
+  .direct-txn-box {
+    background: rgba(5,150,105,0.06); border: 1px solid rgba(5,150,105,0.25);
+    border-radius: 8px; padding: 11px 13px; margin-top: 4px;
+  }
+  .direct-txn-title {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--green); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .direct-txn-input {
+    width: 100%; background: var(--bg); border: 1px solid rgba(5,150,105,0.3);
+    border-radius: 5px; padding: 6px 8px; color: var(--text);
+    font-size: 0.8rem; outline: none; font-family: var(--sans);
+    margin-bottom: 6px;
+  }
+  .direct-txn-input:focus { border-color: var(--green); }
+
+  .party-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 9px; padding: 12px 14px; cursor: pointer; transition: all 0.13s;
+  }
+  .party-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(37,99,235,0.08); }
+  .party-card-name { font-weight: 700; font-size: 0.85rem; margin-bottom: 5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .party-card-stats { display: flex; gap: 12px; font-size: 0.72rem; color: var(--text-muted); flex-wrap: wrap; }
+  .party-card-stat { display: flex; gap: 4px; align-items: center; }
+
+  /* Panel collapse button inside tab bar */
+  .bottom-panel-collapse-btn {
+    display: none; align-items: center; padding: 0 10px;
+    color: var(--text-muted); cursor: pointer; border-left: 1px solid var(--border);
+    transition: color 0.12s; flex-shrink: 0; height: 100%;
+  }
+  #bottomPanel.expanded .bottom-panel-collapse-btn { display: flex; }
+  .bottom-panel-collapse-btn:hover { color: var(--accent); background: var(--surface); }
 </style>
 </head>
 <body>
@@ -1449,7 +1741,7 @@
       <svg class="icon" width="13" height="13"><use href="#ic-zap"/></svg>
       Quick Review
     </button>
-    <div class="ctx-menu-wrap">
+    <div class="ctx-menu-wrap" style="display:none">
       <button class="btn btn-secondary" id="ctxMenuBtn" onclick="toggleCtxMenu(event)" title="Add context for the classifier — either from an existing sheet, or by uploading a new file">
         <svg class="icon" width="13" height="13"><use href="#ic-context"/></svg>
         <span id="ctxMenuBtnLabel">Add Context</span>
@@ -1505,6 +1797,10 @@
       <option value="corrected">Corrected</option>
       <option value="flagged">Flagged</option>
       <option value="rejected">Rejected</option>
+      <option value="asset">📦 Assets</option>
+      <option value="refund">↩ Refunds</option>
+      <option value="direct">⚡ Direct</option>
+      <option value="indirect">↻ Indirect</option>
     </select>
     <div class="toolbar-sep"></div>
     <div class="col-manager-wrap">
@@ -1533,23 +1829,27 @@
       <table id="txnTable">
         <thead>
           <tr>
-            <th style="width:28px;min-width:28px;max-width:28px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
-            <th style="width:36px;min-width:36px;max-width:36px;text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
-            <th style="width:90px;min-width:90px;max-width:90px;white-space:nowrap" data-col="date">Date</th>
-            <th style="width:76px;min-width:76px;max-width:76px" data-col="bank">Bank</th>
-            <th style="width:62px;min-width:62px;max-width:62px;text-align:center" data-col="type">Type</th>
+            <th style="width:28px;min-width:28px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+            <th style="width:36px;min-width:36px;text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
+            <th style="width:90px;min-width:90px;white-space:nowrap" data-col="date">Date</th>
+            <th style="width:76px;min-width:76px" data-col="bank">Bank</th>
+            <th style="width:62px;min-width:62px;text-align:center" data-col="type">Type</th>
             <th data-col="narration">Narration</th>
-            <th style="width:100px;min-width:100px;max-width:100px;text-align:right" data-col="amount">Amount (&#8377;)</th>
-            <th style="width:148px;min-width:148px;max-width:148px" data-col="classification">Category</th>
-            <th style="width:112px;min-width:112px;max-width:112px;text-align:center;background:#1c6b40 !important;color:#fff !important" data-col="gst">GST</th>
-            <th style="width:122px;min-width:122px;max-width:122px;text-align:center;background:#1a2f6e !important;color:#fff !important" data-col="tds">TDS</th>
-            <th style="width:108px;min-width:108px;max-width:108px" data-col="ref">Ref</th>
-            <th style="width:120px;min-width:120px;max-width:120px;text-align:center;background:#065f46 !important;color:#fff !important" data-col="itc">ITC Claim</th>
-            <th style="width:36px;min-width:36px;max-width:36px;text-align:center" data-col="conf">Conf</th>
+            <th style="width:100px;min-width:100px;text-align:right" data-col="amount">Amount (&#8377;)</th>
+            <th style="width:44px;min-width:44px;text-align:center" data-col="asset" title="Asset classification — click to toggle">Asset</th>
+            <th style="width:62px;min-width:62px;text-align:center" data-col="txntype">Dir/Ind</th>
+            <th style="width:130px;min-width:80px" data-col="classification">Category</th>
+            <th style="width:120px;min-width:70px" data-col="subclassification">Subcategory</th>
+            <th style="width:110px;min-width:110px" data-col="party">Party</th>
+            <th style="width:112px;min-width:112px;text-align:center;background:#1c6b40 !important;color:#fff !important" data-col="gst">GST</th>
+            <th style="width:122px;min-width:122px;text-align:center;background:#1a2f6e !important;color:#fff !important" data-col="tds">TDS</th>
+            <th style="width:108px;min-width:108px" data-col="ref">Ref</th>
+            <th style="text-align:center;background:#065f46 !important;color:#fff !important" data-col="itc">ITC Claim</th>
+            <th style="width:36px;min-width:36px;text-align:center" data-col="conf">Conf</th>
           </tr>
         </thead>
         <tbody id="txnBody">
-          <tr><td colspan="12" style="text-align:center;padding:48px;color:var(--text-muted)">
+          <tr><td colspan="17" style="text-align:center;padding:48px;color:var(--text-muted)">
             <div class="spinner" style="margin:0 auto 10px"></div><br>Loading transactions...
           </td></tr>
         </tbody>
@@ -1580,7 +1880,171 @@
   </div>
 </div>
 
-<!-- ===================== RULES TAB ===================== -->
+<!-- Spacer so fixed bottom panel never covers content -->
+<div id="bottomPanelSpacer"></div>
+
+<!-- ===================== BOTTOM PANEL ===================== -->
+<div id="bottomPanel">
+  <!-- Drag handle to resize -->
+  <div class="bottom-panel-resize" id="bottomPanelResize"></div>
+
+  <!-- Tab bar — always visible; clicking a tab toggles the panel open/closed -->
+  <div class="bottom-tab-bar">
+    <div class="bottom-tab" data-btab="bank" onclick="clickBottomTab('bank', this)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      Bank Statements
+      <span class="btab-count" id="btab-count-bank">0</span>
+    </div>
+    <div class="bottom-tab" data-btab="gst" onclick="clickBottomTab('gst', this)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      GST
+      <span class="btab-count" id="btab-count-gst">0</span>
+    </div>
+    <div class="bottom-tab" data-btab="tds" onclick="clickBottomTab('tds', this)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      TDS
+      <span class="btab-count" id="btab-count-tds">0</span>
+    </div>
+    <div class="bottom-tab" data-btab="sales" onclick="clickBottomTab('sales', this)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Sales Invoices
+      <span class="btab-count" id="btab-count-sales">0</span>
+    </div>
+    <div class="bottom-tab" data-btab="invoices" onclick="clickBottomTab('invoices', this)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Invoices
+      <span class="btab-count" id="btab-count-invoices">0</span>
+    </div>
+    <div class="bottom-tab" data-btab="parties" onclick="clickBottomTab('parties', this)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Parties
+      <span class="btab-count" id="btab-count-parties" style="background:rgba(124,58,237,0.12);color:var(--purple)">0</span>
+    </div>
+    <div style="flex:1"></div>
+    <!-- Collapse button — only visible when panel is expanded -->
+    <div class="bottom-panel-collapse-btn" onclick="collapseBottomPanel()" title="Collapse panel">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+  </div>
+
+  <!-- Bank Statements Panel -->
+  <div class="bottom-tab-panel active" id="btab-bank">
+    <!-- Subtabs for each uploaded statement -->
+    <div class="bp-subtab-bar" id="bankSubtabBar">
+      <button class="bp-subtab-add" onclick="triggerBankUpload()" title="Upload a bank statement">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Statement
+      </button>
+    </div>
+    <input type="file" id="bankFileInput" multiple accept=".xlsx,.xls,.csv" style="display:none" onchange="handleBankUpload(this.files)">
+    <div class="bottom-panel-body" id="bankPanelBody">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--text-muted)">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        <div style="font-size:0.82rem;text-align:center">No bank statements uploaded yet.<br>Click <strong>Add Statement</strong> to upload an Excel or CSV file.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GST Panel -->
+  <div class="bottom-tab-panel" id="btab-gst">
+    <div class="bottom-panel-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:0.88rem;color:var(--text)">GST Sheets</div>
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px">Upload GSTR-2B, purchase registers, or any GST reference file</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="triggerGstUpload()">
+          <svg class="icon" width="12" height="12"><use href="#ic-upload"/></svg> Upload Sheet
+        </button>
+      </div>
+      <input type="file" id="gstFileInput" multiple accept=".xlsx,.xls,.csv" style="display:none" onchange="handleGstUpload(this.files)">
+      <div id="gstFilesList">
+        <div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">No GST sheets uploaded yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TDS Panel -->
+  <div class="bottom-tab-panel" id="btab-tds">
+    <div class="bottom-panel-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:0.88rem;color:var(--text)">TDS Sheets</div>
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px">Upload Form 26AS, TDS certificates, or TDS reconciliation files</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="triggerTdsUpload()">
+          <svg class="icon" width="12" height="12"><use href="#ic-upload"/></svg> Upload Sheet
+        </button>
+      </div>
+      <input type="file" id="tdsFileInput" multiple accept=".xlsx,.xls,.csv" style="display:none" onchange="handleTdsUpload(this.files)">
+      <div id="tdsFilesList">
+        <div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">No TDS sheets uploaded yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales Invoices Panel -->
+  <div class="bottom-tab-panel" id="btab-sales">
+    <div class="bottom-panel-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:0.88rem;color:var(--text)">Sales Invoices</div>
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px">Upload your issued sales invoice registers or exported invoice data</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="triggerSalesUpload()">
+          <svg class="icon" width="12" height="12"><use href="#ic-upload"/></svg> Upload Sheet
+        </button>
+      </div>
+      <input type="file" id="salesFileInput" multiple accept=".xlsx,.xls,.csv" style="display:none" onchange="handleSalesUpload(this.files)">
+      <div id="salesFilesList">
+        <div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">No sales invoice sheets uploaded yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invoices Panel -->
+  <div class="bottom-tab-panel" id="btab-invoices">
+    <div class="bottom-panel-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:0.88rem;color:var(--text)">Purchase Invoices</div>
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px">Amazon, Flipkart, MakeMyTrip, and other vendor invoices</div>
+        </div>
+      </div>
+      <!-- Invoice source sub-categories -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="invoiceSourceChips">
+        <button class="btn btn-secondary btn-sm inv-src-btn" data-src="Amazon" onclick="triggerInvoiceUpload('Amazon')">📦 Amazon</button>
+        <button class="btn btn-secondary btn-sm inv-src-btn" data-src="Flipkart" onclick="triggerInvoiceUpload('Flipkart')">🛒 Flipkart</button>
+        <button class="btn btn-secondary btn-sm inv-src-btn" data-src="MakeMyTrip" onclick="triggerInvoiceUpload('MakeMyTrip')">✈️ MakeMyTrip</button>
+        <button class="btn btn-secondary btn-sm inv-src-btn" data-src="Other" onclick="triggerInvoiceUpload('Other')">➕ Other</button>
+      </div>
+      <input type="file" id="invoiceFileInput" multiple accept=".xlsx,.xls,.csv,.pdf" style="display:none" onchange="handleInvoiceUpload(this.files, window._pendingInvoiceSrc)">
+      <div id="invoiceFilesList">
+        <div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">No invoice files uploaded yet. Choose a source above to upload.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parties Panel (auto-generated) -->
+  <div class="bottom-tab-panel" id="btab-parties">
+    <div class="bottom-panel-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:0.88rem;color:var(--text)">Parties</div>
+          <div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px">Auto-generated from classified transactions — groups by party name with summaries</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="buildPartiesTab()">
+          <svg class="icon" width="12" height="12"><use href="#ic-refresh"/></svg> Rebuild
+        </button>
+      </div>
+      <div id="partiesList">
+        <div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">Classify transactions first, then click Rebuild to generate party summaries.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- (bottom panel toggle removed — tabs always visible as strip) -->
 <div class="tab-content" id="tab-rules">
   <div style="padding:0 24px 40px">
     <div class="section-header" style="padding-left:0">
@@ -1592,6 +2056,34 @@
         <svg class="icon" width="12" height="12"><use href="#ic-refresh"/></svg> Refresh
       </button>
     </div>
+
+    <!-- Manual rule creation -->
+    <div class="section-card" style="margin-bottom:18px">
+      <div class="section-card-title" style="font-size:0.78rem;font-weight:600;margin-bottom:8px">
+        <svg class="icon" width="13" height="13"><use href="#ic-brain"/></svg> Create Rule Manually
+      </div>
+      <div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:10px">Type a keyword pattern and the classification it should trigger.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:160px">
+          <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Keyword Pattern</label>
+          <input id="newRulePattern" class="cat-select" type="text" placeholder="e.g. BLUEDART, AMAZON, AWFIS…"
+                 style="width:100%;font-size:0.78rem;font-family:var(--mono)"
+                 onkeydown="if(event.key==='Enter')createManualRule()">
+        </div>
+        <div style="flex:1;min-width:160px">
+          <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Classifies As</label>
+          <input id="newRuleClass" class="cat-select" type="text" placeholder="e.g. Courier/Logistics, Office/Admin Expense…"
+                 style="width:100%;font-size:0.78rem"
+                 list="newRuleClassList"
+                 onkeydown="if(event.key==='Enter')createManualRule()">
+          <datalist id="newRuleClassList" id="newRuleClassList"></datalist>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="createManualRule()" style="height:34px;white-space:nowrap">
+          <svg class="icon" width="12" height="12"><use href="#ic-check"/></svg> Add Rule
+        </button>
+      </div>
+    </div>
+
     <table class="data-table" id="rulesTable">
       <thead>
         <tr>
@@ -1757,6 +2249,101 @@
       </div>
     </div>
 
+    <!-- GST Sheet — Matched / Unmatched transactions -->
+    <div style="margin-top:28px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:0.88rem;font-weight:700;color:var(--text)">GST Sheet — Classified Transactions</div>
+          <div style="font-size:0.74rem;color:var(--text-muted)" id="gstSheetStats">Run GST classification to populate.</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="refreshGstTdsSheetData()" id="gstRefreshBtn">
+          <svg class="icon" width="12" height="12"><use href="#ic-refresh"/></svg> Refresh
+        </button>
+      </div>
+
+      <!-- Tabs within GST sheet section -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px">
+        <button id="gstMatchedTabBtn" class="btn btn-ghost btn-sm" style="border-radius:6px 6px 0 0;border-bottom:2px solid var(--accent);font-weight:600;font-size:0.76rem"
+                onclick="document.getElementById('gstMatchedSection').style.display='';document.getElementById('gstUnmatchedSection').style.display='none';document.getElementById('gstMatchedTabBtn').style.borderBottom='2px solid var(--accent)';document.getElementById('gstUnmatchedTabBtn').style.borderBottom='none'">
+          ✓ Matched (GST Applicable)
+        </button>
+        <button id="gstUnmatchedTabBtn" class="btn btn-ghost btn-sm" style="border-radius:6px 6px 0 0;font-size:0.76rem"
+                onclick="document.getElementById('gstMatchedSection').style.display='none';document.getElementById('gstUnmatchedSection').style.display='';document.getElementById('gstUnmatchedTabBtn').style.borderBottom='2px solid var(--accent)';document.getElementById('gstMatchedTabBtn').style.borderBottom='none'">
+          ✗ Unmatched (No GST)
+        </button>
+      </div>
+      <div id="gstMatchedSection" style="overflow-x:auto;border:1px solid var(--xls-border);border-radius:6px">
+        <table style="min-width:780px">
+          <thead><tr style="background:#1c6b40;color:#fff">
+            <th style="width:32px">#</th><th>Date</th><th>Narration</th><th>Amount (₹)</th><th>Category</th><th>GST</th><th>Rate</th><th>Ref ID</th><th>Fields Matched / Missing</th>
+          </tr></thead>
+          <tbody id="gstSheetMatchedBody"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Run GST classification to see data.</td></tr></tbody>
+        </table>
+      </div>
+      <div id="gstUnmatchedSection" style="display:none;overflow-x:auto;border:1px solid var(--xls-border);border-radius:6px">
+        <table style="min-width:780px">
+          <thead><tr style="background:var(--surface2)">
+            <th style="width:32px">#</th><th>Date</th><th>Narration</th><th>Amount (₹)</th><th>Category</th><th>GST</th><th>Rate</th><th>Ref ID</th><th>Fields Matched / Missing</th>
+          </tr></thead>
+          <tbody id="gstSheetUnmatchedBody"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Run GST classification to see data.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TDS Sheet — Matched / Unmatched transactions -->
+    <div style="margin-top:28px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:0.88rem;font-weight:700;color:var(--text)">TDS Sheet — Classified Transactions</div>
+          <div style="font-size:0.74rem;color:var(--text-muted)" id="tdsSheetStats">Run GST/TDS classification to populate.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px">
+        <button id="tdsMatchedTabBtn" class="btn btn-ghost btn-sm" style="border-radius:6px 6px 0 0;border-bottom:2px solid #1a2f6e;font-weight:600;font-size:0.76rem"
+                onclick="document.getElementById('tdsMatchedSection').style.display='';document.getElementById('tdsUnmatchedSection').style.display='none';document.getElementById('tdsMatchedTabBtn').style.borderBottom='2px solid #1a2f6e';document.getElementById('tdsUnmatchedTabBtn').style.borderBottom='none'">
+          ✓ Matched (TDS Applicable)
+        </button>
+        <button id="tdsUnmatchedTabBtn" class="btn btn-ghost btn-sm" style="border-radius:6px 6px 0 0;font-size:0.76rem"
+                onclick="document.getElementById('tdsMatchedSection').style.display='none';document.getElementById('tdsUnmatchedSection').style.display='';document.getElementById('tdsUnmatchedTabBtn').style.borderBottom='2px solid #1a2f6e';document.getElementById('tdsMatchedTabBtn').style.borderBottom='none'">
+          ✗ Unmatched (No TDS)
+        </button>
+      </div>
+      <div id="tdsMatchedSection" style="overflow-x:auto;border:1px solid var(--xls-border);border-radius:6px">
+        <table style="min-width:780px">
+          <thead><tr style="background:#1a2f6e;color:#fff">
+            <th style="width:32px">#</th><th>Date</th><th>Narration</th><th>Amount (₹)</th><th>Category</th><th>TDS</th><th>Section</th><th>Rate</th><th>Fields Matched / Missing</th>
+          </tr></thead>
+          <tbody id="tdsSheetMatchedBody"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Run TDS classification to see data.</td></tr></tbody>
+        </table>
+      </div>
+      <div id="tdsUnmatchedSection" style="display:none;overflow-x:auto;border:1px solid var(--xls-border);border-radius:6px">
+        <table style="min-width:780px">
+          <thead><tr style="background:var(--surface2)">
+            <th style="width:32px">#</th><th>Date</th><th>Narration</th><th>Amount (₹)</th><th>Category</th><th>TDS</th><th>Section</th><th>Rate</th><th>Fields Matched / Missing</th>
+          </tr></thead>
+          <tbody id="tdsSheetUnmatchedBody"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Run TDS classification to see data.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Refund Detection & Asset Detection -->
+    <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap">
+      <div class="section-card" style="flex:1;min-width:240px">
+        <div class="section-card-title" style="font-size:0.8rem">↩ Refund Detection</div>
+        <div class="section-card-sub">Automatically detect refunds from Amazon, Flipkart, MakeMyTrip, and other ecommerce vendors.</div>
+        <button class="btn btn-secondary btn-sm" id="refundDetectBtn" onclick="runRefundDetection()" style="margin-top:10px">
+          <svg class="icon" width="12" height="12"><use href="#ic-sparkle"/></svg> Detect Refunds
+        </button>
+      </div>
+      <div class="section-card" style="flex:1;min-width:240px">
+        <div class="section-card-title" style="font-size:0.8rem">📦 Asset Detection</div>
+        <div class="section-card-sub">Auto-flag non-consumable items above ₹5,000 as capital assets (3D printers, laptops, equipment, etc.).</div>
+        <button class="btn btn-secondary btn-sm" onclick="autoDetectAssets()" style="margin-top:10px">
+          <svg class="icon" width="12" height="12"><use href="#ic-sparkle"/></svg> Auto-detect Assets
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1844,7 +2431,10 @@
 
     <div style="font-size:0.73rem;color:var(--text-muted);margin-bottom:14px" id="taxModalReasoning"></div>
 
-    <div style="display:flex;gap:8px;justify-content:flex-end">
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="saveTaxAsRule()" title="Save this classification as a learned rule for similar transactions" style="color:var(--accent)">
+        <svg class="icon" width="11" height="11"><use href="#ic-brain"/></svg> Save as Rule
+      </button>
       <button class="btn btn-secondary" onclick="closeTaxModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveTaxConfirmation()">
         <svg class="icon" width="12" height="12"><use href="#ic-check"/></svg>
@@ -2243,10 +2833,15 @@ function _clearNavActive() {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
 }
 
-function switchTab(tab, el) {
+function switchTab(tab, el, _skipPush) {
   _clearNavActive();
   _hideAllTabContents();
   if (el) el.classList.add('active');
+
+  // Bottom panel: only show in sheet view (classifier mode); hide everywhere else
+  if (tab !== 'transactions') {
+    hideBottomPanel();
+  }
 
   // Transactions is special: it shares the screen real-estate with the
   // Drive Home view. Restore whichever sub-mode the user was last in.
@@ -2268,15 +2863,22 @@ function switchTab(tab, el) {
       const ctxWrap = document.getElementById('ctxChipsWrap');
       if (ctxWrap) ctxWrap.style.display = '';
       // Re-run showClassifierView to restore breadcrumb + pills correctly.
-      try { showClassifierView(window._lastClassifierNodeId); } catch (_) {}
+      try { showClassifierView(window._lastClassifierNodeId, true); } catch (_) {}
       const driveHome = document.getElementById('driveHomeView');
       if (driveHome) driveHome.classList.remove('active');
     } else {
       // Default: go back to the folder view (My Drive).
       // navigateDriveHome handles hiding #tab-transactions and showing the home.
-      try { navigateDriveHome(window._driveCurrentFolderId || null); } catch (_) {}
+      try { navigateDriveHome(window._driveCurrentFolderId || null, true); } catch (_) {}
     }
     return;
+  }
+
+  // ── Routing: push a history entry for this aux tab ──
+  if (!_skipPush) {
+    const state = { view: 'tab', tab: tab };
+    history.pushState(state, '', '#tab-' + tab);
+    _routeSaveSession(state);
   }
 
   // Non-transactions tabs (rules / upload / gst): hide the drive home,
@@ -2330,13 +2932,17 @@ function closeAuxPanel() {
 }
 
 // ---- Filters ----
-function getFilteredIndices() {
+function _getFilteredBase() {
   const search = document.getElementById('searchBox').value.toLowerCase();
   const typeF = document.getElementById('typeFilter').value;
   const classF = document.getElementById('classFilter').value;
   return allTransactions.map((t, i) => ({ t, i })).filter(({ t, i }) => {
-    if (search && !t.narration.toLowerCase().includes(search) &&
-        !t.particulars.toLowerCase().includes(search)) return false;
+    if (search) {
+      const partyN = (classificationResults[i]?.party_name || '').toLowerCase();
+      if (!t.narration.toLowerCase().includes(search) &&
+          !t.particulars.toLowerCase().includes(search) &&
+          !partyN.includes(search)) return false;
+    }
     if (typeF && t.voucher_type !== typeF) return false;
     if (classF === 'classified' && !classificationResults[i]) return false;
     if (classF === 'unclassified' && classificationResults[i]) return false;
@@ -2345,10 +2951,16 @@ function getFilteredIndices() {
     if (classF === 'corrected' && reviewDecisions[i] !== 'corrected') return false;
     if (classF === 'flagged' && reviewDecisions[i] !== 'flagged') return false;
     if (classF === 'rejected' && reviewDecisions[i] !== 'rejected') return false;
+    if (classF === 'asset' && !classificationResults[i]?.is_asset) return false;
+    if (classF === 'refund' && !classificationResults[i]?.is_refund) return false;
+    if (classF === 'direct' && classificationResults[i]?.transaction_type !== 'direct') return false;
+    if (classF === 'indirect' && (!classificationResults[i] || classificationResults[i]?.transaction_type === 'direct')) return false;
     return true;
   }).map(({ i }) => i);
 }
+function getFilteredIndices() { return _getFilteredBase(); } // replaced by sort-aware version below
 function filterTable() { currentPage = 1; renderTable(); updateStats(); }
+
 
 function changePageSize(val) {
   pageSize = parseInt(val, 10);
@@ -2405,7 +3017,7 @@ function renderTable() {
 
   const tbody = document.getElementById('txnBody');
   if (pageIndices.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--text-muted)">No transactions match</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted)">No transactions match</td></tr>`;
     return;
   }
   tbody.innerHTML = pageIndices.map((i, rowNum) => {
@@ -2419,23 +3031,37 @@ function renderTable() {
       ? `<span class="badge badge-receipt">↑ In</span>`
       : `<span class="badge badge-payment">↓ Out</span>`;
 
-    let classBadge;
+    let classBadgeInner;
     if (decision === 'accepted') {
-      classBadge = res ? `<span class="badge badge-accepted">${icon('ic-check',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-accepted">${icon('ic-check',9)} Accepted</span>`;
+      classBadgeInner = res ? `<span class="badge badge-accepted">${icon('ic-check',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-accepted">${icon('ic-check',9)} Accepted</span>`;
     } else if (decision === 'corrected') {
-      classBadge = res ? `<span class="badge badge-corrected">${icon('ic-check',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-corrected">Corrected</span>`;
+      classBadgeInner = res ? `<span class="badge badge-corrected">${icon('ic-check',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-corrected">Corrected</span>`;
     } else if (decision === 'flagged') {
-      classBadge = `<span class="badge badge-flagged">${icon('ic-alert',9)} Flagged</span>`;
+      classBadgeInner = `<span class="badge badge-flagged">${icon('ic-alert',9)} Flagged</span>`;
     } else if (decision === 'rejected') {
-      classBadge = res ? `<span class="badge badge-rejected">${icon('ic-x',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-rejected">${icon('ic-x',9)} Rejected</span>`;
+      classBadgeInner = res ? `<span class="badge badge-rejected">${icon('ic-x',9)} ${escHtml(res.classification)}</span>` : `<span class="badge badge-rejected">${icon('ic-x',9)} Rejected</span>`;
     } else if (res) {
       const isLearned = res.matched_detail === 'Auto-classified from learned feedback';
-      classBadge = isLearned
+      classBadgeInner = isLearned
         ? `<span class="badge badge-learned">${icon('ic-brain',9)} ${escHtml(res.classification)}</span>`
         : `<span class="badge badge-classified">${icon('ic-sparkle',9)} ${escHtml(res.classification)}</span>`;
     } else {
-      classBadge = `<span class="badge badge-pending">Pending</span>`;
+      classBadgeInner = `<span class="badge badge-pending" style="cursor:pointer" title="Click to assign category">+ Category</span>`;
     }
+    // Transaction type badge
+    const txTypeBadge = res
+      ? (res.transaction_type === 'direct'
+          ? `<span style="display:inline-block;font-size:0.6rem;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(5,150,105,0.12);color:var(--green);border:1px solid rgba(5,150,105,0.25);margin-top:2px">DIR</span>`
+          : `<span style="display:inline-block;font-size:0.6rem;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(100,116,139,0.1);color:var(--text-muted);border:1px solid var(--border);margin-top:2px">IND</span>`)
+      : '';
+    // Wrap in clickable pill-edit container (only when row is classified or always to allow assignment)
+    const classBadge = `<span class="pill-edit-wrap" onclick="event.stopPropagation();openPillEditor(event,${i})" title="Click to change category"><span style="display:inline-flex;align-items:center;gap:2px">${classBadgeInner}<span style="font-size:0.6rem;opacity:0.5">▾</span></span></span>`;
+
+    // Party badge — clickable to filter by party
+    const _partyName = res && res.party_name ? res.party_name : '';
+    const partyBadge = _partyName
+      ? `<span class="party-link" onclick="event.stopPropagation();filterTableByPartyName('${escHtml(_partyName.replace(/'/g,"\'"))}');" title="Filter by ${escHtml(_partyName)}">${escHtml(_partyName)}</span>`
+      : `<span style="color:var(--text-muted);font-size:0.72rem">—</span>`;
 
     const refBadge = res && res.reference_id
       ? `<span class="badge badge-ref">${icon('ic-link',9)} ${escHtml(res.reference_id)}</span>`
@@ -2515,13 +3141,16 @@ function renderTable() {
     }
 
     // GST working match sub-row: shown when a reference_id was matched from a GSTR-2B context sheet
+    // or when an ITC match with an invoice_no was found (fixes medium-confidence reference_id missing bug)
     let gstMatchRow = '';
-    if (res && res.reference_id && res.matched_detail && res.matched_detail !== 'Auto-classified' && res.matched_detail !== 'Auto-classified from learned feedback' && res.matched_detail !== 'User corrected' && res.matched_detail !== 'User corrected + learned') {
-      const colSpan = 13;
-      const refId = escHtml(res.reference_id);
-      // Use structured itcRow data if available, otherwise show matched_detail
-      const itcK = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
-      const rowItc = itcMatches[itcK] || {};
+    const itcK = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+    const rowItc = itcMatches[itcK] || {};
+    const hasItcInvoice = rowItc.invoice_no && rowItc.itc_status === 'reflected';
+    const hasRefId = res && res.reference_id && res.matched_detail && res.matched_detail !== 'Auto-classified' && res.matched_detail !== 'Auto-classified from learned feedback' && res.matched_detail !== 'User corrected' && res.matched_detail !== 'User corrected + learned';
+    if (hasRefId || hasItcInvoice) {
+      const colSpan = 17; // updated for new asset col
+      // Use the reference_id from classificationResults if present, else fall back to invoice_no
+      const refId = escHtml((res && res.reference_id) || rowItc.invoice_no || '');
       const subVendor = rowItc.vendor_name || '';
       const subDate   = rowItc.invoice_date || '';
       const subVal    = rowItc.invoice_value || '';
@@ -2532,17 +3161,17 @@ function renderTable() {
       const gstParts  = [subIgst>0 ? `IGST ₹${subIgst}` : '', subCgst>0 ? `CGST ₹${subCgst}` : '', subSgst>0 ? `SGST ₹${subSgst}` : ''].filter(Boolean).join(' ');
       const detailStr = subVendor
         ? `${escHtml(subVendor)}${subDate ? ' · '+escHtml(subDate) : ''}${subVal ? ' · ₹'+escHtml(subVal) : ''}${gstParts ? ' · GST: '+escHtml(gstParts) : ''}`
-        : escHtml(res.matched_detail);
+        : (res && res.matched_detail ? escHtml(res.matched_detail) : '');
+      const confLabel = rowItc.confidence === 'medium' ? ' <span style="color:var(--yellow);font-size:0.62rem">⚠ Medium confidence</span>' : '';
       gstMatchRow = `<tr class="gst-match-row" onclick="selectRow(${i})">
         <td colspan="${colSpan}" style="padding:2px 8px 3px 52px">
           <span class="gst-match-label">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-            Reflected in GSTR-2B
+            Reflected in GSTR-2B${confLabel}
           </span>
           <span class="gst-match-divider">·</span>
           <span class="gst-match-field">Inv# <span>${refId}</span></span>
-          <span class="gst-match-divider">·</span>
-          <span class="gst-match-field">${detailStr}</span>
+          ${detailStr ? `<span class="gst-match-divider">·</span><span class="gst-match-field">${detailStr}</span>` : ''}
         </td>
       </tr>`;
     }
@@ -2552,12 +3181,16 @@ function renderTable() {
       <td class="row-num" style="width:36px;max-width:36px">${(currentPage-1)*pageSize + rowNum + 1}</td>
       <td style="width:90px;max-width:90px;white-space:nowrap;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim)">${date}</td>
       <td style="width:76px;max-width:76px;font-size:0.74rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(bank)}</td>
-      <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px">${typeBadge}</td>
-      <td class="narr-cell" title="${escHtml(t.narration)}" onclick="updateFormulaBar(${i},'${escHtml(date)}')">${escHtml(t.narration)}${dupBadge}</td>
+      <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px">${typeBadge}${res && res.is_refund ? '<br><span style="font-size:0.6rem;font-weight:700;color:#7c3aed;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.25);border-radius:4px;padding:1px 4px">↩ Refund</span>' : ''}</td>
+      <td class="narr-cell" title="${escHtml(t.narration)}" onclick="updateFormulaBar(${i},'${escHtml(date)}')">${escHtml(t.narration)}${dupBadge}${res && res.is_refund && res.refund_vendor ? ` <span style="font-size:0.66rem;color:var(--purple);opacity:0.8">(${escHtml(res.refund_vendor)})</span>` : ''}</td>
       <td class="amount-cell ${isReceipt?'receipt':'payment'}" style="width:100px;max-width:100px;text-align:right">${escHtml(t.gross_total)}</td>
-      <td style="width:148px;max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px">${classBadge}</td>
-      <td style="width:112px;max-width:112px;text-align:center;white-space:nowrap;padding:5px 6px">${gstBadge}</td>
-      <td style="width:122px;max-width:122px;text-align:center;white-space:nowrap;padding:5px 6px">${tdsBadge}</td>
+      <td style="width:44px;max-width:44px;text-align:center;padding:5px 3px" title="${res && res.is_asset ? 'Asset — click to unmark' : 'Not an asset — click to mark as asset'}" onclick="event.stopPropagation();toggleAsset(${i})">${res && res.is_asset ? '<span style="font-size:0.66rem;font-weight:700;color:#b45309;background:rgba(180,83,9,0.1);border:1px solid rgba(180,83,9,0.3);border-radius:4px;padding:1px 5px;cursor:pointer">📦 Asset</span>' : '<span style="font-size:0.6rem;color:var(--border2);cursor:pointer">○</span>'}</td>
+      <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px;cursor:${res ? 'pointer' : 'default'}" title="${res ? 'Click to toggle Direct/Indirect' : 'Not classified'}" onclick="event.stopPropagation();${res ? `setTransactionType(${i},'${res.transaction_type === 'direct' ? 'indirect' : 'direct'}')` : ''}">${txTypeBadge || '<span style="color:var(--text-muted);font-size:0.72rem">—</span>'}</td>
+      <td style="width:130px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px">${classBadge}</td>
+      <td style="width:120px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;font-size:0.72rem;color:var(--text-muted)">${res && res.subclassification ? escHtml(res.subclassification) : '<span style="color:var(--border2)">—</span>'}</td>
+      <td style="width:110px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px">${partyBadge}</td>
+      <td style="width:112px;max-width:112px;text-align:center;white-space:nowrap;padding:5px 6px" onclick="event.stopPropagation();openGstPillEditor(event,${i})" title="Click to edit GST classification" style="cursor:pointer">${gstBadge}</td>
+      <td style="width:122px;max-width:122px;text-align:center;white-space:nowrap;padding:5px 6px" onclick="event.stopPropagation();openTdsPillEditor(event,${i})" title="Click to edit TDS classification" style="cursor:pointer">${tdsBadge}</td>
       <td style="width:108px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${refBadge}</td>
       <td style="width:120px;max-width:120px;text-align:center;white-space:nowrap;padding:4px 6px">${itcBadge}</td>
       <td style="width:36px;max-width:36px;text-align:center">${confDot}</td>
@@ -2584,6 +3217,13 @@ async function loadRules() {
   `).join('');
   document.getElementById('rulesPill').style.display = '';
   document.getElementById('rulesStatus').textContent = `${rules.length} rules`;
+  // Populate the datalist for manual rule creation with all known categories
+  const dl = document.getElementById('newRuleClassList');
+  if (dl) {
+    const allCats = [...(window.ALL_CATEGORIES || []),
+      ...rules.map(r => r.classification).filter((c,i,a) => a.indexOf(c)===i)];
+    dl.innerHTML = [...new Set(allCats)].map(c => `<option value="${escHtml(c)}">`).join('');
+  }
 }
 
 async function deleteRule(id) {
@@ -2601,16 +3241,46 @@ function updateStats() {
   const corrected = Object.values(reviewDecisions).filter(d => d === 'corrected').length;
   const flagged = Object.values(reviewDecisions).filter(d => d === 'flagged').length;
   const dups = Object.keys(duplicatesMap).length;
+  const assets = Object.values(classificationResults).filter(r => r?.is_asset).length;
+  const refunds = Object.values(classificationResults).filter(r => r?.is_refund).length;
+  const directTxns   = Object.values(classificationResults).filter(r => r?.transaction_type === 'direct').length;
+  const indirectTxns = Object.values(classificationResults).filter(r => r && r.transaction_type !== 'direct').length;
+
+  // Determine current active filter to highlight the matching card
+  const curType  = document.getElementById('typeFilter').value;
+  const curClass = document.getElementById('classFilter').value;
+  function activeClass(typeVal, classVal) {
+    const typeMatch  = curType  === typeVal;
+    const classMatch = curClass === classVal;
+    return (typeMatch && classMatch) ? ' stat-active' : '';
+  }
+
   document.getElementById('statsBar').innerHTML = `
-    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${receipts}</div><div class="stat-lbl">↑ Receipts</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--red)">${payments}</div><div class="stat-lbl">↓ Payments</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:#93c5fd">${classified}</div><div class="stat-lbl">Classified</div></div>
-    ${accepted > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--green)">${accepted}</div><div class="stat-lbl">Accepted</div></div>` : ''}
-    ${corrected > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${corrected}</div><div class="stat-lbl">Corrected</div></div>` : ''}
-    ${flagged > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--red)">${flagged}</div><div class="stat-lbl">Flagged</div></div>` : ''}
-    ${dups > 0 ? `<div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${dups}</div><div class="stat-lbl">Dup Flags</div></div>` : ''}
+    <div class="stat-card clickable${activeClass('','')}" onclick="statCardFilter('','')">
+      <div class="stat-num">${total}</div><div class="stat-lbl">Total</div></div>
+    <div class="stat-card clickable${activeClass('Receipt','')}" onclick="statCardFilter('Receipt','')">
+      <div class="stat-num" style="color:var(--green)">${receipts}</div><div class="stat-lbl">↑ Receipts</div></div>
+    <div class="stat-card clickable${activeClass('Payment','')}" onclick="statCardFilter('Payment','')">
+      <div class="stat-num" style="color:var(--red)">${payments}</div><div class="stat-lbl">↓ Payments</div></div>
+    <div class="stat-card clickable${activeClass('','classified')}" onclick="statCardFilter('','classified')">
+      <div class="stat-num" style="color:#93c5fd">${classified}</div><div class="stat-lbl">Classified</div></div>
+    ${accepted > 0 ? `<div class="stat-card clickable${activeClass('','accepted')}" onclick="statCardFilter('','accepted')"><div class="stat-num" style="color:var(--green)">${accepted}</div><div class="stat-lbl">Accepted</div></div>` : ''}
+    ${corrected > 0 ? `<div class="stat-card clickable${activeClass('','corrected')}" onclick="statCardFilter('','corrected')"><div class="stat-num" style="color:var(--yellow)">${corrected}</div><div class="stat-lbl">Corrected</div></div>` : ''}
+    ${flagged > 0 ? `<div class="stat-card clickable${activeClass('','flagged')}" onclick="statCardFilter('','flagged')"><div class="stat-num" style="color:var(--red)">${flagged}</div><div class="stat-lbl">Flagged</div></div>` : ''}
+    ${dups > 0 ? `<div class="stat-card clickable${activeClass('','duplicate')}" onclick="statCardFilter('','duplicate')"><div class="stat-num" style="color:var(--yellow)">${dups}</div><div class="stat-lbl">Dup Flags</div></div>` : ''}
+    ${directTxns > 0 ? `<div class="stat-card clickable${activeClass('','direct')}" onclick="statCardFilter('','direct')"><div class="stat-num" style="color:#0891b2">${directTxns}</div><div class="stat-lbl">⚡ Direct</div></div>` : ''}
+    ${indirectTxns > 0 ? `<div class="stat-card clickable${activeClass('','indirect')}" onclick="statCardFilter('','indirect')"><div class="stat-num" style="color:#6b7280">${indirectTxns}</div><div class="stat-lbl">↻ Indirect</div></div>` : ''}
+    ${assets > 0 ? `<div class="stat-card clickable${activeClass('','asset')}" onclick="statCardFilter('','asset')"><div class="stat-num" style="color:#b45309">${assets}</div><div class="stat-lbl">📦 Assets</div></div>` : ''}
+    ${refunds > 0 ? `<div class="stat-card clickable${activeClass('','refund')}" onclick="statCardFilter('','refund')"><div class="stat-num" style="color:#7c3aed">${refunds}</div><div class="stat-lbl">↩ Refunds</div></div>` : ''}
   `;
+}
+
+function statCardFilter(typeVal, classVal) {
+  document.getElementById('typeFilter').value  = typeVal;
+  document.getElementById('classFilter').value = classVal;
+  currentPage = 1;
+  renderTable();
+  updateStats(); // re-render cards so active state refreshes
 }
 
 // ---- Row / Detail ----
@@ -2800,6 +3470,109 @@ function renderItcDetailHtml(t) {
   return '';
 }
 
+function _renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions) {
+  if (!res) {
+    return '<button class="btn btn-primary" style="width:100%;justify-content:center" onclick="classifySingle(' + i + ')">' +
+           icon('ic-sparkle',13) + ' Classify This Entry</button>';
+  }
+
+  const txType = res.transaction_type || 'indirect';
+  const isDirect = txType === 'direct';
+  const directBtnCls   = isDirect  ? 'btn-success'   : 'btn-secondary';
+  const indirectBtnCls = !isDirect ? 'btn-secondary btn-active' : 'btn-secondary';
+
+  const subclsHtml = res.subclassification
+    ? '<div style="font-size:0.76rem;color:var(--text-muted);margin-top:2px;margin-bottom:4px">↳ ' + escHtml(res.subclassification) + '</div>'
+    : '';
+
+  const typeBadge = isDirect
+    ? '<span style="font-size:0.7rem;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(5,150,105,0.12);color:var(--green);border:1px solid rgba(5,150,105,0.3)">⬤ Direct Transaction</span>'
+    : '<span style="font-size:0.7rem;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)">◯ Indirect Transaction</span>';
+
+  const partyHtml = res.party_name
+    ? '<span style="font-size:0.74rem;font-weight:500;color:var(--accent)" title="Party/Vendor">🏢 ' + escHtml(res.party_name) + '</span>'
+    : '';
+
+  const refHtml = res.reference_id
+    ? '<div style="margin:5px 0"><span class="badge badge-ref">' + icon('ic-link',9) + ' ' + escHtml(res.reference_id) + '</span></div>'
+    : '';
+
+  const matchHtml = res.matched_detail
+    ? '<div style="font-size:0.76rem;margin:4px 0;color:var(--accent2);display:flex;align-items:center;gap:4px">' + icon('ic-link',11) + ' ' + escHtml(res.matched_detail) + '</div>'
+    : '';
+
+  const savedHtml = (res.direct_product_name || res.direct_quantity)
+    ? '<div style="margin-top:6px;font-size:0.72rem;color:var(--green)">✓ Saved: ' + escHtml(res.direct_product_name || '') + (res.direct_quantity ? ' · ' + escHtml(res.direct_quantity) : '') + '</div>'
+    : '';
+
+  const directBoxHtml = isDirect
+    ? '<div class="direct-txn-box">' +
+        '<div class="direct-txn-title">📦 Direct Transaction Details</div>' +
+        '<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">Add product and quantity for this direct business transaction:</div>' +
+        '<input class="direct-txn-input" id="directProductName" type="text" placeholder="Product name (e.g. Headset, Tablet, Carry Case, Lens…)" value="' + escHtml(res.direct_product_name||'') + '" onchange="saveDirectTxnDetail(' + i + ')">' +
+        '<input class="direct-txn-input" id="directQuantity" type="text" placeholder="Quantity (e.g. 5 units, 2 pcs, 1 box…)" value="' + escHtml(res.direct_quantity||'') + '" onchange="saveDirectTxnDetail(' + i + ')">' +
+        '<button class="btn btn-success btn-xs" onclick="saveDirectTxnDetail(' + i + ')" style="margin-top:2px">Save Details</button>' +
+        savedHtml +
+      '</div>'
+    : '';
+
+  // Asset & Refund badges
+  const isAsset = !!(res.is_asset);
+  const isRefund = !!(res.is_refund);
+  const assetBadge = isAsset
+    ? '<span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(180,83,9,0.12);color:#b45309;border:1px solid rgba(180,83,9,0.3)">📦 Capital Asset</span>'
+    : '';
+  const refundBadge = isRefund
+    ? '<span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(124,58,237,0.1);color:#7c3aed;border:1px solid rgba(124,58,237,0.25)">↩ Refund' + (res.refund_vendor ? ' · ' + escHtml(res.refund_vendor) : '') + '</span>'
+    : '';
+  const assetBtnCls   = isAsset  ? 'btn-warning'   : 'btn-secondary';
+  const assetBtnLabel = isAsset  ? '📦 Unmark Asset' : '📦 Mark as Asset';
+  const refundBtnCls   = isRefund ? 'btn-secondary'  : 'btn-secondary';
+  const refundBtnLabel = isRefund ? '↩ Unmark Refund' : '↩ Mark as Refund';
+
+  return '<div class="ai-result-box">' +
+    '<div class="ai-result-title">' + icon('ic-sparkle',11) + ' AI Classification</div>' +
+    '<div class="ai-category">' + escHtml(res.classification) + '</div>' +
+    subclsHtml +
+    '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px">' + typeBadge + partyHtml + (assetBadge ? ' ' + assetBadge : '') + (refundBadge ? ' ' + refundBadge : '') + '</div>' +
+    refHtml + matchHtml +
+    renderItcDetailHtml(t) +
+    '<div style="margin:5px 0;display:flex;align-items:center;gap:5px"><span class="conf-dot conf-' + res.confidence + '"></span><span style="font-size:0.72rem;color:var(--text-muted)">' + res.confidence + ' confidence</span></div>' +
+    '<div class="ai-reasoning">' + escHtml(res.reasoning) + '</div>' +
+  '</div>' +
+  directBoxHtml +
+  reviewStatusHtml +
+  '<div class="feedback-box">' +
+    '<div class="feedback-box-title">' + icon('ic-comment',11) + ' Feedback</div>' +
+    '<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:7px">Correct the classification if wrong:</div>' +
+    '<select class="cat-select" id="feedbackCat">' + catOptions + '</select>' +
+    '<div style="display:flex;gap:5px;margin-bottom:8px">' +
+      '<input class="cat-select" id="feedbackCustomCat" type="text" placeholder="Or type a custom category…" style="margin-bottom:0;font-size:0.77rem"' +
+      ' oninput="if(this.value.trim()){document.getElementById(&quot;feedbackCat&quot;).value=&quot;__custom__&quot;}"' +
+      ' onkeydown="if(event.key===&quot;Enter&quot;){event.preventDefault();applyCustomCategoryFromPanel(' + i + ')}">' +
+      '<button class="btn btn-secondary btn-xs" onclick="applyCustomCategoryFromPanel(' + i + ')" title="Use this custom category">+ Use</button>' +
+    '</div>' +
+    '<label class="learn-toggle"><input type="checkbox" id="feedbackLearn" checked><span>Learn from this — apply to similar narrations automatically</span></label>' +
+    '<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap">' +
+      '<span style="font-size:0.72rem;color:var(--text-muted)">Transaction type:</span>' +
+      '<button class="btn btn-xs ' + directBtnCls + '" id="toggleTypeDirect_' + i + '" onclick="setTransactionType(' + i + ',&quot;direct&quot;)">Direct</button>' +
+      '<button class="btn btn-xs ' + indirectBtnCls + '" id="toggleTypeIndirect_' + i + '" onclick="setTransactionType(' + i + ',&quot;indirect&quot;)">Indirect</button>' +
+    '</div>' +
+    '<div class="feedback-actions">' +
+      '<button class="btn btn-success" onclick="acceptClassification(' + i + ')">' + icon('ic-check',12) + ' Accept</button>' +
+      '<button class="btn btn-primary" onclick="submitFeedback(' + i + ')">' + icon('ic-check',12) + ' Save Correction</button>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-xs ' + assetBtnCls + '" onclick="toggleAsset(' + i + ')" title="Toggle capital asset flag">' + assetBtnLabel + '</button>' +
+      '<button class="btn btn-xs ' + refundBtnCls + '" onclick="toggleRefund(' + i + ')" title="Toggle refund flag">' + refundBtnLabel + '</button>' +
+    '</div>' +
+    '<div style="margin-top:9px;font-size:0.7rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:8px">' +
+      '<span class="key">Enter</span> Accept &amp; next &nbsp;·&nbsp; <span class="key">F</span> Flag &amp; next &nbsp;·&nbsp; <span class="key">R</span> Correct &nbsp;·&nbsp; <span class="key">↑↓</span> Navigate<br>' +
+      '<span style="margin-top:5px;display:inline-block"><span class="key">G</span> Accept GST &nbsp;·&nbsp; <span class="key">H</span> Change GST &nbsp;·&nbsp; <span class="key">T</span> Accept TDS &nbsp;·&nbsp; <span class="key">Y</span> Change TDS</span>' +
+    '</div>' +
+  '</div>';
+}
+
 function renderDetailPanel(i) {
   const t = allTransactions[i];
   const res = classificationResults[i];
@@ -2832,7 +3605,11 @@ function renderDetailPanel(i) {
     reviewStatusHtml = `<div class="review-status-rej">${icon('ic-x',13)} Rejected</div>`;
   }
 
-  const catOptions = ALL_CATEGORIES.map(c =>
+  const customCats = Object.values(classificationResults)
+    .map(r => r?.classification).filter(c => c && !ALL_CATEGORIES.includes(c))
+    .filter((c, i, a) => a.indexOf(c) === i);
+  const allCatsForPanel = [...ALL_CATEGORIES, ...customCats];
+  const catOptions = allCatsForPanel.map(c =>
     `<option value="${c}" ${res && res.classification === c ? 'selected' : ''}>${c}</option>`
   ).join('');
 
@@ -2871,43 +3648,7 @@ function renderDetailPanel(i) {
 
     ${renderTaxDetailHtml(t)}
 
-    ${res ? `
-    <div class="ai-result-box">
-      <div class="ai-result-title">${icon('ic-sparkle',11)} AI Classification</div>
-      <div class="ai-category">${escHtml(res.classification)}</div>
-      ${res.reference_id ? `<div style="margin:5px 0"><span class="badge badge-ref">${icon('ic-link',9)} ${escHtml(res.reference_id)}</span></div>` : ''}
-      ${res.matched_detail ? `<div style="font-size:0.76rem;margin:4px 0;color:var(--accent2);display:flex;align-items:center;gap:4px">${icon('ic-link',11)} ${escHtml(res.matched_detail)}</div>` : ''}
-      ${renderItcDetailHtml(t)}
-      <div style="margin:5px 0;display:flex;align-items:center;gap:5px"><span class="conf-dot conf-${res.confidence}"></span><span style="font-size:0.72rem;color:var(--text-muted)">${res.confidence} confidence</span></div>
-      <div class="ai-reasoning">${escHtml(res.reasoning)}</div>
-    </div>
-
-    ${reviewStatusHtml}
-
-    <div class="feedback-box">
-      <div class="feedback-box-title">${icon('ic-comment',11)} Feedback</div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:7px">Correct the classification if wrong:</div>
-      <select class="cat-select" id="feedbackCat">${catOptions}</select>
-      <label class="learn-toggle">
-        <input type="checkbox" id="feedbackLearn" checked>
-        <span>Learn from this — apply to similar narrations automatically</span>
-      </label>
-      <div class="feedback-actions">
-        <button class="btn btn-success" onclick="acceptClassification(${i})">${icon('ic-check',12)} Accept</button>
-        <button class="btn btn-primary" onclick="submitFeedback(${i})">${icon('ic-check',12)} Save Correction</button>
-      </div>
-      <div style="margin-top:9px;font-size:0.7rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:8px">
-        <span class="key">Enter</span> Accept &amp; next &nbsp;·&nbsp;
-        <span class="key">F</span> Flag &amp; next &nbsp;·&nbsp;
-        <span class="key">R</span> Correct &nbsp;·&nbsp;
-        <span class="key">↑↓</span> Navigate
-      </div>
-    </div>
-    ` : `
-    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="classifySingle(${i})">
-      ${icon('ic-sparkle',13)} Classify This Entry
-    </button>
-    `}
+    ${_renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions)}
   `;
 }
 
@@ -2935,17 +3676,32 @@ function resetRowDecision(i, event) {
 async function submitFeedback(i) {
   const t = allTransactions[i];
   const res = classificationResults[i];
-  const corrected = document.getElementById('feedbackCat').value;
+  const customInput = document.getElementById('feedbackCustomCat');
+  const customVal = customInput ? customInput.value.trim() : '';
+  const selectEl = document.getElementById('feedbackCat');
+  let corrected = selectEl ? selectEl.value : '';
+  // If user typed a custom category, use that
+  if (customVal) {
+    corrected = customVal;
+    if (!ALL_CATEGORIES.includes(corrected)) ALL_CATEGORIES.push(corrected);
+  }
+  if (!corrected || corrected === '__custom__') { showToast('Please select or type a category.'); return; }
   const shouldLearn = document.getElementById('feedbackLearn').checked;
-  if (!corrected) return;
 
   if (shouldLearn) {
-    // Show keyword suggestion modal before saving
     openKwModal(i, corrected, t.narration);
     return;
   }
-
   await _doSubmitFeedback(i, corrected, false, null);
+}
+
+function applyCustomCategoryFromPanel(i) {
+  const customInput = document.getElementById('feedbackCustomCat');
+  const val = customInput ? customInput.value.trim() : '';
+  if (!val) { showToast('Type a category name first.'); return; }
+  if (!ALL_CATEGORIES.includes(val)) ALL_CATEGORIES.push(val);
+  _applyInlineCategory(i, val);
+  if (customInput) customInput.value = '';
 }
 
 async function _doSubmitFeedback(i, corrected, shouldLearn, keyword) {
@@ -2995,7 +3751,11 @@ function showToast(msg, duration = 3500) {
 
 // ---- Quick Review ----
 function buildCatOptions(select, current) {
-  select.innerHTML = ALL_CATEGORIES.map(c =>
+  const customCats = Object.values(classificationResults)
+    .map(r => r?.classification).filter(c => c && !ALL_CATEGORIES.includes(c))
+    .filter((c, i, a) => a.indexOf(c) === i);
+  const allCats = [...ALL_CATEGORIES, ...customCats];
+  select.innerHTML = allCats.map(c =>
     `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`
   ).join('');
 }
@@ -3130,6 +3890,40 @@ document.addEventListener('keydown', function(e) {
     // Focus the feedback category select in detail panel
     const cat = document.getElementById('feedbackCat');
     if (cat) { cat.focus(); showToast('Select correct category, then Save Correction'); }
+  } else if (e.key === 'g' || e.key === 'G') {
+    // G = Accept GST classification (confirm it as-is)
+    e.preventDefault();
+    const t = allTransactions[selectedTxnIndex];
+    if (!t) return;
+    const txnKey = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+    const tax = taxClassifications[txnKey];
+    if (tax) {
+      tax.confirmed = 1;
+      showToast('GST classification accepted ✓');
+    } else {
+      showToast('No GST classification to accept yet. Run classification first.');
+    }
+  } else if (e.key === 'h' || e.key === 'H') {
+    // H = Change GST classification (open tax modal for GST)
+    e.preventDefault();
+    openTaxModalForRow(selectedTxnIndex);
+  } else if (e.key === 't' || e.key === 'T') {
+    // T = Accept TDS classification (confirm it as-is)
+    e.preventDefault();
+    const t = allTransactions[selectedTxnIndex];
+    if (!t) return;
+    const txnKey = `${t.date.slice(0,10)}|${t.narration.slice(0,80)}|${t.gross_total}`;
+    const tax = taxClassifications[txnKey];
+    if (tax) {
+      tax.confirmed = 1;
+      showToast('TDS classification accepted ✓');
+    } else {
+      showToast('No TDS classification to accept yet. Run classification first.');
+    }
+  } else if (e.key === 'y' || e.key === 'Y') {
+    // Y = Change TDS classification (open tax modal for TDS)
+    e.preventDefault();
+    openTaxModalForRow(selectedTxnIndex);
   }
 });
 
@@ -3383,6 +4177,21 @@ const classifyViaStream = function classifyViaStream(indices) {
             if (r.original_index !== undefined) {
               classificationResults[r.original_index] = r;
             }
+            // Auto-populate is_asset if server returned it
+            if (r.is_asset && r.original_index !== undefined) {
+              classificationResults[r.original_index] = {
+                ...(classificationResults[r.original_index] || r),
+                is_asset: true
+              };
+            }
+            // Auto-populate is_refund / refund_vendor if server returned them
+            if (r.is_refund && r.original_index !== undefined) {
+              classificationResults[r.original_index] = {
+                ...(classificationResults[r.original_index] || r),
+                is_refund: true,
+                refund_vendor: r.refund_vendor || ''
+              };
+            }
             // Auto-populate GST/TDS if the classify endpoint returned tax fields
             if (r.gst_applicable || r.tds_applicable) {
               const t = allTransactions[r.original_index];
@@ -3466,7 +4275,9 @@ function toggleSelectAll(cb) {
 function exportCSV() {
   // Column headers — core transaction + tax fields
   const COLS = ['Date','Particulars','Voucher Type','Voucher No','Narration','Gross Total',
-    'AI Classification','Reference ID','Confidence','Reasoning','Review Decision','Duplicate Flag',
+    'AI Classification','Subclassification','Party Name','Transaction Type',
+    'Reference ID','Confidence','Reasoning','Review Decision','Duplicate Flag',
+    'Direct Product Name','Direct Quantity',
     'GST Applicable','GST Direction','GST Rate (%)','GST Component (₹)',
     'TDS Applicable','TDS Direction','TDS Section','TDS Rate (%)','TDS Component (₹)',
     'ITC Claim Status','ITC Confidence'];
@@ -3503,8 +4314,10 @@ function exportCSV() {
     // ── Main transaction row ──────────────────────────────────────────────
     rows.push([
       t.date, t.particulars, t.voucher_type, t.voucher_no, t.narration, t.gross_total,
-      res.classification||'', res.reference_id||'', res.confidence||'',
+      res.classification||'', res.subclassification||'', res.party_name||'', res.transaction_type||'indirect',
+      res.reference_id||'', res.confidence||'',
       res.reasoning||'', reviewDecisions[i]||'', duplicatesMap[String(i)]?'YES':'',
+      res.direct_product_name||'', res.direct_quantity||'',
       tax.gst_applicable||'', tax.gst_direction||'', tax.gst_rate||'', gstComp,
       tax.tds_applicable||'', tax.tds_direction||'', tax.tds_section||'', tax.tds_rate||'', tdsComp,
       itcStatus, itcConf,
@@ -4791,15 +5604,19 @@ async function wsOpenClassifier(nodeId) {
       <th style="width:32px;text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
       <th data-col="date">Date</th><th data-col="bank">Bank</th><th data-col="type">Type</th>
       <th data-col="narration">Narration</th><th data-col="amount">Amount</th>
-      <th data-col="classification">Classification</th>
+      <th style="width:44px;min-width:44px;text-align:center" data-col="asset" title="Asset">Asset</th>
+      <th style="width:62px;min-width:62px;text-align:center" data-col="txntype">Dir/Ind</th>
+      <th style="width:130px;min-width:80px" data-col="classification">Category</th>
+      <th style="width:120px;min-width:70px" data-col="subclassification">Subcategory</th>
+      <th style="width:110px;min-width:110px" data-col="party">Party</th>
       <th style="text-align:center;background:#1c6b40 !important;color:#fff !important" data-col="gst">GST</th>
       <th style="text-align:center;background:#1a2f6e !important;color:#fff !important" data-col="tds">TDS</th>
       <th data-col="ref">Ref</th>
-      <th style="width:120px;min-width:120px;max-width:120px;text-align:center;background:#065f46 !important;color:#fff !important" data-col="itc">ITC Claim</th>
+      <th style="text-align:center;background:#065f46 !important;color:#fff !important" data-col="itc">ITC Claim</th>
       <th data-col="conf">Conf</th>
     </tr></thead>
     <tbody id="txnBody">
-      <tr><td colspan="13" style="text-align:center;padding:48px;color:var(--text-muted)">
+      <tr><td colspan="17" style="text-align:center;padding:48px;color:var(--text-muted)">
         <div class="spinner" style="margin:0 auto 10px"></div><br>
         Loading <strong>${escHtml(node.tab_name)}</strong> from <strong>${escHtml(node.sheet_name)}</strong>...
       </td></tr>
@@ -4814,6 +5631,8 @@ async function wsOpenClassifier(nodeId) {
       </div>
       <div class="pagination-controls" id="pageControls"></div>
     </div>`);
+  // Re-attach sort + resize handlers to the freshly-injected thead
+  window.reattachTableHeaders && window.reattachTableHeaders();
 
   allTransactions = [];
   classificationResults = {};
@@ -4843,10 +5662,18 @@ async function wsOpenClassifier(nodeId) {
       if (idx >= 0) {
         classificationResults[idx] = {
           classification: c.classification,
+          subclassification: c.subclassification || '',
+          party_name: c.party_name || '',
+          transaction_type: c.transaction_type || 'indirect',
           reference_id: c.reference_id || '',
           matched_detail: c.matched_detail || '',
           confidence: c.confidence || 'high',
           reasoning: c.reasoning || '',
+          direct_product_name: c.direct_product_name || '',
+          direct_quantity: c.direct_quantity || '',
+          is_asset: !!(c.is_asset),
+          is_refund: !!(c.is_refund),
+          refund_vendor: c.refund_vendor || '',
           idx: idx
         };
         if (c.review_decision) reviewDecisions[idx] = c.review_decision;
@@ -4861,8 +5688,11 @@ async function wsOpenClassifier(nodeId) {
 
     renderTable(); updateStats();
     showToast(`Loaded ${allTransactions.length} transactions from "${node.tab_name}".`);
-    // Refresh the Upload Context button badge
+    // Refresh the Upload Context button badge and reload bottom-panel file lists
     try { await wsLoadContextFilesSilent(nodeId); refreshUploadContextBtn(); } catch(_) {}
+    try { await reloadBpFilesFromServer(nodeId); } catch(_) {}
+    // Load GST/TDS sheet data tables
+    try { await Promise.all([loadGstSheetData(nodeId), loadTdsSheetData(nodeId)]); } catch(_) {}
   } catch(e) {
     showToast('Failed to load: ' + String(e));
   }
@@ -4875,13 +5705,23 @@ function _makeTxnKey(t) {
 // ======== Drive Home (Google Drive-style navigation) ========
 window._driveCurrentFolderId = null; // null = root
 
-async function navigateDriveHome(folderId) {
+async function navigateDriveHome(folderId, _skipPush) {
   folderId = (folderId === undefined) ? null : folderId;
   window._driveCurrentFolderId = folderId;
+
+  // ── Routing: push a history entry so Back stays within the app ──
+  if (!_skipPush) {
+    const state = { view: 'home', folderId: folderId };
+    history.pushState(state, '', folderId ? `#folder-${folderId}` : '#home');
+    _routeSaveSession(state);
+  }
 
   // Remember that the transactions area is currently in folder/drive-home mode,
   // so that switching to Rules and back returns here (not to a stale txn list).
   window._txnViewMode = 'drive_home';
+
+  // Hide the bottom panel entirely when browsing drive home
+  hideBottomPanel();
 
   // Show drive home, hide classifier
   document.getElementById('driveHomeView').classList.add('active');
@@ -5107,12 +5947,21 @@ async function driveAttachSheet(nodeId) {
   openDriveModal();
 }
 
-function showClassifierView(nodeId) {
+function showClassifierView(nodeId, _skipPush) {
+  // ── Routing: push a history entry for this classifier view ──
+  if (!_skipPush) {
+    const state = { view: 'classifier', nodeId: nodeId };
+    history.pushState(state, '', `#sheet-${nodeId}`);
+    _routeSaveSession(state);
+  }
   // Remember we're in classifier mode on this specific sheet node, so that
   // a round-trip through Rules (or any aux panel) and back lands us here
   // again without re-fetching transactions.
   window._txnViewMode = 'classifier';
   window._lastClassifierNodeId = nodeId;
+
+  // Show the bottom panel strip now that we're in sheet view
+  showBottomPanel();
 
   // Hide drive home, show classifier
   document.getElementById('driveHomeView').classList.remove('active');
@@ -5194,11 +6043,19 @@ async function wsSaveNodeClassifications() {
     return {
       txn_key: _makeTxnKey(t),
       classification: res.classification || '',
+      subclassification: res.subclassification || '',
+      party_name: res.party_name || '',
+      transaction_type: res.transaction_type || 'indirect',
       reference_id: res.reference_id || '',
       matched_detail: res.matched_detail || '',
       confidence: res.confidence || 'high',
       reasoning: res.reasoning || '',
-      review_decision: reviewDecisions[i] || ''
+      review_decision: reviewDecisions[i] || '',
+      direct_product_name: res.direct_product_name || '',
+      direct_quantity: res.direct_quantity || '',
+      is_asset: res.is_asset ? 1 : 0,
+      is_refund: res.is_refund ? 1 : 0,
+      refund_vendor: res.refund_vendor || ''
     };
   }).filter(Boolean);
   if (!records.length) return;
@@ -5216,6 +6073,13 @@ window.classifyViaStream = (function(_orig) {
   return function classifyViaStream(indices) {
     return _orig(indices).then(async () => {
       await wsSaveNodeClassifications();
+      // Auto-detect assets after classification
+      autoDetectAssets();
+      // Refresh GST/TDS sheet data tables
+      const nodeId = window._wsCurrentNodeId;
+      if (nodeId) {
+        try { await Promise.all([loadGstSheetData(nodeId), loadTdsSheetData(nodeId)]); } catch(_) {}
+      }
     });
   };
 })(classifyViaStream);
@@ -5262,13 +6126,17 @@ function closeTabPicker() {
 // ======== Column Manager ========
 const COL_DEFS = [
   { key: 'check',          label: '☑ Select',        defaultW: 30,  hideable: false },
-  { key: 'rownum',         label: '#',                defaultW: 36,  hideable: false },
+  { key: 'rownum',         label: '# (Serial No.)',   defaultW: 36,  hideable: true  },
   { key: 'date',           label: 'Date',             defaultW: 90,  hideable: true },
   { key: 'bank',           label: 'Bank',             defaultW: 110, hideable: true },
   { key: 'type',           label: 'Type',             defaultW: 70,  hideable: true },
   { key: 'narration',      label: 'Narration',        defaultW: 260, hideable: true },
   { key: 'amount',         label: 'Amount',           defaultW: 100, hideable: true },
-  { key: 'classification', label: 'Classification',   defaultW: 160, hideable: true },
+  { key: 'asset',          label: '📦 Asset',          defaultW: 44,  hideable: true },
+  { key: 'txntype',        label: 'Dir/Ind',          defaultW: 62,  hideable: true },
+  { key: 'classification',    label: 'Classification',   defaultW: 160, hideable: true },
+  { key: 'subclassification', label: 'Subcategory',      defaultW: 120, hideable: true },
+  { key: 'party',         label: 'Party',            defaultW: 110, hideable: true },
   { key: 'gst',           label: 'GST',              defaultW: 112, hideable: true },
   { key: 'tds',           label: 'TDS',              defaultW: 122, hideable: true },
   { key: 'ref',            label: 'Ref',              defaultW: 90,  hideable: true },
@@ -5291,7 +6159,7 @@ function applyColStyles() {
     if (!colVisible[c.key]) {
       css += `#txnTable th:nth-child(${nth}), #txnTable td:nth-child(${nth}) { display: none; }\n`;
     } else {
-      css += `#txnTable th:nth-child(${nth}), #txnTable td:nth-child(${nth}) { width: ${colWidths[c.key]}px; min-width: ${colWidths[c.key]}px; max-width: ${colWidths[c.key]}px; }\n`;
+      css += `#txnTable th:nth-child(${nth}), #txnTable td:nth-child(${nth}) { width: ${colWidths[c.key]}px; min-width: ${colWidths[c.key]}px; max-width: none; }\n`;
     }
   });
   el.textContent = css;
@@ -5336,6 +6204,306 @@ function resizeCol(key, val, label) {
   if (label) label.textContent = val + 'px';
   applyColStyles();
 }
+
+// ======== Inline Classification Pill Editor ========
+let _pillEditorOpenIdx = null;
+
+function openPillEditor(event, rowIdx) {
+  closePillEditor();
+  _pillEditorOpenIdx = rowIdx;
+  const currentCls = classificationResults[rowIdx]?.classification || '';
+
+  // Create floating dropdown
+  const dd = document.createElement('div');
+  dd.id = 'pillEditDropdown';
+  dd.className = 'pill-edit-dropdown show';
+
+  // Merge ALL_CATEGORIES + any existing custom categories from classificationResults
+  const customCats = [];
+  Object.values(classificationResults).forEach(r => {
+    if (r && r.classification && !ALL_CATEGORIES.includes(r.classification) && !customCats.includes(r.classification)) {
+      customCats.push(r.classification);
+    }
+  });
+  const allCats = [...ALL_CATEGORIES, ...customCats];
+
+  function renderOptions(filter) {
+    const filtered = filter
+      ? allCats.filter(c => c.toLowerCase().includes(filter.toLowerCase()))
+      : allCats;
+    optionsEl.innerHTML = filtered.map(c =>
+      `<div class="pill-edit-option${c === currentCls ? ' current' : ''}" onclick="applyPillCategory(${rowIdx},'${c.replace(/'/g,"\\'")}')">${escHtml(c)}</div>`
+    ).join('');
+  }
+
+  const searchInput = document.createElement('input');
+  searchInput.className = 'pill-edit-search';
+  searchInput.placeholder = 'Search categories…';
+  dd.appendChild(searchInput);
+
+  const optionsEl = document.createElement('div');
+  dd.appendChild(optionsEl);
+
+  // Custom category row
+  const customRow = document.createElement('div');
+  customRow.className = 'pill-edit-custom-row';
+  customRow.innerHTML = `<input class="pill-edit-custom-input" id="pillCustomInput" placeholder="Custom category…">
+    <button class="pill-edit-custom-btn" onclick="applyPillCustom(${rowIdx})">+ Add</button>`;
+  dd.appendChild(customRow);
+
+  renderOptions('');
+
+  searchInput.addEventListener('input', () => renderOptions(searchInput.value));
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closePillEditor(); e.stopPropagation(); }
+  });
+
+  document.body.appendChild(dd);
+
+  // Position near the click
+  const rect = event.target.closest('.pill-edit-wrap')?.getBoundingClientRect() || { bottom: event.clientY, left: event.clientX };
+  dd.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  dd.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 250) + 'px';
+
+  setTimeout(() => searchInput.focus(), 50);
+}
+
+function closePillEditor() {
+  const dd = document.getElementById('pillEditDropdown');
+  if (dd) dd.remove();
+  _pillEditorOpenIdx = null;
+}
+
+function applyPillCategory(rowIdx, category) {
+  closePillEditor();
+  _applyInlineCategory(rowIdx, category);
+}
+
+function applyPillCustom(rowIdx) {
+  const input = document.getElementById('pillCustomInput');
+  const val = (input?.value || '').trim();
+  if (!val) return;
+  closePillEditor();
+  // Add to ALL_CATEGORIES so it shows up in future dropdowns
+  if (!ALL_CATEGORIES.includes(val)) ALL_CATEGORIES.push(val);
+  _applyInlineCategory(rowIdx, val);
+}
+
+async function _applyInlineCategory(rowIdx, category) {
+  const t = allTransactions[rowIdx];
+  if (!t) return;
+  const existing = classificationResults[rowIdx];
+  const original = existing ? existing.classification : '';
+
+  // Update local state
+  classificationResults[rowIdx] = {
+    ...(existing || { idx: rowIdx, reference_id: '', confidence: 'high', reasoning: '' }),
+    classification: category,
+    matched_detail: 'User corrected',
+    confidence: 'high',
+    reasoning: `Manually set to "${category}" by user.`
+  };
+  reviewDecisions[rowIdx] = 'corrected';
+
+  // Save to server
+  try {
+    await fetch('/api/feedback', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        index: rowIdx, original_classification: original,
+        corrected_classification: category, should_learn: false,
+        narration: t.narration, date: t.date, gross_total: t.gross_total
+      })
+    });
+    if (window._wsCurrentNodeId) wsSaveNodeClassifications();
+  } catch(e) { /* silent */ }
+
+  renderTable(); updateStats();
+  showToast(`Category set: ${category}`);
+}
+
+// Close pill editor on outside click
+document.addEventListener('click', function(e) {
+  if (_pillEditorOpenIdx !== null && !e.target.closest('#pillEditDropdown') && !e.target.closest('.pill-edit-wrap')) {
+    closePillEditor();
+  }
+});
+
+// ======== GST / TDS Inline Pill Editors ========
+function openGstPillEditor(event, rowIdx) {
+  event.stopPropagation();
+  // Reuse quick tax modal approach — open the tax modal pre-filled for this row
+  openTaxModalForRow(rowIdx);
+}
+
+function openTdsPillEditor(event, rowIdx) {
+  event.stopPropagation();
+  openTaxModalForRow(rowIdx);
+}
+
+// ======== Table Sorting ========
+let tableSortCol = null;   // column key
+let tableSortDir = 'asc';  // 'asc' | 'desc'
+
+function sortTableBy(colKey) {
+  if (tableSortCol === colKey) {
+    tableSortDir = tableSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    tableSortCol = colKey;
+    tableSortDir = 'asc';
+  }
+  // Update header sort classes
+  document.querySelectorAll('#txnTable thead th').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.col === colKey) th.classList.add('sort-' + tableSortDir);
+  });
+  renderTable();
+}
+
+// Sort-aware getFilteredIndices — replaces the base version above
+function getFilteredIndices() {
+  const indices = _getFilteredBase();
+  if (!tableSortCol) return indices;
+  const dir = tableSortDir === 'asc' ? 1 : -1;
+  return [...indices].sort((a, b) => {
+    const ta = allTransactions[a], tb = allTransactions[b];
+    let va, vb;
+    switch (tableSortCol) {
+      case 'date':           va = ta.date || ''; vb = tb.date || ''; break;
+      case 'bank':           va = (ta.source || ta.particulars || '').toLowerCase(); vb = (tb.source || tb.particulars || '').toLowerCase(); break;
+      case 'amount':         va = parseFloat(String(ta.gross_total||'0').replace(/[^0-9.-]/g,''))||0; vb = parseFloat(String(tb.gross_total||'0').replace(/[^0-9.-]/g,''))||0; break;
+      case 'type':           va = ta.voucher_type||''; vb = tb.voucher_type||''; break;
+      case 'narration':      va = (ta.narration||'').toLowerCase(); vb = (tb.narration||'').toLowerCase(); break;
+      case 'classification': va = (classificationResults[a]?.classification||'').toLowerCase(); vb = (classificationResults[b]?.classification||'').toLowerCase(); break;
+      case 'gst': {
+        const taxA = taxClassifications[_makeTxnKey(ta)] || {};
+        const taxB = taxClassifications[_makeTxnKey(tb)] || {};
+        va = (taxA.gst_applicable || '').toLowerCase(); vb = (taxB.gst_applicable || '').toLowerCase(); break;
+      }
+      case 'tds': {
+        const taxA = taxClassifications[_makeTxnKey(ta)] || {};
+        const taxB = taxClassifications[_makeTxnKey(tb)] || {};
+        va = (taxA.tds_applicable || '').toLowerCase(); vb = (taxB.tds_applicable || '').toLowerCase(); break;
+      }
+      case 'ref':  va = (classificationResults[a]?.reference_id||'').toLowerCase(); vb = (classificationResults[b]?.reference_id||'').toLowerCase(); break;
+      case 'txntype': va = (classificationResults[a]?.transaction_type||'indirect').toLowerCase(); vb = (classificationResults[b]?.transaction_type||'indirect').toLowerCase(); break;
+      case 'asset':   va = classificationResults[a]?.is_asset ? 1 : 0; vb = classificationResults[b]?.is_asset ? 1 : 0; break;
+      case 'party':   va = (classificationResults[a]?.party_name||'').toLowerCase(); vb = (classificationResults[b]?.party_name||'').toLowerCase(); break;
+      case 'itc': {
+        const itcKeyA = `${ta.date.slice(0,10)}|${ta.narration.slice(0,80)}|${ta.gross_total}`;
+        const itcKeyB = `${tb.date.slice(0,10)}|${tb.narration.slice(0,80)}|${tb.gross_total}`;
+        va = (itcMatches[itcKeyA]?.itc_status || '').toLowerCase();
+        vb = (itcMatches[itcKeyB]?.itc_status || '').toLowerCase();
+        break;
+      }
+      case 'conf': {
+        const confA = classificationResults[a]?.confidence || 0;
+        const confB = classificationResults[b]?.confidence || 0;
+        va = typeof confA === 'string' ? confA.toLowerCase() : confA;
+        vb = typeof confB === 'string' ? confB.toLowerCase() : confB;
+        break;
+      }
+      default: return 0;
+    }
+    if (va < vb) return -1 * dir;
+    if (va > vb) return  1 * dir;
+    return 0;
+  });
+}
+
+// ======== Excel-style Column Resize + Header Sort (unified, fixed) ========
+(function initTableHeaderFeatures() {
+  const SORTABLE_COLS = new Set(['date','bank','type','narration','amount','classification','gst','tds','ref','itc','conf','txntype','party','asset']);
+
+  let resizing = false, resizeKey = null, resizeStartX = 0, resizeStartW = 0;
+  let rafPending = false;
+
+  function attachSortHandler(th) {
+    const col = th.dataset.col;
+    if (!col || !SORTABLE_COLS.has(col)) return;
+    if (th.dataset.sortAttached) return;
+    th.dataset.sortAttached = '1';
+    th.classList.add('sortable');
+    // ⚠️ Must use appendChild — innerHTML+= destroys previously-appended DOM nodes
+    if (!th.querySelector('.sort-indicator')) {
+      const s = document.createElement('span');
+      s.className = 'sort-indicator';
+      th.appendChild(s);
+    }
+    th.addEventListener('click', e => {
+      if (e.target.closest('.col-resize-handle')) return;
+      sortTableBy(col);
+    });
+  }
+
+  function attachResizeHandle(th) {
+    const colKey = th.dataset.col;
+    if (!colKey) return;
+    if (th.querySelector('.col-resize-handle')) return;
+    const handle = document.createElement('div');
+    handle.className = 'col-resize-handle';
+    handle.addEventListener('mousedown', e => {
+      e.stopPropagation(); e.preventDefault();
+      resizing = true; resizeKey = colKey;
+      resizeStartX = e.clientX; resizeStartW = colWidths[colKey] || 80;
+      handle.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+    th.appendChild(handle);
+  }
+
+  // Exposed globally so wsOpenClassifier can call it after rebuilding the table
+  window.reattachTableHeaders = function() {
+    const ths = document.querySelectorAll('#txnTable thead th');
+    ths.forEach(th => {
+      attachSortHandler(th);
+      attachResizeHandle(th);
+    });
+    // Re-observe the new thead
+    const thead = document.querySelector('#txnTable thead');
+    if (thead && !thead._colObserving) {
+      thead._colObserving = true;
+      new MutationObserver(() => window.reattachTableHeaders())
+        .observe(thead, { childList: true, subtree: false });
+    }
+  };
+
+  document.addEventListener('mousemove', e => {
+    if (!resizing || !resizeKey) return;
+    const delta = e.clientX - resizeStartX;
+    colWidths[resizeKey] = Math.max(30, resizeStartW + delta);
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(() => {
+        applyColStyles();
+        rafPending = false;
+      });
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!resizing) return;
+    resizing = false;
+    resizeKey = null;
+    rafPending = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    document.querySelectorAll('.col-resize-handle.resizing').forEach(h => h.classList.remove('resizing'));
+  });
+
+  function init() {
+    const thead = document.querySelector('#txnTable thead');
+    if (!thead) { setTimeout(init, 100); return; }
+    window.reattachTableHeaders();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
 
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.col-manager-wrap')) {
@@ -5632,6 +6800,11 @@ async function runTaxClassify() {
   msg.textContent = `✓ Done — ${allResults.length} transactions`;
   // Re-render main table so GST/TDS badges appear
   renderTable();
+  // Refresh the GST/TDS sheet data tables
+  const nodeId = window._wsCurrentNodeId;
+  if (nodeId) {
+    await Promise.all([loadGstSheetData(nodeId), loadTdsSheetData(nodeId)]);
+  }
 }
 
 function renderTaxTable() {
@@ -5767,6 +6940,48 @@ function closeTaxModal() {
   _taxModalIdx = -1;
 }
 
+// Opens the tax modal pre-filled from the main transaction table's taxClassifications store.
+// Used by keyboard shortcuts (G/H/T/Y) and by inline GST/TDS pill click handlers.
+function openTaxModalForRow(mainRowIdx) {
+  const t = allTransactions[mainRowIdx];
+  if (!t) return;
+  const txnKey = `${(t.date||'').slice(0,10)}|${(t.narration||'').slice(0,80)}|${t.gross_total}`;
+  const tax = taxClassifications[txnKey] || {};
+  // Build a synthetic taxTableData entry so saveTaxConfirmation can write back
+  const syntheticRow = {
+    date: t.date, narration: t.narration, gross_total: t.gross_total,
+    gst_applicable: tax.gst_applicable || 'no',
+    gst_direction:  tax.gst_direction  || '',
+    gst_rate:       tax.gst_rate       || '',
+    tds_applicable: tax.tds_applicable || 'no',
+    tds_direction:  tax.tds_direction  || '',
+    tds_section:    tax.tds_section    || '',
+    tds_rate:       tax.tds_rate       || '',
+    reasoning:      tax.ai_reasoning   || '',
+    _mainRowIdx: mainRowIdx  // back-reference for save
+  };
+  // Push or replace in taxTableData so saveTaxConfirmation can find it
+  const existingTaxIdx = taxTableData.findIndex(r =>
+    r.date === t.date && r.narration === t.narration && r.gross_total === t.gross_total);
+  if (existingTaxIdx >= 0) {
+    _taxModalIdx = existingTaxIdx;
+    Object.assign(taxTableData[existingTaxIdx], syntheticRow);
+  } else {
+    _taxModalIdx = taxTableData.length;
+    taxTableData.push(syntheticRow);
+  }
+  document.getElementById('taxModalNarr').textContent = `${(t.date||'').slice(0,10)} | ${t.narration||''} | ₹${t.gross_total||''}`;
+  document.getElementById('taxModalGstApplicable').value = syntheticRow.gst_applicable;
+  document.getElementById('taxModalGstDir').value         = syntheticRow.gst_direction;
+  document.getElementById('taxModalGstRate').value        = syntheticRow.gst_rate;
+  document.getElementById('taxModalTdsApplicable').value  = syntheticRow.tds_applicable;
+  document.getElementById('taxModalTdsDir').value         = syntheticRow.tds_direction;
+  document.getElementById('taxModalTdsSection').value     = syntheticRow.tds_section;
+  document.getElementById('taxModalTdsRate').value        = syntheticRow.tds_rate;
+  document.getElementById('taxModalReasoning').textContent = syntheticRow.reasoning ? `AI: ${syntheticRow.reasoning}` : '';
+  document.getElementById('taxModalOverlay').classList.add('show');
+}
+
 async function saveTaxConfirmation() {
   if (_taxModalIdx < 0) return;
   const row = taxTableData[_taxModalIdx];
@@ -5796,8 +7011,925 @@ async function saveTaxConfirmation() {
   renderTable(); // refresh GST/TDS badges in main table
 }
 
-// Load tax classifications on init
+// ===================== BOTTOM PANEL =====================
+
+// State
+const bp = {
+  activeTab: 'bank',
+  bankStatements: [],    // [{id, filename, tabs: [{name, rows:[], active}]}]
+  activeBankIdx: 0,
+  gstFiles: [],          // [{id, filename, tabCount, rowCount, source}]
+  tdsFiles: [],
+  salesFiles: [],
+  invoiceFiles: [],      // [{id, filename, source, tabCount, rowCount}]
+  collapsed: false,
+  panelHeight: 320       // remembered height when expanded
+};
+
+function initBottomPanel() {
+  const panel = document.getElementById('bottomPanel');
+  if (!panel) return;
+  // Panel is always visible (as tab strip). Do NOT expand on init.
+  // Spacer = tab bar height only
+  syncPanelSpacer();
+
+  // Resize drag handle
+  const handle = document.getElementById('bottomPanelResize');
+  if (!handle) return;
+  let dragging = false, startY = 0, startH = 0;
+  handle.addEventListener('mousedown', e => {
+    dragging = true; startY = e.clientY; startH = panel.offsetHeight;
+    document.body.style.cursor = 'ns-resize'; e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const delta = startY - e.clientY; // drag up = bigger
+    const newH = Math.max(120, Math.min(600, startH + delta));
+    panel.style.height = newH + 'px';
+    syncPanelSpacer(newH);
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; document.body.style.cursor = ''; }
+  });
+}
+
+function syncPanelSpacer(explicitH) {
+  const panel = document.getElementById('bottomPanel');
+  const spacer = document.getElementById('bottomPanelSpacer');
+  if (!spacer || !panel) return;
+  const h = explicitH !== undefined ? explicitH : panel.offsetHeight;
+  spacer.style.height = h + 'px';
+}
+
+function showBottomPanel() {
+  const panel = document.getElementById('bottomPanel');
+  const spacer = document.getElementById('bottomPanelSpacer');
+  if (!panel) return;
+  panel.classList.add('visible');
+  if (spacer) spacer.classList.add('panel-visible');
+  syncPanelSpacer();
+}
+
+function hideBottomPanel() {
+  const panel = document.getElementById('bottomPanel');
+  const spacer = document.getElementById('bottomPanelSpacer');
+  if (!panel) return;
+  collapseBottomPanel();
+  panel.classList.remove('visible');
+  if (spacer) { spacer.classList.remove('panel-visible'); spacer.style.height = '0'; }
+}
+
+// Click a tab: if panel is collapsed OR a different tab → expand + switch
+// If same tab and already expanded → collapse
+function clickBottomTab(tab, el) {
+  const panel = document.getElementById('bottomPanel');
+  const isExpanded = panel.classList.contains('expanded');
+  const isSameTab = bp.activeTab === tab;
+
+  if (isExpanded && isSameTab) {
+    collapseBottomPanel();
+    return;
+  }
+
+  // Expand and switch to tab
+  bp.activeTab = tab;
+  document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('open'));
+  if (el) el.classList.add('open');
+  document.querySelectorAll('.bottom-tab-panel').forEach(p => p.classList.remove('active'));
+  const tabPanel = document.getElementById('btab-' + tab);
+  if (tabPanel) tabPanel.classList.add('active');
+  if (tab === 'parties') buildPartiesTab();
+
+  if (!isExpanded) {
+    // Restore last known height or default
+    const savedH = bp.panelHeight || 320;
+    panel.style.height = savedH + 'px';
+    panel.classList.add('expanded');
+    const spacer = document.getElementById('bottomPanelSpacer');
+    if (spacer) { spacer.classList.add('expanded'); spacer.style.height = savedH + 'px'; }
+  }
+}
+
+function collapseBottomPanel() {
+  const panel = document.getElementById('bottomPanel');
+  const spacer = document.getElementById('bottomPanelSpacer');
+  // Save current height before collapsing
+  if (panel.classList.contains('expanded')) bp.panelHeight = panel.offsetHeight;
+  panel.classList.remove('expanded');
+  panel.style.height = '';  // reset to CSS default (36px tab strip)
+  document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('open'));
+  if (spacer) { spacer.classList.remove('expanded'); spacer.style.height = '36px'; }
+}
+
+// Keep old switchBottomTab for any internal callers
+function switchBottomTab(tab, el) { clickBottomTab(tab, el); }
+function toggleBottomPanel() {
+  const panel = document.getElementById('bottomPanel');
+  if (panel.classList.contains('expanded')) collapseBottomPanel();
+  else clickBottomTab(bp.activeTab || 'bank', document.querySelector(`.bottom-tab[data-btab="${bp.activeTab || 'bank'}"]`));
+}
+
+// ─── Bank Statements ───────────────────────────────────────────────
+function triggerBankUpload() {
+  document.getElementById('bankFileInput').click();
+}
+
+async function handleBankUpload(files) {
+  if (!files || !files.length) return;
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) {
+    // Still allow upload; we'll store locally without node association
+  }
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        // Upload to context_files if node exists, otherwise keep in memory
+        if (nodeId) {
+          const fd = new FormData();
+          fd.append('files', file);
+          const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files`, { method: 'POST', body: fd });
+          const d = await r.json();
+          if (d.ok) {
+            const cf = (d.uploaded || [])[0];
+            if (cf) {
+              bp.bankStatements.push({
+                id: cf.id, filename: cf.filename, nodeId,
+                tabs: (cf.tabs || []).map(t => ({name: t.tab_name, rows: [], active: true, rowCount: t.row_count}))
+              });
+            }
+          }
+        } else {
+          // Parse locally via simple XLSX read if XLSX available, else store as file-only
+          bp.bankStatements.push({
+            id: Date.now() + Math.random(),
+            filename: file.name, nodeId: null,
+            tabs: [{name: file.name, rows: [], active: true, rowCount: '?'}]
+          });
+        }
+        renderBankSubtabs();
+        renderBankBody();
+        updateBtabCount('bank', bp.bankStatements.length);
+      } catch(e) { console.error('Bank upload failed', e); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function renderBankSubtabs() {
+  const bar = document.getElementById('bankSubtabBar');
+  const subtabs = bp.bankStatements.map((stmt, si) => {
+    const isActive = bp.activeBankIdx === si;
+    const isPrimary = !!stmt._isPrimary;
+    const delBtn = isPrimary
+      ? `<span title="Primary transaction sheet" style="font-size:0.62rem;opacity:0.5;margin-left:2px">🔒</span>`
+      : `<span class="subtab-del" onclick="event.stopPropagation();deleteBankStatement(${si})">✕</span>`;
+    return `<div class="bp-subtab ${isActive ? 'active' : ''}" onclick="selectBankStatement(${si})">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      <span>${escHtml(stmt.filename)}</span>
+      ${delBtn}
+    </div>`;
+  }).join('');
+  bar.innerHTML = subtabs + `<button class="bp-subtab-add" onclick="triggerBankUpload()" title="Upload a bank statement">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Add Statement
+  </button>`;
+}
+
+function selectBankStatement(idx) {
+  bp.activeBankIdx = idx;
+  renderBankSubtabs();
+  renderBankBody();
+}
+
+function renderBankBody() {
+  const body = document.getElementById('bankPanelBody');
+  if (!bp.bankStatements.length) {
+    body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--text-muted)">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      <div style="font-size:0.82rem;text-align:center">No bank statements uploaded yet.<br>Click <strong>Add Statement</strong> above.</div>
+    </div>`;
+    return;
+  }
+  const stmt = bp.bankStatements[bp.activeBankIdx];
+  if (!stmt) return;
+
+  const tabMeta = stmt.tabs.map(t => escHtml(t.name)).join(' · ');
+  const removeBtn = stmt._isPrimary ? '' :
+    `<button class="btn btn-danger btn-xs" onclick="deleteBankStatement(${bp.activeBankIdx})">Remove</button>`;
+
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 4px">
+      <div>
+        <div style="font-size:0.85rem;font-weight:500">${escHtml(stmt.filename)}</div>
+        <div style="font-size:0.74rem;color:var(--text-muted);margin-top:2px">${tabMeta}</div>
+      </div>
+      ${removeBtn}
+    </div>
+  `;
+}
+
+function deleteBankStatement(idx) {
+  bp.bankStatements.splice(idx, 1);
+  bp.activeBankIdx = Math.max(0, bp.activeBankIdx - 1);
+  renderBankSubtabs();
+  renderBankBody();
+  updateBtabCount('bank', bp.bankStatements.length);
+}
+
+// ─── Reload bottom-panel bp.*Files arrays from the server ──────────────
+// Called whenever a new classifier node is opened (or on any page load that
+// resumes a previous classifier session) so that files uploaded in a prior
+// session / deployment are immediately visible in the bottom panel tabs.
+async function reloadBpFilesFromServer(nodeId) {
+  if (!nodeId) return;
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}/context_files`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const allFiles = data.files || [];
+
+    // Map source_label → bp array key and list element id
+    const TYPE_MAP = {
+      gst:      { key: 'gstFiles',     listId: 'gstFilesList'     },
+      tds:      { key: 'tdsFiles',     listId: 'tdsFilesList'     },
+      sales:    { key: 'salesFiles',   listId: 'salesFilesList'   },
+      invoices: { key: 'invoiceFiles', listId: 'invoiceFilesList' },
+      bank:     { key: 'bankStatements', listId: null             },
+    };
+
+    // Reset bp arrays for known types
+    Object.values(TYPE_MAP).forEach(({ key }) => { bp[key] = []; });
+
+    for (const cf of allFiles) {
+      const label = (cf.source_label || '').toLowerCase();
+      const map = TYPE_MAP[label];
+      if (!map || map.key === 'bankStatements') continue; // bank statements have their own flow
+      const entry = {
+        id: cf.id,
+        filename: cf.filename,
+        source: '',
+        tabCount: (cf.tabs || []).length,
+        rowCount: cf.row_count_total || 0,
+        nodeId
+      };
+      (bp[map.key] = bp[map.key] || []).push(entry);
+    }
+
+    // Auto-populate Bank Statements from the node's primary transaction sheet.
+    // The sheet the user uploaded to classify is always the primary statement —
+    // seed it first so the tab is never empty when a classifier node is opened.
+    const node = wsGetNode(nodeId);
+    if (node && node.tab_name && (node.excel_file_id || node.sheet_id)) {
+      const primaryFilename = node.sheet_name || node.tab_name;
+      // Only add if not already present (avoid duplicates on repeated reloads)
+      const alreadyPresent = bp.bankStatements.some(
+        s => s._isPrimary && s.nodeId === nodeId
+      );
+      if (!alreadyPresent) {
+        bp.bankStatements.unshift({
+          id: node.excel_file_id || node.sheet_id,
+          filename: primaryFilename,
+          nodeId,
+          _isPrimary: true,   // marker so we can detect it on reload
+          tabs: [{ name: node.tab_name, rows: [], active: true, rowCount: '…' }]
+        });
+        bp.activeBankIdx = 0;
+      }
+    }
+    renderBankSubtabs();
+    renderBankBody();
+    updateBtabCount('bank', bp.bankStatements.length);
+
+    // Re-render each bottom panel tab list and update badges
+    Object.entries(TYPE_MAP).forEach(([type, { key, listId }]) => {
+      if (!listId) return;
+      const arr = bp[key] || [];
+      renderContextFileList(type, listId);
+      updateBtabCount(type, arr.length);
+    });
+  } catch (e) {
+    console.warn('reloadBpFilesFromServer failed:', e);
+  }
+}
+
+// ─── Generic context file uploader (GST / TDS / Sales) ─────────────
+function triggerGstUpload()   { document.getElementById('gstFileInput').click(); }
+function triggerTdsUpload()   { document.getElementById('tdsFileInput').click(); }
+function triggerSalesUpload() { document.getElementById('salesFileInput').click(); }
+function triggerInvoiceUpload(src) {
+  window._pendingInvoiceSrc = src;
+  document.getElementById('invoiceFileInput').click();
+}
+
+async function handleGstUpload(files)    { await handleContextUpload(files, 'gst',      'gstFilesList');     }
+async function handleTdsUpload(files)    { await handleContextUpload(files, 'tds',      'tdsFilesList');     }
+async function handleSalesUpload(files)  { await handleContextUpload(files, 'sales',    'salesFilesList');   }
+async function handleInvoiceUpload(files, src) { await handleContextUpload(files, 'invoices', 'invoiceFilesList', src); }
+
+async function handleContextUpload(files, type, listId, extraLabel) {
+  if (!files || !files.length) return;
+  const nodeId = window._wsCurrentNodeId;
+  const storeArr = bp[type + 'Files'] || (bp[type + 'Files'] = []);
+  const listEl = document.getElementById(listId);
+  if (listEl) { const spinner = document.createElement('div'); spinner.className='spinner'; spinner.style='margin:10px auto'; listEl.prepend(spinner); }
+
+  for (const file of files) {
+    try {
+      let entry = { id: Date.now() + Math.random(), filename: file.name, source: extraLabel || '', tabCount: 1, rowCount: '?' };
+      if (nodeId) {
+        const fd = new FormData();
+        fd.append('files', file);
+        fd.append('source_label', type);   // persist which bottom-panel tab owns this file
+        const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files`, { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d.ok && d.uploaded?.length) {
+          const cf = d.uploaded[0];
+          entry = { id: cf.id, filename: cf.filename, source: extraLabel || '', tabCount: (cf.tabs||[]).length, rowCount: (cf.tabs||[]).reduce((s,t)=>s+t.row_count,0), nodeId };
+        }
+      }
+      storeArr.push(entry);
+    } catch(e) { console.error('Upload failed', e); }
+  }
+  renderContextFileList(type, listId);
+  updateBtabCount(type, storeArr.length);
+  refreshClassifierCtxBtn && refreshClassifierCtxBtn();
+}
+
+function renderContextFileList(type, listId) {
+  const listEl = document.getElementById(listId);
+  if (!listEl) return;
+  const storeArr = bp[type + 'Files'] || [];
+  if (!storeArr.length) {
+    const labels = { gst:'GST sheets', tds:'TDS sheets', sales:'sales invoice sheets', invoices:'invoice files' };
+    listEl.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">No ${labels[type]||'files'} uploaded yet.</div>`;
+    return;
+  }
+  listEl.innerHTML = storeArr.map((f, fi) => `
+    <div class="bp-file-chip">
+      <svg class="icon" width="14" height="14" style="color:var(--accent2);flex-shrink:0"><use href="#ic-file"/></svg>
+      <span class="bp-file-chip-name">${escHtml(f.filename)}</span>
+      ${f.source ? `<span class="bp-file-chip-meta" style="background:var(--surface3);padding:2px 7px;border-radius:20px">${escHtml(f.source)}</span>` : ''}
+      <span class="bp-file-chip-meta">${f.tabCount} tab${f.tabCount!=1?'s':''} · ${f.rowCount} rows</span>
+      ${f.id && f.nodeId ? `<button class="btn btn-ghost btn-sm" style="padding:1px 7px;font-size:0.68rem;border:1px solid var(--border)" onclick="openContextFileDataViewer(${f.nodeId},${f.id},'${escHtml(f.filename)}')" title="View data in this file">👁 View</button>` : ''}
+      <button class="bp-file-chip-del" onclick="removeContextFile('${type}','${listId}',${fi})">✕ Remove</button>
+    </div>`).join('');
+}
+
+function removeContextFile(type, listId, idx) {
+  const storeArr = bp[type + 'Files'] || [];
+  storeArr.splice(idx, 1);
+  renderContextFileList(type, listId);
+  updateBtabCount(type, storeArr.length);
+}
+
+// ─── Parties (auto-generated) ──────────────────────────────────────
+function buildPartiesTab() {
+  const listEl = document.getElementById('partiesList');
+  if (!allTransactions.length) {
+    listEl.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">No transactions loaded. Load a sheet first.</div>`;
+    return;
+  }
+
+  // Group transactions by AI-extracted party_name or keyword-derived party
+  const partyMap = {};
+  for (let i = 0; i < allTransactions.length; i++) {
+    const t = allTransactions[i];
+    const res = classificationResults[i];
+    // Prefer AI-extracted party_name; fall back to keyword extraction from narration
+    let partyKey;
+    if (res && res.party_name && res.party_name.trim()) {
+      partyKey = res.party_name.trim().toUpperCase();
+    } else {
+      const narr = (t.narration || '').replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g,' ').trim();
+      const tokens = narr.split(' ').filter(w => w.length > 2 && !/^(IMPS|NEFT|RTGS|UPI|UTR|REF|TRF|DR|CR|CHQ|BY|TO|FOR|AND|THE|INT)$/i.test(w));
+      partyKey = tokens.slice(0, 3).join(' ').toUpperCase() || 'UNKNOWN';
+    }
+
+    if (!partyMap[partyKey]) partyMap[partyKey] = { name: partyKey, txns: [], totalReceipt: 0, totalPayment: 0, categories: {} };
+    const entry = partyMap[partyKey];
+    entry.txns.push(i);
+    const amt = parseFloat(String(t.gross_total||'0').replace(/[^0-9.-]/g,'')) || 0;
+    if (t.voucher_type === 'Receipt') entry.totalReceipt += amt;
+    else entry.totalPayment += amt;
+    if (res?.classification) {
+      entry.categories[res.classification] = (entry.categories[res.classification] || 0) + 1;
+    }
+  }
+
+  const parties = Object.values(partyMap).sort((a,b) => (a.totalReceipt + a.totalPayment) > (b.totalReceipt + b.totalPayment) ? -1 : 1);
+  updateBtabCount('parties', parties.length);
+
+  if (!parties.length) {
+    listEl.innerHTML = `<div style="font-size:0.8rem;color:var(--text-muted);padding:20px 0;text-align:center">No parties found.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = `<div class="parties-grid">${parties.map(p => {
+    const topCat = Object.entries(p.categories).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+    const fmt = n => n ? '₹' + n.toLocaleString('en-IN', {maximumFractionDigits:0}) : '—';
+    return `<div class="party-card" onclick="filterTableByPartyName('${escHtml(p.name.replace(/'/g,"\\'"))}')">
+      <div class="party-card-name">${escHtml(p.name)}</div>
+      <div class="party-card-stats">
+        <div class="party-card-stat"><span style="color:var(--text-muted)">Txns:</span><strong>${p.txns.length}</strong></div>
+        ${p.totalReceipt > 0 ? `<div class="party-card-stat"><span style="color:var(--green)">↑</span><strong style="color:var(--green)">${fmt(p.totalReceipt)}</strong></div>` : ''}
+        ${p.totalPayment > 0 ? `<div class="party-card-stat"><span style="color:var(--red)">↓</span><strong style="color:var(--red)">${fmt(p.totalPayment)}</strong></div>` : ''}
+        ${topCat !== '—' ? `<div class="party-card-stat" style="width:100%;margin-top:2px"><span style="color:var(--text-muted);font-size:0.68rem">${escHtml(topCat)}</span></div>` : ''}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function filterTableByParty(name) {
+  const sb = document.getElementById('searchBox');
+  if (sb) { sb.value = name; filterTable(); }
+  switchTab('transactions', document.querySelector('.nav-tab.active'));
+}
+
+function setTransactionType(i, txType) {
+  const res = classificationResults[i];
+  if (!res) return;
+  classificationResults[i] = { ...res, transaction_type: txType };
+  renderDetailPanel(i);
+  renderTable();
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
+  showToast(`Marked as ${txType} transaction.`);
+}
+
+function filterTableByPartyName(name) {
+  // Filter the transaction table to show only rows with this party name
+  // Uses the search box to drive the filter
+  const sb = document.getElementById('searchBox');
+  if (sb) { sb.value = name; filterTable(); }
+  // If we're not on the transactions tab, switch to it
+  const txnNavTab = document.querySelector('.nav-tab[onclick*="\'transactions\'"]');
+  if (txnNavTab) switchTab('transactions', txnNavTab);
+  showToast(`Showing transactions for: ${name}`);
+}
+
+async function saveDirectTxnDetail(i) {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) { showToast('Open a workspace sheet first.'); return; }
+  const t = allTransactions[i];
+  const res = classificationResults[i];
+  if (!t || !res) return;
+  const txnKey = _makeTxnKey(t);
+  const productName = (document.getElementById('directProductName') || {}).value || '';
+  const quantity    = (document.getElementById('directQuantity') || {}).value || '';
+
+  // Update local state
+  classificationResults[i] = {
+    ...res,
+    direct_product_name: productName,
+    direct_quantity: quantity,
+    transaction_type: 'direct'
+  };
+
+  // Persist to server
+  try {
+    await fetch(`/api/workspace/nodes/${nodeId}/direct_txn_detail`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ txn_key: txnKey, direct_product_name: productName,
+                              direct_quantity: quantity, transaction_type: 'direct' })
+    });
+    showToast('Direct transaction details saved.');
+    renderDetailPanel(i);
+    renderTable();
+  } catch(e) { showToast('Save failed: ' + e); }
+}
+
+function updateBtabCount(tab, count) {
+  const el = document.getElementById('btab-count-' + tab);
+  if (el) el.textContent = count;
+}
+
+// Init on page load
+document.addEventListener('DOMContentLoaded', () => { setTimeout(initBottomPanel, 300); });
+
+// ===================== END BOTTOM PANEL =====================
+
+// Tax classifications load
 loadTaxClassifications();
+
+// ===================== SPA ROUTING =====================
+// Saves current view state to sessionStorage so a reload can restore it.
+function _routeSaveSession(state) {
+  try { sessionStorage.setItem('alfaleus_route', JSON.stringify(state)); } catch(_) {}
+}
+
+// Restores a saved route state (called on popstate and page load).
+async function _routeRestore(state, isPopstate) {
+  if (!state) return;
+
+  if (state.view === 'home') {
+    await navigateDriveHome(state.folderId ?? null, true);
+
+  } else if (state.view === 'classifier') {
+    if (isPopstate && window._lastClassifierNodeId === state.nodeId) {
+      // Transactions already in memory — just restore the UI.
+      showClassifierView(state.nodeId, true);
+    } else {
+      // Either a different node (popstate) or a hard reload:
+      // wsOpenClassifier fully re-fetches transactions from the server.
+      await wsOpenClassifier(state.nodeId);
+    }
+
+  } else if (state.view === 'tab') {
+    const el = document.querySelector(`.nav-tab[onclick*="'${state.tab}'"]`);
+    switchTab(state.tab, el, true);
+  }
+}
+
+// Handle browser Back/Forward.
+window.addEventListener('popstate', function(e) {
+  const state = e.state;
+  if (!state) {
+    navigateDriveHome(null, true);
+    return;
+  }
+  _routeRestore(state, true);
+});
+
+// On first page load, seed a baseline history entry so the Back button
+// has somewhere to go within the app instead of leaving it.
+// Then attempt to restore the last view from the URL hash or sessionStorage.
+document.addEventListener('DOMContentLoaded', function() {
+  // Replace the current history entry preserving the real URL hash.
+  const hash = location.hash;
+  let initialState = { view: 'home', folderId: null };
+  if (hash.startsWith('#sheet-')) {
+    const nodeId = parseInt(hash.slice('#sheet-'.length), 10);
+    if (!isNaN(nodeId)) initialState = { view: 'classifier', nodeId };
+  } else if (hash.startsWith('#folder-')) {
+    const folderId = parseInt(hash.slice('#folder-'.length), 10);
+    if (!isNaN(folderId)) initialState = { view: 'home', folderId };
+  } else if (hash.startsWith('#tab-')) {
+    initialState = { view: 'tab', tab: hash.slice('#tab-'.length) };
+  }
+  history.replaceState(initialState, '', hash || '#home');
+
+  // Restore the view after the page has initialised.
+  if (initialState.view !== 'home') {
+    setTimeout(() => _routeRestore(initialState, false), 600);
+  }
+});
+async function refreshGstTdsSheetData() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) { showToast('Open a workspace sheet to view GST/TDS sheet data.'); return; }
+  const btn = document.getElementById('gstRefreshBtn');
+  if (btn) btn.disabled = true;
+  await Promise.all([loadGstSheetData(nodeId), loadTdsSheetData(nodeId)]);
+  if (btn) btn.disabled = false;
+}
+
+// Open the context sheet viewer for an uploaded context file (by file ID)
+async function openContextFileDataViewer(nodeId, fileId, filename) {
+  const overlay = document.getElementById('ctxViewerOverlay');
+  const titleEl = document.getElementById('ctxViewerTitle');
+  const subEl   = document.getElementById('ctxViewerSub');
+  const bodyEl  = document.getElementById('ctxViewerBody');
+  if (!overlay || !bodyEl) return;
+
+  // First fetch the file's tabs list
+  let tabs = [];
+  let firstTab = '';
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files`);
+    const d = await r.json();
+    const file = (d.files || []).find(f => f.id === fileId);
+    tabs = (file?.tabs || []).map(t => t.tab_name);
+    firstTab = tabs[0] || '';
+  } catch(e) {}
+
+  titleEl.textContent = filename || 'Context File';
+  if (subEl) subEl.textContent = tabs.length > 1 ? `${tabs.length} tabs` : '';
+  overlay.classList.add('show');
+  bodyEl.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div>Loading…</div>`;
+
+  if (!firstTab && tabs.length === 0) {
+    bodyEl.innerHTML = `<div style="padding:24px;color:var(--text-muted);text-align:center">No readable tabs found in this file.</div>`;
+    return;
+  }
+
+  // Tab selector if multiple tabs
+  let tabHtml = '';
+  if (tabs.length > 1) {
+    tabHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface2)">
+      ${tabs.map(t => `<button class="btn btn-ghost btn-sm" style="font-size:0.72rem;border:1px solid var(--border)" onclick="loadContextFileTab(${nodeId},${fileId},'${t.replace(/'/g,"\\'")}')">${escHtml(t)}</button>`).join('')}
+    </div>`;
+  }
+
+  await loadContextFileTab(nodeId, fileId, firstTab, tabHtml);
+}
+
+async function loadContextFileTab(nodeId, fileId, tab, extraHeaderHtml) {
+  const bodyEl = document.getElementById('ctxViewerBody');
+  if (!bodyEl) return;
+  bodyEl.innerHTML = (extraHeaderHtml || '') + `<div style="text-align:center;padding:32px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div>Loading ${escHtml(tab)}…</div>`;
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files/${fileId}/tab_data?tab=${encodeURIComponent(tab)}&limit=500`);
+    const d = await r.json();
+    if (d.error) { bodyEl.innerHTML = (extraHeaderHtml||'') + `<div style="padding:24px;color:var(--red)">${escHtml(d.error)}</div>`; return; }
+    const headers = d.headers || [];
+    const rows = d.rows || [];
+    const truncNote = d.truncated ? `<div style="padding:6px 12px;font-size:0.72rem;color:var(--yellow);background:rgba(217,119,6,0.08);border-bottom:1px solid var(--border)">⚠ Showing first ${rows.length} of ${d.total_rows} rows</div>` : '';
+    const thead = `<thead><tr>${headers.map(h=>`<th style="font-size:0.72rem;background:#1c6b40;color:#fff;white-space:nowrap">${escHtml(String(h))}</th>`).join('')}</tr></thead>`;
+    const tbody = `<tbody>${rows.map(row => `<tr>${(Array.isArray(row)?row:Object.values(row)).map(v=>`<td style="font-size:0.73rem;white-space:nowrap">${escHtml(String(v))}</td>`).join('')}</tr>`).join('')}</tbody>`;
+    bodyEl.innerHTML = (extraHeaderHtml||'') + truncNote + `<div style="overflow-x:auto"><table style="min-width:100%;border-collapse:collapse">${thead}${tbody}</table></div>`;
+  } catch(e) {
+    bodyEl.innerHTML = (extraHeaderHtml||'') + `<div style="padding:24px;color:var(--red)">Error: ${escHtml(String(e))}</div>`;
+  }
+}
+
+// ===================== ASSET CLASSIFICATION =====================
+
+async function toggleAsset(rowIdx) {
+  const t = allTransactions[rowIdx];
+  const res = classificationResults[rowIdx];
+  if (!t) return;
+  const nodeId = window._wsCurrentNodeId;
+  const txnKey = _makeTxnKey(t);
+  const newAsset = !(res && res.is_asset);
+
+  // Update local state
+  if (res) {
+    classificationResults[rowIdx] = { ...res, is_asset: newAsset };
+  } else {
+    classificationResults[rowIdx] = {
+      idx: rowIdx, classification: '', reference_id: '', confidence: 'high', reasoning: '',
+      matched_detail: '', is_asset: newAsset, is_refund: false, refund_vendor: ''
+    };
+  }
+
+  renderTable();
+  if (selectedTxnIndex === rowIdx) renderDetailPanel(rowIdx);
+
+  if (nodeId) {
+    try {
+      await fetch(`/api/workspace/nodes/${nodeId}/set_asset`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ txn_key: txnKey, is_asset: newAsset })
+      });
+      await wsSaveNodeClassifications();
+    } catch(e) { console.warn('toggleAsset save failed', e); }
+  }
+  showToast(newAsset ? '📦 Marked as Asset' : 'Asset flag removed');
+}
+
+// Auto-detect assets after classification completes: scan all classified transactions
+// and auto-mark those that look like capital assets (non-consumable > ₹5000).
+function autoDetectAssets() {
+  const ASSET_KEYWORDS = [
+    '3D PRINTER','PRINTER','LAPTOP','COMPUTER','SERVER','MONITOR','CAMERA','SCANNER',
+    'PROJECTOR','TABLET','MACHINERY','EQUIPMENT','VEHICLE','MOTORCYCLE','FURNITURE',
+    'GENERATOR','INVERTER','PHONE','MOBILE','DEVICE','INSTRUMENT','TOOL','MICROSCOPE',
+    'SLIT LAMP','OCT','OPHTHALM','MACHINE','ROBOT','DRONE','LENS DISPLAY','HEADSET',
+    'VR DISPLAY','FIXTURE','SOLAR','PUMP','COMPRESSOR','UPS','REFRIGERATOR','AC ',
+  ];
+  const CONSUMABLE = [
+    'SALARY','PAYROLL','REIMBURSE','FUEL','PETROL','FOOD','MEAL','RENT','TAX',
+    'CBDT','GST','TDS','SUBSCRIPTION','MAINTENANCE','BANK CHARGE','INTEREST',
+  ];
+  let autoMarked = 0;
+  allTransactions.forEach((t, i) => {
+    const res = classificationResults[i];
+    if (res && res.is_asset) return; // already set
+    const amt = parseFloat(String(t.gross_total).replace(/[^0-9.]/g,'')) || 0;
+    if (t.voucher_type !== 'Payment' || amt < 5000) return;
+    const narr = (t.narration || '').toUpperCase();
+    for (const cons of CONSUMABLE) { if (narr.includes(cons)) return; }
+    for (const kw of ASSET_KEYWORDS) {
+      if (narr.includes(kw)) {
+        classificationResults[i] = { ...(res || { idx: i, classification: '', reference_id: '', confidence: 'high', reasoning: '', matched_detail: '' }), is_asset: true };
+        autoMarked++;
+        break;
+      }
+    }
+  });
+  if (autoMarked > 0) {
+    renderTable();
+    updateStats();
+    showToast(`📦 Auto-detected ${autoMarked} asset transaction${autoMarked !== 1 ? 's' : ''}.`);
+    if (window._wsCurrentNodeId) wsSaveNodeClassifications();
+  }
+}
+
+// ===================== REFUND DETECTION =====================
+
+async function runRefundDetection() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) { showToast('Open a workspace sheet first.'); return; }
+  const btn = document.getElementById('refundDetectBtn');
+  if (btn) btn.disabled = true;
+  showToast('Scanning for refunds…');
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/detect_refunds`, { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { showToast('Error: ' + d.error); return; }
+    const refunds = d.refunds || {};
+    let count = 0;
+    Object.entries(refunds).forEach(([idx, rf]) => {
+      const i = parseInt(idx, 10);
+      const res = classificationResults[i];
+      classificationResults[i] = {
+        ...(res || { idx: i, classification: '', reference_id: '', confidence: 'high', reasoning: '', matched_detail: '' }),
+        is_refund: rf.is_refund,
+        refund_vendor: rf.refund_vendor || ''
+      };
+      count++;
+    });
+    await wsSaveNodeClassifications();
+    renderTable();
+    updateStats();
+    showToast(`↩ Found ${count} refund transaction${count !== 1 ? 's' : ''}.`);
+  } catch(e) { showToast('Refund detection failed: ' + e.message); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+async function toggleRefund(rowIdx) {
+  const t = allTransactions[rowIdx];
+  const res = classificationResults[rowIdx];
+  if (!t) return;
+  const nodeId = window._wsCurrentNodeId;
+  const txnKey = _makeTxnKey(t);
+  const newRefund = !(res && res.is_refund);
+  let vendor = '';
+  if (newRefund) {
+    vendor = prompt('Refund vendor (e.g. Amazon, Flipkart):') || '';
+  }
+  classificationResults[rowIdx] = {
+    ...(res || { idx: rowIdx, classification: '', reference_id: '', confidence: 'high', reasoning: '', matched_detail: '' }),
+    is_refund: newRefund, refund_vendor: vendor
+  };
+  renderTable();
+  if (selectedTxnIndex === rowIdx) renderDetailPanel(rowIdx);
+  if (nodeId) {
+    try {
+      await fetch(`/api/workspace/nodes/${nodeId}/set_refund`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ txn_key: txnKey, is_refund: newRefund, refund_vendor: vendor })
+      });
+      await wsSaveNodeClassifications();
+    } catch(e) { console.warn('toggleRefund save failed', e); }
+  }
+  showToast(newRefund ? `↩ Marked as Refund${vendor ? ' from ' + vendor : ''}` : 'Refund flag removed');
+}
+
+// ===================== GST/TDS SHEET DATA VIEWER =====================
+
+let _gstSheetData = { matched: [], unmatched: [] };
+let _tdsSheetData = { matched: [], unmatched: [] };
+
+async function loadGstSheetData(nodeId) {
+  if (!nodeId) return;
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/gst_sheet_data`);
+    if (!r.ok) return;
+    _gstSheetData = await r.json();
+    renderGstSheetTable();
+  } catch(e) { console.warn('loadGstSheetData error', e); }
+}
+
+async function loadTdsSheetData(nodeId) {
+  if (!nodeId) return;
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/tds_sheet_data`);
+    if (!r.ok) return;
+    _tdsSheetData = await r.json();
+    renderTdsSheetTable();
+  } catch(e) { console.warn('loadTdsSheetData error', e); }
+}
+
+function renderGstSheetTable() {
+  const el = document.getElementById('gstSheetMatchedBody');
+  const el2 = document.getElementById('gstSheetUnmatchedBody');
+  const stat = document.getElementById('gstSheetStats');
+  if (!el || !el2) return;
+  if (stat) stat.textContent = `${_gstSheetData.matched_count || 0} matched · ${_gstSheetData.unmatched_count || 0} unmatched`;
+
+  function fieldMatchBadges(r) {
+    const matched = (r.matched_fields || []);
+    const unmatched = (r.unmatched_fields || []);
+    if (!matched.length && !unmatched.length) return '';
+    const matchedHtml = matched.map(f =>
+      `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;font-size:0.63rem;font-weight:600;background:rgba(16,185,129,0.12);color:#065f46;border:1px solid rgba(16,185,129,0.3);white-space:nowrap">✓ ${escHtml(f)}</span>`
+    ).join('');
+    const unmatchedHtml = unmatched.map(f =>
+      `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;font-size:0.63rem;font-weight:600;background:rgba(239,68,68,0.08);color:#b91c1c;border:1px solid rgba(239,68,68,0.2);white-space:nowrap">✗ ${escHtml(f)}</span>`
+    ).join('');
+    return `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${matchedHtml}${unmatchedHtml}</div>`;
+  }
+
+  const renderRow = (r, i) => `<tr>
+    <td class="row-num">${i+1}</td>
+    <td style="font-family:var(--mono);font-size:0.73rem;white-space:nowrap">${escHtml(r.date||'')}</td>
+    <td style="font-size:0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.narration||'')}">${escHtml(r.narration||'')}</td>
+    <td style="font-family:var(--mono);text-align:right">${escHtml(r.gross_total||'')}</td>
+    <td style="font-size:0.72rem">${escHtml(r.classification||'—')}</td>
+    <td><span class="gst-badge ${r.gst_applicable==='no'?'gst-no':r.gst_applicable==='reverse_charge'?'gst-rc':r.gst_direction==='in'?'gst-in':'gst-out'}">${escHtml(r.gst_applicable||'—')}</span></td>
+    <td style="font-family:var(--mono);font-size:0.74rem">${r.gst_rate ? r.gst_rate+'%' : '—'}</td>
+    <td style="font-size:0.72rem;color:var(--text-muted)">${escHtml(r.reference_id||'—')}</td>
+    <td style="min-width:180px">${fieldMatchBadges(r)}</td>
+  </tr>`;
+  el.innerHTML = (_gstSheetData.matched||[]).map((r,i)=>renderRow(r,i)).join('') || '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-muted)">No matched GST transactions</td></tr>';
+  el2.innerHTML = (_gstSheetData.unmatched||[]).map((r,i)=>renderRow(r,i)).join('') || '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-muted)">No unmatched transactions</td></tr>';
+}
+
+function renderTdsSheetTable() {
+  const el = document.getElementById('tdsSheetMatchedBody');
+  const el2 = document.getElementById('tdsSheetUnmatchedBody');
+  const stat = document.getElementById('tdsSheetStats');
+  if (!el || !el2) return;
+  if (stat) stat.textContent = `${_tdsSheetData.matched_count || 0} matched · ${_tdsSheetData.unmatched_count || 0} unmatched`;
+
+  function fieldMatchBadges(r) {
+    const matched = (r.matched_fields || []);
+    const unmatched = (r.unmatched_fields || []);
+    if (!matched.length && !unmatched.length) return '';
+    const matchedHtml = matched.map(f =>
+      `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;font-size:0.63rem;font-weight:600;background:rgba(16,185,129,0.12);color:#065f46;border:1px solid rgba(16,185,129,0.3);white-space:nowrap">✓ ${escHtml(f)}</span>`
+    ).join('');
+    const unmatchedHtml = unmatched.map(f =>
+      `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;font-size:0.63rem;font-weight:600;background:rgba(239,68,68,0.08);color:#b91c1c;border:1px solid rgba(239,68,68,0.2);white-space:nowrap">✗ ${escHtml(f)}</span>`
+    ).join('');
+    return `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${matchedHtml}${unmatchedHtml}</div>`;
+  }
+
+  const renderRow = (r, i) => `<tr>
+    <td class="row-num">${i+1}</td>
+    <td style="font-family:var(--mono);font-size:0.73rem;white-space:nowrap">${escHtml(r.date||'')}</td>
+    <td style="font-size:0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(r.narration||'')}">${escHtml(r.narration||'')}</td>
+    <td style="font-family:var(--mono);text-align:right">${escHtml(r.gross_total||'')}</td>
+    <td style="font-size:0.72rem">${escHtml(r.classification||'—')}</td>
+    <td><span class="tds-badge ${r.tds_applicable==='no'?'tds-no':r.tds_direction==='in'?'tds-in':'tds-out'}">${r.tds_applicable==='no'?'No':'Yes'}</span></td>
+    <td style="font-size:0.72rem">${escHtml(r.tds_section||'—')}</td>
+    <td style="font-family:var(--mono);font-size:0.74rem">${r.tds_rate ? r.tds_rate+'%' : '—'}</td>
+    <td style="min-width:180px">${fieldMatchBadges(r)}</td>
+  </tr>`;
+  el.innerHTML = (_tdsSheetData.matched||[]).map((r,i)=>renderRow(r,i)).join('') || '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-muted)">No matched TDS transactions</td></tr>';
+  el2.innerHTML = (_tdsSheetData.unmatched||[]).map((r,i)=>renderRow(r,i)).join('') || '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-muted)">No unmatched transactions</td></tr>';
+}
+
+// ===================== TAX MODAL: SAVE AS LEARNED RULE =====================
+
+async function saveTaxAsRule() {
+  if (_taxModalIdx < 0) return;
+  const row = taxTableData[_taxModalIdx];
+  if (!row || !row.narration) { showToast('No narration available to create rule from.'); return; }
+  const gstApp = document.getElementById('taxModalGstApplicable').value;
+  const gstDir = document.getElementById('taxModalGstDir').value;
+  const gstRate = document.getElementById('taxModalGstRate').value;
+  const tdsApp = document.getElementById('taxModalTdsApplicable').value;
+  const tdsSection = document.getElementById('taxModalTdsSection').value;
+  // Build a classification label
+  const parts = [];
+  if (gstApp !== 'no') parts.push(`GST:${gstApp}${gstDir?'/'+gstDir:''}${gstRate?'@'+gstRate+'%':''}`);
+  if (tdsApp !== 'no') parts.push(`TDS:${tdsSection||'yes'}`);
+  if (!parts.length) { showToast('Nothing to save as rule — GST and TDS are both "No".'); return; }
+  const classification = parts.join(' | ');
+
+  // Use keyword extraction from narration
+  const narr = (row.narration || '').trim();
+  const kw = prompt(`Save learned rule for keyword (edit if needed):`, extractKeywords(narr)[0] || narr.slice(0, 40).toUpperCase());
+  if (!kw || !kw.trim()) return;
+
+  const r = await fetch('/api/feedback/rules', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ pattern: kw.trim().toUpperCase(), classification })
+  });
+  const d = await r.json();
+  if (d.ok) {
+    showToast(`✓ Tax rule saved: "${kw}" → ${classification}`);
+    loadRules();
+  } else {
+    showToast('Error saving rule: ' + (d.error || 'unknown'));
+  }
+}
+
+// ===================== RULES: MANUAL RULE CREATION =====================
+
+async function createManualRule() {
+  const patternEl = document.getElementById('newRulePattern');
+  const classEl   = document.getElementById('newRuleClass');
+  const pattern = (patternEl?.value || '').trim().toUpperCase();
+  const classification = (classEl?.value || '').trim();
+  if (!pattern || !classification) { showToast('Enter both a keyword pattern and a classification.'); return; }
+  const r = await fetch('/api/feedback/rules', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ pattern, classification })
+  });
+  const d = await r.json();
+  if (d.ok) {
+    showToast(`✓ Rule created: "${pattern}" → ${classification}`);
+    if (patternEl) patternEl.value = '';
+    if (classEl) classEl.value = '';
+    loadRules();
+  } else {
+    showToast('Error: ' + (d.error || 'unknown'));
+  }
+}
+
+// ===================== END SPA ROUTING =====================
 </script>
 </body>
 </html>
