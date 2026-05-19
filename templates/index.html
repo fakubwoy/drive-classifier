@@ -1837,17 +1837,17 @@
         <thead>
           <tr>
             <th style="width:28px;min-width:28px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
-            <th style="width:36px;min-width:36px;text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
+            <th style="text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
             <th style="width:90px;min-width:90px;white-space:nowrap" data-col="date">Date</th>
             <th style="width:76px;min-width:76px" data-col="bank">Bank</th>
             <th style="width:62px;min-width:62px;text-align:center" data-col="type">Type</th>
             <th data-col="narration">Narration</th>
             <th style="width:100px;min-width:100px;text-align:right" data-col="amount">Amount (&#8377;)</th>
-            <th style="width:44px;min-width:44px;text-align:center" data-col="asset" title="Asset classification — click to toggle">Asset</th>
-            <th style="width:62px;min-width:62px;text-align:center" data-col="txntype">Dir/Ind</th>
-            <th style="width:130px;min-width:80px" data-col="classification">Category</th>
-            <th style="width:120px;min-width:70px" data-col="subclassification">Subcategory</th>
-            <th style="width:110px;min-width:110px" data-col="party">Party</th>
+            <th style="text-align:center" data-col="asset" title="Asset classification — click to toggle">Asset</th>
+            <th style="text-align:center" data-col="txntype">Dir/Ind</th>
+            <th data-col="classification">Category</th>
+            <th data-col="subclassification">Subcategory</th>
+            <th data-col="party">Party</th>
             <th style="width:112px;min-width:112px;text-align:center;background:#1c6b40 !important;color:#fff !important" data-col="gst">GST</th>
             <th style="width:122px;min-width:122px;text-align:center;background:#1a2f6e !important;color:#fff !important" data-col="tds">TDS</th>
             <th style="width:108px;min-width:108px" data-col="ref">Ref</th>
@@ -5824,14 +5824,14 @@ async function wsOpenClassifier(nodeId) {
   document.querySelector('.table-panel') && (document.querySelector('.table-panel').innerHTML =
     `<table id="txnTable"><thead><tr>
       <th style="width:30px" data-col="check"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
-      <th style="width:32px;text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
+      <th style="text-align:right;font-size:0.66rem;opacity:0.7" data-col="rownum">#</th>
       <th data-col="date">Date</th><th data-col="bank">Bank</th><th data-col="type">Type</th>
       <th data-col="narration">Narration</th><th data-col="amount">Amount</th>
-      <th style="width:44px;min-width:44px;text-align:center" data-col="asset" title="Asset">Asset</th>
-      <th style="width:62px;min-width:62px;text-align:center" data-col="txntype">Dir/Ind</th>
-      <th style="width:130px;min-width:80px" data-col="classification">Category</th>
-      <th style="width:120px;min-width:70px" data-col="subclassification">Subcategory</th>
-      <th style="width:110px;min-width:110px" data-col="party">Party</th>
+      <th style="text-align:center" data-col="asset" title="Asset">Asset</th>
+      <th style="text-align:center" data-col="txntype">Dir/Ind</th>
+      <th data-col="classification">Category</th>
+      <th data-col="subclassification">Subcategory</th>
+      <th data-col="party">Party</th>
       <th style="text-align:center;background:#1c6b40 !important;color:#fff !important" data-col="gst">GST</th>
       <th style="text-align:center;background:#1a2f6e !important;color:#fff !important" data-col="tds">TDS</th>
       <th data-col="ref">Ref</th>
