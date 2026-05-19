@@ -143,6 +143,15 @@ def init_db():
         ALTER TABLE workspace_nodes
         ADD COLUMN IF NOT EXISTS excel_file_id INTEGER
     """)
+    # Statement date range metadata (purely informational — does NOT filter transactions)
+    c.execute("""
+        ALTER TABLE workspace_nodes
+        ADD COLUMN IF NOT EXISTS statement_from_date TEXT DEFAULT ''
+    """)
+    c.execute("""
+        ALTER TABLE workspace_nodes
+        ADD COLUMN IF NOT EXISTS statement_to_date TEXT DEFAULT ''
+    """)
 
     # ── workspace excel files — uploaded Excel statements per workspace node ──
     # An alternative to attaching a Google Sheet. Stores parsed tab data so the
@@ -903,6 +912,16 @@ PAYMENTS (outgoing) — pick the MOST SPECIFIC matching category:
 - "Business Travel/Logistics" — DELHI EXPENSES, city name + EXPENSES, travel reimbursement, petrol/toll, any travel cost without a specific booking match
 - "Sales Consultant Payment" — SALES CONSULTANT, commission payment
 - "Other Expense" — ONLY if truly none of the above fit
+
+REFUND CLASSIFICATION RULE (CRITICAL):
+If a transaction is a refund/reversal/cashback, classify it in the ORIGINAL VENDOR'S CATEGORY, not "Bank/Finance Transaction":
+- Refund from MakeMyTrip/Goibibo/Cleartrip/EaseMyTrip/Yatra/Ixigo → "Flight Booking"
+- Refund from a hotel/Booking.com → "Hotel Booking"
+- Refund from Swiggy/Zomato → "Office/Admin Expense"
+- Refund from Amazon/Flipkart/Myntra/ecommerce → "Office/Admin Expense"
+- Refund from a cab/transport vendor → "Cab/Transport Booking"
+- Only classify as "Bank/Finance Transaction" if the refund is genuinely a banking fee reversal or wallet credit
+Set is_refund=true and refund_vendor=<vendor name> for all refunds.
 
 RECEIPTS (incoming) — pick the MOST SPECIFIC matching category:
 - "Device Payment Receipt" — incoming UPI/NEFT/IMPS from any doctor, hospital, or person whose name appears in context sheets
@@ -2073,19 +2092,29 @@ def _node_to_dict(r):
         excel_file_id = r["excel_file_id"] or 0
     except (KeyError, IndexError):
         excel_file_id = 0
+    try:
+        statement_from_date = r["statement_from_date"] or ""
+    except (KeyError, IndexError):
+        statement_from_date = ""
+    try:
+        statement_to_date = r["statement_to_date"] or ""
+    except (KeyError, IndexError):
+        statement_to_date = ""
     return {
-        "id":            r["id"],
-        "parent_id":     r["parent_id"],
-        "name":          r["name"],
-        "node_type":     r["node_type"],
-        "sheet_id":      r["sheet_id"] or "",
-        "sheet_name":    r["sheet_name"] or "",
-        "tab_name":      r["tab_name"] or "",
-        "context_tabs":  json.loads(r["context_tabs"] or "[]"),
-        "source_type":   source_type,
-        "excel_file_id": excel_file_id,
-        "sort_order":    r["sort_order"],
-        "created_at":    str(r["created_at"]),
+        "id":                   r["id"],
+        "parent_id":            r["parent_id"],
+        "name":                 r["name"],
+        "node_type":            r["node_type"],
+        "sheet_id":             r["sheet_id"] or "",
+        "sheet_name":           r["sheet_name"] or "",
+        "tab_name":             r["tab_name"] or "",
+        "context_tabs":         json.loads(r["context_tabs"] or "[]"),
+        "source_type":          source_type,
+        "excel_file_id":        excel_file_id,
+        "sort_order":           r["sort_order"],
+        "created_at":           str(r["created_at"]),
+        "statement_from_date":  statement_from_date,
+        "statement_to_date":    statement_to_date,
     }
 
 
@@ -2140,7 +2169,8 @@ def workspace_update_node(node_id):
     fields = []
     vals   = []
     for col in ("name", "sheet_id", "sheet_name", "tab_name", "parent_id", "sort_order",
-                "source_type", "excel_file_id"):
+                "source_type", "excel_file_id",
+                "statement_from_date", "statement_to_date"):
         if col in data:
             fields.append(f"{col} = %s")
             vals.append(data[col])
@@ -2864,6 +2894,184 @@ def workspace_context_file_tab_data(node_id, file_id):
         "total_rows": total,
         "truncated": truncated_at_parse or truncated_at_view,
         "limit":     limit,
+    })
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/highlight_context_files", methods=["POST"])
+@login_required
+def workspace_highlight_context_files(node_id):
+    """After classification, colour-code each context-file row:
+       GREEN  (FF90EE90) — row was matched (its reference appears in a classified txn)
+       ORANGE (FFFFD580) — row was NOT matched in any classified transaction
+
+    Returns a per-file highlight map and, optionally, a downloadable highlighted
+    Excel file when ?download=1 is passed.
+
+    POST body (optional):
+      { "reference_ids": ["INV-001", ...] }   ← client can supply already-collected
+                                                  reference_ids; if omitted the
+                                                  endpoint re-queries the DB.
+    """
+    import io
+    uid  = current_user_id()
+    data = request.json or {}
+
+    # 1. Collect the set of reference_ids that were actually matched during
+    #    classification for this node.
+    if "reference_ids" in data:
+        matched_refs = set(str(r).strip() for r in data["reference_ids"] if r)
+    else:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("""SELECT reference_id FROM node_classifications
+                     WHERE node_id=%s AND user_id=%s AND reference_id IS NOT NULL
+                       AND reference_id <> ''""",
+                  (node_id, uid))
+        rows = c.fetchall()
+        conn.close()
+        matched_refs = set(str(r["reference_id"]).strip() for r in rows)
+
+    # Also collect bank-statement narrations / amounts so we can do a
+    # secondary match by amount for rows that were matched but whose
+    # reference_id the AI stored differently from the context-file value.
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""SELECT txn_key, matched_detail FROM node_classifications
+                 WHERE node_id=%s AND user_id=%s""", (node_id, uid))
+    txn_rows = c.fetchall()
+    conn.close()
+    # matched_detail often looks like "Invoice INV-001 matched vendor XYZ"
+    # Pull every word that looks like an invoice/ref number from it.
+    import re as _re
+    _ref_re = _re.compile(r'[A-Z0-9][A-Z0-9/_\-]{2,}')
+    for tr in txn_rows:
+        for tok in _ref_re.findall(str(tr.get("matched_detail") or "")):
+            matched_refs.add(tok.strip())
+
+    # 2. Load all context files for this node.
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""SELECT id, filename, parsed_json FROM node_context_files
+                 WHERE user_id=%s AND node_id=%s ORDER BY id""", (uid, node_id))
+    ctx_files = c.fetchall()
+    conn.close()
+
+    highlight_map = {}   # {file_id: {tab_name: [row_index, ...]}}  — matched indices
+    download = request.args.get("download") == "1"
+    wb_out = None
+    if download:
+        try:
+            from openpyxl import Workbook
+            wb_out = Workbook()
+            wb_out.remove(wb_out.active)  # remove default empty sheet
+        except Exception:
+            wb_out = None
+
+    GREEN  = "FF90EE90"
+    ORANGE = "FFFFD580"
+
+    for cf in ctx_files:
+        fid = cf["id"]
+        try:
+            parsed = json.loads(cf["parsed_json"] or "{}")
+        except Exception:
+            parsed = {}
+
+        file_highlights = {}   # tab_name -> {row_idx: "matched"|"unmatched"}
+        for tab_name, payload in parsed.items():
+            headers  = payload.get("headers", [])
+            rows     = payload.get("rows", [])
+            row_status = {}
+
+            for ri, row in enumerate(rows):
+                # Gather all cell values from this context row as candidate
+                # reference strings.
+                if isinstance(row, dict):
+                    cell_vals = [str(v).strip() for v in row.values()]
+                elif isinstance(row, list):
+                    cell_vals = [str(v).strip() for v in row]
+                else:
+                    cell_vals = [str(row).strip()]
+
+                # Check if any cell value appears in the matched reference set
+                is_matched = any(
+                    cv and cv in matched_refs
+                    for cv in cell_vals
+                )
+                # Fallback: check substrings for longer reference values
+                if not is_matched:
+                    for cv in cell_vals:
+                        if not cv or len(cv) < 3:
+                            continue
+                        if any(cv in ref or ref in cv
+                               for ref in matched_refs if len(ref) >= 3):
+                            is_matched = True
+                            break
+
+                row_status[ri] = "matched" if is_matched else "unmatched"
+
+            file_highlights[tab_name] = row_status
+
+            # Build highlighted sheet for download
+            if wb_out is not None:
+                try:
+                    from openpyxl.styles import PatternFill, Font
+                    safe_name = f"{cf['filename'][:15]}-{tab_name}"[:31]
+                    ws = wb_out.create_sheet(title=safe_name)
+                    if headers:
+                        ws.append(headers)
+                        for ci, h in enumerate(headers, 1):
+                            ws.cell(row=1, column=ci).font = Font(bold=True)
+                    for ri, row in enumerate(rows):
+                        if isinstance(row, dict):
+                            vals = list(row.values())
+                        elif isinstance(row, list):
+                            vals = row
+                        else:
+                            vals = [row]
+                        ws.append([str(v) if v is not None else "" for v in vals])
+                        excel_row = ri + (2 if headers else 1)
+                        color = GREEN if row_status.get(ri) == "matched" else ORANGE
+                        fill  = PatternFill("solid", start_color=color, end_color=color)
+                        for col in range(1, len(vals) + 1):
+                            ws.cell(row=excel_row, column=col).fill = fill
+                except Exception as ws_err:
+                    log.warning("highlight sheet build failed for %s/%s: %s",
+                                cf["filename"], tab_name, ws_err)
+
+        highlight_map[str(fid)] = {
+            "filename": cf["filename"],
+            "tabs":     file_highlights,
+        }
+
+    if download and wb_out is not None and wb_out.sheetnames:
+        buf = io.BytesIO()
+        wb_out.save(buf)
+        buf.seek(0)
+        from flask import send_file
+        return send_file(
+            buf,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name="context_files_highlighted.xlsx"
+        )
+
+    matched_total   = sum(
+        1 for fh in highlight_map.values()
+          for tab in fh["tabs"].values()
+          for s in tab.values() if s == "matched"
+    )
+    unmatched_total = sum(
+        1 for fh in highlight_map.values()
+          for tab in fh["tabs"].values()
+          for s in tab.values() if s == "unmatched"
+    )
+    return jsonify({
+        "ok":             True,
+        "highlight_map":  highlight_map,
+        "matched_refs":   list(matched_refs),
+        "matched_rows":   matched_total,
+        "unmatched_rows": unmatched_total,
     })
 
 
@@ -4599,6 +4807,167 @@ def workspace_gst_itc_match(node_id):
     except Exception as e:
         log.exception('gst_itc_match error')
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/workspace/nodes/<int:node_id>/context_row_status', methods=['GET'])
+@login_required
+def workspace_context_row_status(node_id):
+    """
+    For each uploaded context file tab attached to this node, returns which rows
+    were referenced (matched via reference_id or matched_detail) by the account
+    statement classifications, and which were not.
+
+    Response:
+    {
+      "by_file": {
+        "<file_id>": {
+          "<tab_name>": {
+            "referenced_rows": [0, 3, 7, ...],    # 0-based row indices
+            "unreferenced_rows": [1, 2, 4, ...]
+          }
+        }
+      }
+    }
+    """
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+
+    # 1. Collect all reference_ids and matched_details from node classifications
+    c.execute("""
+        SELECT reference_id, matched_detail, party_name
+        FROM node_classifications
+        WHERE node_id=%s AND user_id=%s
+    """, (node_id, uid))
+    cls_rows = c.fetchall()
+
+    # Build sets of matched reference strings for fast lookup
+    matched_refs = set()
+    matched_details = set()
+    matched_parties = set()
+    for r in cls_rows:
+        if r["reference_id"] and r["reference_id"].strip():
+            matched_refs.add(r["reference_id"].strip().lower())
+        if r["matched_detail"] and r["matched_detail"].strip() not in (
+            "", "Auto-classified", "Auto-classified from learned feedback",
+            "User corrected", "User corrected + learned"
+        ):
+            matched_details.add(r["matched_detail"].strip().lower())
+        if r["party_name"] and r["party_name"].strip():
+            matched_parties.add(r["party_name"].strip().lower())
+
+    # 2. Load all context files for this node
+    c.execute("""
+        SELECT id, filename, parsed_json, selected_tabs
+        FROM node_context_files
+        WHERE user_id=%s AND node_id=%s
+    """, (uid, node_id))
+    ctx_files = c.fetchall()
+    conn.close()
+
+    by_file = {}
+    for cf in ctx_files:
+        try:
+            parsed = json.loads(cf["parsed_json"] or "{}")
+            selected = json.loads(cf["selected_tabs"] or "[]")
+        except Exception:
+            continue
+
+        file_result = {}
+        for tab_name, payload in parsed.items():
+            headers = payload.get("headers", []) or []
+            rows = payload.get("rows", []) or []
+            if not headers and not rows:
+                continue
+
+            # Detect the reference column in this tab
+            ref_col_idx = None
+            ref_col_name = _detect_ref_column(
+                __import__('pandas').DataFrame(rows[:5] if rows else [[]], columns=headers) if headers else __import__('pandas').DataFrame()
+            )
+            if ref_col_name and ref_col_name in headers:
+                ref_col_idx = headers.index(ref_col_name)
+
+            # Also find vendor/party columns for matching
+            vendor_col_idx = None
+            vendor_keywords = ["vendor", "trade", "legal name", "supplier", "party", "name", "company"]
+            for vi, h in enumerate(headers):
+                if any(kw in h.strip().lower() for kw in vendor_keywords):
+                    vendor_col_idx = vi
+                    break
+
+            referenced = []
+            unreferenced = []
+
+            for row_idx, row in enumerate(rows):
+                is_referenced = False
+
+                # Check by reference_id column
+                if ref_col_idx is not None and ref_col_idx < len(row):
+                    cell_val = str(row[ref_col_idx]).strip().lower()
+                    if cell_val and cell_val not in ("nan", "none", ""):
+                        if cell_val in matched_refs:
+                            is_referenced = True
+
+                # Check by vendor/party name in matched_details or matched_parties
+                if not is_referenced and vendor_col_idx is not None and vendor_col_idx < len(row):
+                    vendor_val = str(row[vendor_col_idx]).strip().lower()
+                    if vendor_val and vendor_val not in ("nan", "none", ""):
+                        # Check against matched_details (contains vendor info)
+                        for md in matched_details:
+                            if vendor_val in md or md in vendor_val:
+                                is_referenced = True
+                                break
+                        if not is_referenced:
+                            for party in matched_parties:
+                                # Fuzzy: check if significant overlap
+                                vt = set(vendor_val.split())
+                                pt = set(party.split())
+                                if len(vt) > 0 and len(pt) > 0:
+                                    overlap = vt & pt
+                                    # At least one meaningful token (len > 3) overlaps
+                                    if any(len(t) > 3 for t in overlap):
+                                        is_referenced = True
+                                        break
+
+                # Check any cell in row against matched_refs or matched_details
+                if not is_referenced:
+                    for cell in row:
+                        cv = str(cell).strip().lower()
+                        if cv and cv not in ("nan", "none", "") and len(cv) > 3:
+                            if cv in matched_refs:
+                                is_referenced = True
+                                break
+                            for md in matched_details:
+                                if cv in md or md in cv:
+                                    is_referenced = True
+                                    break
+                            if is_referenced:
+                                break
+
+                if is_referenced:
+                    referenced.append(row_idx)
+                else:
+                    unreferenced.append(row_idx)
+
+            file_result[tab_name] = {
+                "referenced_rows": referenced,
+                "unreferenced_rows": unreferenced,
+                "total_rows": len(rows),
+                "referenced_count": len(referenced),
+                "unreferenced_count": len(unreferenced),
+            }
+
+        by_file[str(cf["id"])] = {
+            "filename": cf["filename"],
+            "tabs": file_result
+        }
+
+    return jsonify({"by_file": by_file, "node_id": node_id})
 
 
 @app.route('/api/workspace/nodes/<int:node_id>/gst_itc_match', methods=['GET'])

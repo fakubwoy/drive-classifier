@@ -287,27 +287,34 @@
   tbody tr:hover { background: var(--surface); }
   tbody tr.row-selected { background: rgba(59,130,246,0.07); border-left: 2px solid var(--accent); }
   tbody tr.row-dup { border-left: 2px solid var(--yellow) !important; }
-  /* Review status row colors — strongly visible */
+  /* Cell-level focus for arrow key navigation */
+  tbody tr td.cell-focused {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: rgba(37,99,235,0.08);
+    border-radius: 3px;
+  }
+  /* Review status row colors — strongly visible; must come after row-selected to override it */
   tbody tr.row-accepted {
-    background: rgba(16,185,129,0.13);
-    border-left: 3px solid #059669;
+    background: rgba(16,185,129,0.13) !important;
+    border-left: 3px solid #059669 !important;
     box-shadow: inset 0 0 0 0 transparent;
     outline: none;
   }
   tbody tr.row-accepted td:first-child { border-left: none; }
-  tbody tr.row-accepted:hover { background: rgba(16,185,129,0.22); }
+  tbody tr.row-accepted:hover { background: rgba(16,185,129,0.22) !important; }
 
   tbody tr.row-corrected {
-    background: rgba(245,158,11,0.13);
-    border-left: 3px solid #d97706;
+    background: rgba(245,158,11,0.13) !important;
+    border-left: 3px solid #d97706 !important;
   }
-  tbody tr.row-corrected:hover { background: rgba(245,158,11,0.22); }
+  tbody tr.row-corrected:hover { background: rgba(245,158,11,0.22) !important; }
 
   tbody tr.row-flagged {
-    background: rgba(239,68,68,0.11);
-    border-left: 3px solid #dc2626;
+    background: rgba(239,68,68,0.11) !important;
+    border-left: 3px solid #dc2626 !important;
   }
-  tbody tr.row-flagged:hover { background: rgba(239,68,68,0.2); }
+  tbody tr.row-flagged:hover { background: rgba(239,68,68,0.2) !important; }
   td { padding: 9px 12px; vertical-align: middle; }
 
   .narr-cell {
@@ -2641,6 +2648,22 @@
     </div>
     <div class="picker-sub">Select the worksheet tab that contains your transactions to classify. A <strong>"Classified"</strong> tab will be created for results.</div>
     <div class="tab-list" id="tabPickerList"></div>
+    <!-- Statement date range — shown after a tab is picked, before confirming -->
+    <div id="statementDateRange" style="display:none;margin-top:12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;gap:10px;flex-wrap:wrap">
+      <div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:8px">
+        📅 Statement Period <span style="font-weight:400;font-style:italic">(optional — for your records only, won't filter transactions)</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
+          <span style="font-size:0.72rem;color:var(--text-muted)">From Date</span>
+          <input type="date" id="stmtFromDate" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.8rem;outline:none">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px">
+          <span style="font-size:0.72rem;color:var(--text-muted)">To Date</span>
+          <input type="date" id="stmtToDate" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.8rem;outline:none">
+        </label>
+      </div>
+    </div>
     <div style="font-size:0.72rem;color:var(--text-muted)">Can't see the right tab? Make sure you picked the correct spreadsheet.</div>
   </div>
 </div>
@@ -3057,11 +3080,11 @@ function renderTable() {
     // Wrap in clickable pill-edit container (only when row is classified or always to allow assignment)
     const classBadge = `<span class="pill-edit-wrap" onclick="event.stopPropagation();openPillEditor(event,${i})" title="Click to change category"><span style="display:inline-flex;align-items:center;gap:2px">${classBadgeInner}<span style="font-size:0.6rem;opacity:0.5">▾</span></span></span>`;
 
-    // Party badge — clickable to filter by party
+    // Party badge — clickable to filter by party, right-click or double-click to edit
     const _partyName = res && res.party_name ? res.party_name : '';
     const partyBadge = _partyName
-      ? `<span class="party-link" onclick="event.stopPropagation();filterTableByPartyName('${escHtml(_partyName.replace(/'/g,"\'"))}');" title="Filter by ${escHtml(_partyName)}">${escHtml(_partyName)}</span>`
-      : `<span style="color:var(--text-muted);font-size:0.72rem">—</span>`;
+      ? `<span class="party-link" onclick="event.stopPropagation();_partyLinkClickTimer=setTimeout(()=>filterTableByPartyName('${escHtml(_partyName.replace(/'/g,"\'"))}'),220);" ondblclick="event.stopPropagation();clearTimeout(_partyLinkClickTimer);openPartyEditor(event,${i})" title="Click to filter · Double-click to rename">${escHtml(_partyName)}</span>`
+      : `<span style="color:var(--text-muted);font-size:0.72rem;cursor:pointer" ondblclick="event.stopPropagation();openPartyEditor(event,${i})" title="Double-click to set party name">—</span>`;
 
     const refBadge = res && res.reference_id
       ? `<span class="badge badge-ref">${icon('ic-link',9)} ${escHtml(res.reference_id)}</span>`
@@ -3286,7 +3309,17 @@ function statCardFilter(typeVal, classVal) {
 // ---- Row / Detail ----
 function selectRow(i) {
   selectedTxnIndex = i;
-  document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('row-selected'));
+  document.querySelectorAll('tbody tr').forEach(r => {
+    r.classList.remove('row-selected');
+    // Re-apply status classes in case renderTable hasn't run (e.g. Enter-key navigate)
+    const ri = r.id && r.id.startsWith('row-') ? parseInt(r.id.slice(4)) : -1;
+    if (ri >= 0) {
+      const dec = reviewDecisions[ri];
+      r.classList.toggle('row-accepted',  dec === 'accepted');
+      r.classList.toggle('row-corrected', dec === 'corrected');
+      r.classList.toggle('row-flagged',   dec === 'flagged');
+    }
+  });
   const row = document.getElementById('row-' + i);
   if (row) { row.classList.add('row-selected'); if (duplicatesMap[String(i)]) row.classList.add('row-dup'); }
   renderDetailPanel(i);
@@ -3490,8 +3523,8 @@ function _renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions) {
     : '<span style="font-size:0.7rem;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)">◯ Indirect Transaction</span>';
 
   const partyHtml = res.party_name
-    ? '<span style="font-size:0.74rem;font-weight:500;color:var(--accent)" title="Party/Vendor">🏢 ' + escHtml(res.party_name) + '</span>'
-    : '';
+    ? '<span style="font-size:0.74rem;font-weight:500;color:var(--accent)" title="Party/Vendor — click to edit" onclick="openPartyEditorFromPanel(' + i + ')" style="cursor:pointer">🏢 ' + escHtml(res.party_name) + ' <span style="font-size:0.6rem;opacity:0.5">✎</span></span>'
+    : '<span style="font-size:0.72rem;color:var(--text-muted);cursor:pointer" onclick="openPartyEditorFromPanel(' + i + ')" title="Click to set party name">+ Set party</span>';
 
   const refHtml = res.reference_id
     ? '<div style="margin:5px 0"><span class="badge badge-ref">' + icon('ic-link',9) + ' ' + escHtml(res.reference_id) + '</span></div>'
@@ -3568,7 +3601,7 @@ function _renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions) {
     '</div>' +
     '<div style="margin-top:9px;font-size:0.7rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:8px">' +
       '<span class="key">Enter</span> Accept &amp; next &nbsp;·&nbsp; <span class="key">F</span> Flag &amp; next &nbsp;·&nbsp; <span class="key">R</span> Correct &nbsp;·&nbsp; <span class="key">↑↓</span> Navigate<br>' +
-      '<span style="margin-top:5px;display:inline-block"><span class="key">G</span> Accept GST &nbsp;·&nbsp; <span class="key">H</span> Change GST &nbsp;·&nbsp; <span class="key">T</span> Accept TDS &nbsp;·&nbsp; <span class="key">Y</span> Change TDS</span>' +
+      '<span style="margin-top:4px;display:inline-block"><span class="key">←→</span> Cell focus &nbsp;·&nbsp; <span class="key">Space</span> Edit cell &nbsp;·&nbsp; <span class="key">G</span> Accept GST &nbsp;·&nbsp; <span class="key">H</span> Change GST &nbsp;·&nbsp; <span class="key">T</span> Accept TDS &nbsp;·&nbsp; <span class="key">Y</span> Change TDS</span>' +
     '</div>' +
   '</div>';
 }
@@ -3592,6 +3625,27 @@ function renderDetailPanel(i) {
       <div>${links}</div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Review narration and date before accepting.</div>
     </div>`;
+  }
+
+  // Refund pair detection
+  let refundPairHtml = '';
+  const res0 = classificationResults[i];
+  if (res0 && res0.is_refund) {
+    const pairIdx = findRefundPair(i);
+    if (pairIdx !== null) {
+      const pt = allTransactions[pairIdx];
+      const pres = classificationResults[pairIdx];
+      refundPairHtml = `<div style="background:rgba(124,58,237,0.07);border:1px solid rgba(124,58,237,0.22);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#7c3aed;margin-bottom:5px">↩ Refund Pair Detected</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">This appears to be a refund for:</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="dup-link" onclick="selectRow(${pairIdx})">#${escHtml(pt.voucher_no)} — ${String(pt.date||'').slice(0,10)}</span>
+          <span style="font-family:var(--mono);font-size:0.78rem;color:var(--red);font-weight:600">${escHtml(pt.gross_total)}</span>
+          ${pres ? `<span style="font-size:0.72rem;background:var(--accent-dim);color:var(--accent);padding:2px 7px;border-radius:5px">${escHtml(pres.classification)}</span>` : ''}
+        </div>
+        <div class="narr-mono" style="margin-top:4px;font-size:0.7rem">${escHtml(pt.narration)}</div>
+      </div>`;
+    }
   }
 
   let reviewStatusHtml = '';
@@ -3621,6 +3675,8 @@ function renderDetailPanel(i) {
     </div>
 
     ${dupHtml}
+
+    ${refundPairHtml}
 
     <div class="detail-section">
       <div class="detail-section-title">Transaction Details</div>
@@ -3654,6 +3710,12 @@ function renderDetailPanel(i) {
 
 function acceptClassification(i) {
   reviewDecisions[i] = 'accepted';
+  // Immediately apply the accepted class to the row without waiting for full re-render
+  const row = document.getElementById('row-' + i);
+  if (row) {
+    row.classList.remove('row-corrected', 'row-flagged', 'row-selected');
+    row.classList.add('row-accepted');
+  }
   renderTable(); renderDetailPanel(i); updateStats();
   if (window._wsCurrentNodeId) wsSaveNodeClassifications();
 }
@@ -4361,7 +4423,8 @@ function exportCSV() {
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'alfaleus_classified.csv';
+  const dateStr = new Date().toISOString().slice(0,10);
+  a.download = `alfaleus_classified_${dateStr}.csv`;
   a.click();
 }
 
@@ -4505,6 +4568,17 @@ function closeContextPicker() {
 function closeTabPicker() {
   document.getElementById('tabPickerOverlay').classList.remove('show');
   _wsPendingSheetId = null; _wsPendingSheetName = null;
+  if (typeof _wsPendingTabName !== 'undefined') _wsPendingTabName = null;
+  // Reset date inputs for next use
+  const fromEl = document.getElementById('stmtFromDate');
+  const toEl   = document.getElementById('stmtToDate');
+  if (fromEl) fromEl.value = '';
+  if (toEl)   toEl.value   = '';
+  // Hide date section and remove confirm bar
+  const dateSection = document.getElementById('statementDateRange');
+  if (dateSection) dateSection.style.display = 'none';
+  const confirmBar = document.getElementById('tabPickerConfirmBar');
+  if (confirmBar) confirmBar.remove();
 }
 
 document.getElementById('tabPickerOverlay').addEventListener('click', function(e) { if (e.target === this) closeTabPicker(); });
@@ -4797,6 +4871,17 @@ function wsRenderSheetPane(node) {
           <div class="ws-attached-title">${isExcel ? '✓ Excel File Attached' : '✓ Sheet Attached'}</div>
           <div class="ws-attached-name">${isExcel ? '📄 ' : ''}${escHtml(node.sheet_name)}</div>
           <div style="font-size:0.78rem;color:var(--text-muted)">Tab: <strong>${escHtml(node.tab_name)}</strong></div>
+          ${(() => {
+            const f = node.statement_from_date || '';
+            const t2 = node.statement_to_date || '';
+            return `<div style="margin-top:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)">📅 Statement Period</span>
+              <span id="stmtDateDisplay-${node.id}" style="font-size:0.78rem;color:var(--text-dim);font-family:var(--mono)">
+                ${f && t2 ? `${f} → ${t2}` : f ? `From ${f}` : t2 ? `Until ${t2}` : '<em style="color:var(--text-muted)">Not set</em>'}
+              </span>
+              <button class="btn btn-ghost btn-xs" onclick="openStmtDateEditor(${node.id},'${f}','${t2}')" style="margin-left:auto">✏️ Edit</button>
+            </div>`;
+          })()}
           ${ctxTabsHtml}
           ${uploadedFilesHtml}
           <div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap">
@@ -4823,6 +4908,32 @@ function wsRenderSheetPane(node) {
   `;
 }
 
+
+function openStmtDateEditor(nodeId, currentFrom, currentTo) {
+  const displayEl = document.getElementById(`stmtDateDisplay-${nodeId}`);
+  const existing = document.getElementById("stmtDateEditorPopover");
+  if (existing) existing.remove();
+  const pop = document.createElement("div");
+  pop.id = "stmtDateEditorPopover";
+  pop.style.cssText = "position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;min-width:260px;box-shadow:0 8px 24px rgba(0,0,0,0.18)";
+  pop.innerHTML = `<div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:8px">📅 Statement Period <span style="font-weight:400;font-style:italic;text-transform:none;letter-spacing:0">— metadata only</span></div><div style="display:flex;flex-direction:column;gap:7px"><label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:0.72rem;color:var(--text-muted)">From Date</span><input type="date" id="stmtDateFrom-${nodeId}" value="${currentFrom}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:0.8rem;outline:none"></label><label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:0.72rem;color:var(--text-muted)">To Date</span><input type="date" id="stmtDateTo-${nodeId}" value="${currentTo}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:0.8rem;outline:none"></label></div><div style="display:flex;gap:6px;margin-top:10px"><button onclick="saveStmtDates(${nodeId})" class="btn btn-primary btn-sm" style="flex:1">Save</button><button onclick="document.getElementById('stmtDateEditorPopover').remove()" class="btn btn-ghost btn-sm">Cancel</button></div>`;
+  document.body.appendChild(pop);
+  if (displayEl) { const rect = displayEl.getBoundingClientRect(); const popH = 200; const topPos = (rect.bottom + 4 + popH > window.innerHeight) ? Math.max(4, rect.top - popH - 4) : rect.bottom + 4; pop.style.top = topPos + "px"; pop.style.left = Math.min(rect.left, window.innerWidth - 280) + "px"; } else { pop.style.top = "200px"; pop.style.left = "50%"; pop.style.transform = "translateX(-50%)"; }
+  setTimeout(() => { document.addEventListener("click", function _close(e) { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener("click", _close); } }); }, 100);
+  document.getElementById(`stmtDateFrom-${nodeId}`)?.focus();
+}
+
+async function saveStmtDates(nodeId) {
+  const fromVal = (document.getElementById(`stmtDateFrom-${nodeId}`)?.value || "").trim();
+  const toVal   = (document.getElementById(`stmtDateTo-${nodeId}`)?.value || "").trim();
+  document.getElementById("stmtDateEditorPopover")?.remove();
+  try {
+    const res = await fetch(`/api/workspace/nodes/${nodeId}`, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ statement_from_date: fromVal, statement_to_date: toVal }) });
+    const data = await res.json();
+    if (data.node) { const idx = wsNodes.findIndex(n => n.id === nodeId); if (idx >= 0) wsNodes[idx] = data.node; wsSelectNode(nodeId); }
+    showToast("Statement period saved: " + (fromVal && toVal ? fromVal + " → " + toVal : fromVal || toVal || "cleared"));
+  } catch(e) { showToast("Failed to save statement dates"); }
+}
 async function wsPromptNewFolder(parentId) {
   const name = prompt(parentId ? 'New subfolder name:' : 'New root folder name:');
   if (!name || !name.trim()) return;
@@ -5012,12 +5123,53 @@ async function _wsExcelFilePicked(inputEl) {
   `).join('');
 }
 
+// Pending tab name waiting for date confirmation
+let _wsPendingTabName = null;
+
 async function wsConfirmTabForAttach(tabName) {
+  // Store selected tab and show the date range inputs before closing picker
+  _wsPendingTabName = tabName;
+  // Highlight selected tab
+  document.querySelectorAll('#tabPickerList .tab-item').forEach(el => {
+    el.style.background = el.textContent.trim().startsWith(tabName) ? 'var(--accent-dim)' : '';
+    el.style.borderColor = el.textContent.trim().startsWith(tabName) ? 'var(--accent)' : '';
+  });
+  // Show date range section
+  const dateSection = document.getElementById('statementDateRange');
+  if (dateSection) {
+    dateSection.style.display = 'block';
+    // Pre-fill from existing node if re-attaching
+    const existingNode = wsGetNode(_wsPendingAttachNodeId);
+    if (existingNode) {
+      if (existingNode.statement_from_date) document.getElementById('stmtFromDate').value = existingNode.statement_from_date;
+      if (existingNode.statement_to_date) document.getElementById('stmtToDate').value = existingNode.statement_to_date;
+    }
+  }
+  // Replace the footer hint with a Confirm button
+  let confirmBar = document.getElementById('tabPickerConfirmBar');
+  if (!confirmBar) {
+    confirmBar = document.createElement('div');
+    confirmBar.id = 'tabPickerConfirmBar';
+    confirmBar.style.cssText = 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end';
+    confirmBar.innerHTML = `
+      <button class="btn btn-ghost btn-sm" onclick="closeTabPicker()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="_wsConfirmTabWithDates()">
+        Confirm Sheet →
+      </button>`;
+    document.getElementById('tabPickerOverlay').querySelector('.picker-box').appendChild(confirmBar);
+  }
+}
+
+async function _wsConfirmTabWithDates() {
+  const tabName = _wsPendingTabName;
+  if (!tabName) return;
+  // Read date inputs (purely metadata, won't filter transactions)
+  window._wsPendingStmtFromDate = (document.getElementById('stmtFromDate')?.value || '').trim();
+  window._wsPendingStmtToDate   = (document.getElementById('stmtToDate')?.value || '').trim();
   closeTabPicker();
   // Context picker
   const otherTabs = _wsPendingAllTabs.filter(t => t !== tabName);
   if (otherTabs.length > 0) {
-    // Show context picker; on confirm, finish
     openContextPicker(otherTabs);
     _wsContextConfirmCallback = async (ctxTabs) => {
       await _wsFinishAttach(tabName, ctxTabs);
@@ -5038,11 +5190,14 @@ async function _wsFinishAttach(tabName, ctxTabs) {
     tab_name: tabName,
     context_tabs: ctxTabs,
     source_type: _wsPendingSource || 'gsheet',
+    // Statement date range — metadata only, does NOT affect transaction data
+    statement_from_date: window._wsPendingStmtFromDate || '',
+    statement_to_date:   window._wsPendingStmtToDate   || '',
   };
   if (_wsPendingSource === 'excel') {
     payload.excel_file_id = _wsPendingExcelFileId;
-    payload.sheet_id      = '';                          // not a gsheet
-    payload.sheet_name    = _wsPendingSheetName || '';   // = filename
+    payload.sheet_id      = '';
+    payload.sheet_name    = _wsPendingSheetName || '';
   } else {
     payload.sheet_id      = _wsPendingSheetId;
     payload.sheet_name    = _wsPendingSheetName;
@@ -5061,17 +5216,22 @@ async function _wsFinishAttach(tabName, ctxTabs) {
   const attachedName = _wsPendingSheetName || '';
   // Reset pending state.
   _wsPendingAttachNodeId = null;
+  _wsPendingTabName = null;
   _wsPendingSource = 'gsheet';
   _wsPendingExcelFileId = null;
   _wsPendingSheetId = null;
   _wsPendingSheetName = null;
+  window._wsPendingStmtFromDate = '';
+  window._wsPendingStmtToDate   = '';
   wsRenderTree();
   wsSelectNode(nodeId);
-  // If we were attaching from drive home view (not the workspace modal), refresh it
   if (!document.getElementById('workspaceModalOverlay').classList.contains('show')) {
     renderDriveHome(window._driveCurrentFolderId);
   }
-  showToast(`${wasExcel ? 'Excel' : 'Sheet'} attached: ${attachedName} › ${tabName}`);
+  const dateStr = payload.statement_from_date && payload.statement_to_date
+    ? ` (${payload.statement_from_date} → ${payload.statement_to_date})`
+    : '';
+  showToast(`${wasExcel ? 'Excel' : 'Sheet'} attached: ${attachedName} › ${tabName}${dateStr}`);
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -5273,12 +5433,27 @@ async function openContextSheetViewer(nodeId, tabName) {
   overlay.classList.add('show');
   window._ctxViewerCurrent = { nodeId, tabName };
   try {
-    const res = await fetch(
-      `/api/workspace/nodes/${nodeId}/context_tab_data?tab=${encodeURIComponent(tabName)}&limit=500`
-    );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load');
-    renderContextSheetViewer(data);
+    const [dataRes, statusRes] = await Promise.all([
+      fetch(`/api/workspace/nodes/${nodeId}/context_tab_data?tab=${encodeURIComponent(tabName)}&limit=500`),
+      fetch(`/api/workspace/nodes/${nodeId}/context_row_status`)
+    ]);
+    const data = await dataRes.json();
+    if (!dataRes.ok) throw new Error(data.error || 'Failed to load');
+
+    // Extract row status for this specific tab from the response
+    let rowStatus = null;
+    if (statusRes.ok) {
+      const statusData = await statusRes.json();
+      // Find the file+tab that matches this tab name
+      for (const [, fileInfo] of Object.entries(statusData.by_file || {})) {
+        if (fileInfo.tabs && fileInfo.tabs[tabName]) {
+          rowStatus = fileInfo.tabs[tabName];
+          break;
+        }
+      }
+    }
+
+    renderContextSheetViewer(data, rowStatus);
   } catch (e) {
     bodyEl.innerHTML = `
       <div style="padding:20px;color:var(--red);font-size:0.85rem">
@@ -5287,7 +5462,7 @@ async function openContextSheetViewer(nodeId, tabName) {
   }
 }
 
-function renderContextSheetViewer(data) {
+function renderContextSheetViewer(data, rowStatus) {
   const bodyEl = document.getElementById('ctxViewerBody');
   const headers = data.headers || [];
   const rows = data.rows || [];
@@ -5300,20 +5475,56 @@ function renderContextSheetViewer(data) {
          Showing first ${data.limit} rows of ${data.total_rows} total — large sheets are truncated for display.
        </div>`
     : '';
+
+  // Build ref/unref sets if rowStatus is provided
+  const refSet = new Set(rowStatus ? (rowStatus.referenced_rows || []) : []);
+  const unrefSet = new Set(rowStatus ? (rowStatus.unreferenced_rows || []) : []);
+  const hasStatus = rowStatus && (refSet.size + unrefSet.size) > 0;
+
+  const legendHtml = hasStatus ? `
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:0.73rem;margin-bottom:8px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px">
+      <span style="font-weight:600;color:var(--text-dim)">Row Match Status:</span>
+      <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#d1fae5;border:1px solid #6ee7b7;display:inline-block"></span><strong style="color:#065f46">${refSet.size}</strong> referenced in your account statement</span>
+      <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:2px;background:#fee2e2;border:1px solid #fca5a5;display:inline-block"></span><strong style="color:#991b1b">${unrefSet.size}</strong> not referenced</span>
+      ${(!hasStatus) ? '<span style="color:var(--text-muted);font-style:italic">Run classification first to see match status</span>' : ''}
+    </div>` : `
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;font-style:italic">
+      Run classification to see which rows are referenced in your account statement.
+    </div>`;
+
   const statsLine = `<div style="font-size:0.74rem;color:var(--text-muted);margin-bottom:8px">
       ${rows.length} row${rows.length === 1 ? '' : 's'} · ${headers.length} column${headers.length === 1 ? '' : 's'}
     </div>`;
   const thead = `<thead><tr>
       <th style="position:sticky;top:0;background:var(--bg-elev,#f5f5f5);padding:6px 8px;text-align:left;font-size:0.7rem;color:var(--text-muted);border-bottom:1px solid var(--border);width:40px">#</th>
+      ${hasStatus ? `<th style="position:sticky;top:0;background:var(--bg-elev,#f5f5f5);padding:6px 8px;text-align:left;font-size:0.7rem;color:var(--text-muted);border-bottom:1px solid var(--border);width:28px" title="Referenced in account statement">✓</th>` : ''}
       ${headers.map(h => `<th style="position:sticky;top:0;background:var(--bg-elev,#f5f5f5);padding:6px 8px;text-align:left;font-size:0.74rem;border-bottom:1px solid var(--border);white-space:nowrap">${escHtml(h)}</th>`).join('')}
     </tr></thead>`;
-  const tbody = `<tbody>${rows.map((r, i) => `
-      <tr>
-        <td style="padding:5px 8px;font-size:0.72rem;color:var(--text-muted);border-bottom:1px solid var(--border-soft,#eee)">${i + 1}</td>
-        ${headers.map((_, ci) => `<td style="padding:5px 8px;font-size:0.78rem;border-bottom:1px solid var(--border-soft,#eee);white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(r[ci] ?? '')}">${escHtml(r[ci] ?? '')}</td>`).join('')}
-      </tr>`).join('')}</tbody>`;
+  const tbody = `<tbody>${rows.map((r, i) => {
+    const isRef   = refSet.has(i);
+    const isUnref = unrefSet.has(i);
+    let rowBg = '';
+    let statusCell = '';
+    if (hasStatus) {
+      if (isRef) {
+        rowBg = 'background:#d1fae5;';
+        statusCell = `<td style="padding:5px 8px;border-bottom:1px solid var(--border-soft,#eee);text-align:center" title="Referenced in account statement"><span style="color:#065f46;font-weight:700;font-size:0.8rem">✓</span></td>`;
+      } else if (isUnref) {
+        rowBg = 'background:#fee2e2;';
+        statusCell = `<td style="padding:5px 8px;border-bottom:1px solid var(--border-soft,#eee);text-align:center" title="Not referenced in account statement"><span style="color:#991b1b;font-size:0.8rem">—</span></td>`;
+      } else {
+        statusCell = `<td style="padding:5px 8px;border-bottom:1px solid var(--border-soft,#eee)"></td>`;
+      }
+    }
+    return `<tr style="${rowBg}">
+      <td style="padding:5px 8px;font-size:0.72rem;color:var(--text-muted);border-bottom:1px solid var(--border-soft,#eee)">${i + 1}</td>
+      ${statusCell}
+      ${headers.map((_, ci) => `<td style="padding:5px 8px;font-size:0.78rem;border-bottom:1px solid var(--border-soft,#eee);white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis" title="${escHtml(r[ci] ?? '')}">${escHtml(r[ci] ?? '')}</td>`).join('')}
+    </tr>`;
+  }).join('')}</tbody>`;
   bodyEl.innerHTML = `
     ${truncatedNote}
+    ${legendHtml}
     ${statsLine}
     <div style="overflow:auto;max-height:60vh;border:1px solid var(--border);border-radius:8px">
       <table style="width:100%;border-collapse:collapse;font-family:inherit">
@@ -5546,12 +5757,24 @@ async function openContextFileViewer(nodeId, fileId, tabName) {
     </div>`;
   overlay.classList.add('show');
   try {
-    const res = await fetch(
-      `/api/workspace/nodes/${nodeId}/context_files/${fileId}/tab_data?tab=${encodeURIComponent(tabName)}&limit=500`
-    );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load');
-    renderContextSheetViewer(data);
+    const [dataRes, statusRes] = await Promise.all([
+      fetch(`/api/workspace/nodes/${nodeId}/context_files/${fileId}/tab_data?tab=${encodeURIComponent(tabName)}&limit=500`),
+      fetch(`/api/workspace/nodes/${nodeId}/context_row_status`)
+    ]);
+    const data = await dataRes.json();
+    if (!dataRes.ok) throw new Error(data.error || 'Failed to load');
+
+    // Extract row status for this specific file+tab
+    let rowStatus = null;
+    if (statusRes.ok) {
+      const statusData = await statusRes.json();
+      const fileInfo = statusData.by_file && statusData.by_file[String(fileId)];
+      if (fileInfo && fileInfo.tabs && fileInfo.tabs[tabName]) {
+        rowStatus = fileInfo.tabs[tabName];
+      }
+    }
+
+    renderContextSheetViewer(data, rowStatus);
   } catch (e) {
     bodyEl.innerHTML = `
       <div style="padding:20px;color:var(--red);font-size:0.85rem">
@@ -6080,6 +6303,10 @@ window.classifyViaStream = (function(_orig) {
       if (nodeId) {
         try { await Promise.all([loadGstSheetData(nodeId), loadTdsSheetData(nodeId)]); } catch(_) {}
       }
+      // ── Highlight context files: colour matched vs unmatched rows ──────────
+      if (nodeId) {
+        try { await highlightContextFiles(nodeId); } catch(_) {}
+      }
     });
   };
 })(classifyViaStream);
@@ -6121,6 +6348,16 @@ function startOAuth() { window.location.href = '/auth/google'; }
 function closeTabPicker() {
   document.getElementById('tabPickerOverlay').classList.remove('show');
   pendingSheetId = null; pendingSheetName = null;
+  if (typeof _wsPendingTabName !== 'undefined') _wsPendingTabName = null;
+  // Reset date inputs and UI for next use
+  const fromEl = document.getElementById('stmtFromDate');
+  const toEl   = document.getElementById('stmtToDate');
+  if (fromEl) fromEl.value = '';
+  if (toEl)   toEl.value   = '';
+  const dateSection = document.getElementById('statementDateRange');
+  if (dateSection) dateSection.style.display = 'none';
+  const confirmBar = document.getElementById('tabPickerConfirmBar');
+  if (confirmBar) confirmBar.remove();
 }
 
 // ======== Column Manager ========
@@ -6260,10 +6497,15 @@ function openPillEditor(event, rowIdx) {
 
   document.body.appendChild(dd);
 
-  // Position near the click
+  // Position near the click — dropdown uses position:fixed so NO scrollY offset
   const rect = event.target.closest('.pill-edit-wrap')?.getBoundingClientRect() || { bottom: event.clientY, left: event.clientX };
-  dd.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-  dd.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 250) + 'px';
+  // Clamp so it doesn't go off-screen vertically either
+  const dropH = 320;
+  const topPos = (rect.bottom + 4 + dropH > window.innerHeight)
+    ? Math.max(4, rect.top - dropH - 4)
+    : rect.bottom + 4;
+  dd.style.top = topPos + 'px';
+  dd.style.left = Math.min(rect.left, window.innerWidth - 250) + 'px';
 
   setTimeout(() => searchInput.focus(), 50);
 }
@@ -6272,6 +6514,225 @@ function closePillEditor() {
   const dd = document.getElementById('pillEditDropdown');
   if (dd) dd.remove();
   _pillEditorOpenIdx = null;
+}
+
+// ======== Party Name Inline Editor ========
+let _partyEditorOpenIdx = null;
+let _partyLinkClickTimer = null;
+
+function openPartyEditor(event, rowIdx) {
+  closePartyEditor();
+  _partyEditorOpenIdx = rowIdx;
+  const currentParty = classificationResults[rowIdx]?.party_name || '';
+
+  const dd = document.createElement('div');
+  dd.id = 'partyEditDropdown';
+  dd.style.cssText = `
+    position: fixed; z-index: 9999;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px; min-width: 220px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  `;
+
+  dd.innerHTML = `
+    <div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);margin-bottom:6px">Edit Party Name</div>
+    <input id="partyEditInput" type="text" value="${escHtml(currentParty)}"
+      style="width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:0.82rem;outline:none;font-family:var(--sans);"
+      placeholder="Enter party / vendor name…">
+    <div style="display:flex;gap:5px;margin-top:7px">
+      <button onclick="confirmPartyEdit(${rowIdx})" style="flex:1;padding:5px 0;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.78rem;font-weight:600">Save</button>
+      <button onclick="closePartyEditor()" style="padding:5px 10px;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.78rem">Cancel</button>
+    </div>`;
+
+  document.body.appendChild(dd);
+  // Use clientX/clientY from the event when available (reliable even when
+  // the target element has been detached from the DOM by a re-render that
+  // a preceding click may have triggered, e.g. filterTableByPartyName).
+  // Fall back to getBoundingClientRect only when coordinates are absent.
+  let anchorLeft, anchorTop, anchorBottom;
+  if (event.clientX != null && (event.clientX !== 0 || event.clientY !== 0)) {
+    anchorLeft  = event.clientX;
+    anchorTop   = event.clientY;
+    anchorBottom = event.clientY;
+  } else {
+    const rect = event.target.getBoundingClientRect();
+    anchorLeft   = rect.left;
+    anchorTop    = rect.top;
+    anchorBottom = rect.bottom;
+  }
+  // position:fixed — no scrollY offset needed; clamp vertically too
+  const ddH = 120;
+  const topPos = (anchorBottom + 4 + ddH > window.innerHeight)
+    ? Math.max(4, anchorTop - ddH - 4)
+    : anchorBottom + 4;
+  dd.style.top = topPos + 'px';
+  dd.style.left = Math.min(anchorLeft, window.innerWidth - 240) + 'px';
+
+  const inp = document.getElementById('partyEditInput');
+  setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmPartyEdit(rowIdx); }
+    if (e.key === 'Escape') closePartyEditor();
+  });
+}
+
+function closePartyEditor() {
+  const dd = document.getElementById('partyEditDropdown');
+  if (dd) dd.remove();
+  _partyEditorOpenIdx = null;
+}
+
+async function confirmPartyEdit(rowIdx) {
+  const inp = document.getElementById('partyEditInput');
+  const newName = (inp?.value || '').trim();
+  closePartyEditor();
+  const t = allTransactions[rowIdx];
+  if (!t) return;
+  const existing = classificationResults[rowIdx] || { idx: rowIdx, reference_id: '', confidence: 'high', reasoning: '' };
+  classificationResults[rowIdx] = { ...existing, party_name: newName };
+  if (window._wsCurrentNodeId) wsSaveNodeClassifications();
+  renderTable(); updateStats();
+  if (selectedTxnIndex === rowIdx) renderDetailPanel(rowIdx);
+  showToast(newName ? `Party updated: ${newName}` : 'Party name cleared');
+}
+
+function openPartyEditorFromPanel(rowIdx) {
+  // Open party editor anchored to the detail panel party area
+  const panelEl = document.getElementById('detailPanel');
+  const fakeRect = panelEl ? panelEl.getBoundingClientRect() : { left: 300, top: 200, bottom: 220 };
+  const fakeEvent = {
+    target: panelEl || document.body,
+    clientX: fakeRect.left + 20,
+    clientY: fakeRect.top + 100,
+    getBoundingClientRect: () => ({ left: fakeRect.left + 20, top: fakeRect.top + 100, bottom: fakeRect.top + 120 })
+  };
+  // Use a wrapper that has getBoundingClientRect
+  const anchor = document.createElement('span');
+  anchor.style.cssText = `position:fixed;left:${fakeRect.left+20}px;top:${fakeRect.top+100}px;width:1px;height:1px`;
+  document.body.appendChild(anchor);
+  openPartyEditor({ target: anchor }, rowIdx);
+  setTimeout(() => anchor.remove(), 500);
+}
+
+document.addEventListener('click', function(e) {
+  if (_partyEditorOpenIdx !== null && !e.target.closest('#partyEditDropdown')) closePartyEditor();
+});
+
+// ======== Refund Pairing ========
+// Build a map: amount -> list of row indices for quick pair lookup
+function findRefundPair(rowIdx) {
+  const t = allTransactions[rowIdx];
+  const res = classificationResults[rowIdx];
+  if (!t || !res || !res.is_refund) return null;
+  // Parse amount as number
+  const refundAmt = parseFloat(String(t.gross_total).replace(/[^0-9.]/g, ''));
+  if (!refundAmt) return null;
+  const refundDate = new Date(t.date.slice(0, 10));
+  const vendor = (res.refund_vendor || '').toUpperCase();
+
+  // Look for a Payment of similar amount from same vendor within 180 days before this refund
+  let bestMatch = null;
+  let bestDiff = Infinity;
+  allTransactions.forEach((ot, oi) => {
+    if (oi === rowIdx) return;
+    if (ot.voucher_type !== 'Payment') return;
+    const oAmt = parseFloat(String(ot.gross_total).replace(/[^0-9.]/g, ''));
+    if (!oAmt) return;
+    const amtDiff = Math.abs(oAmt - refundAmt) / refundAmt;
+    if (amtDiff > 0.02) return; // within 2%
+    const oDate = new Date(ot.date.slice(0, 10));
+    const daysDiff = (refundDate - oDate) / 86400000;
+    if (daysDiff < 0 || daysDiff > 180) return; // refund must come after payment
+    // Vendor match bonus
+    const oNarr = (ot.narration || '').toUpperCase();
+    const vendorMatch = vendor && oNarr.includes(vendor);
+    const score = amtDiff * 100 + (vendorMatch ? 0 : 5) + daysDiff * 0.01;
+    if (score < bestDiff) { bestDiff = score; bestMatch = oi; }
+  });
+  return bestMatch;
+}
+
+// ======== Cell-wise Navigation & Space Key ========
+// Track current focused column within selected row
+const TABLE_COLS = ['check','rownum','date','bank','type','narration','amount','asset','txntype','classification','subclassification','party','gst','tds','ref','itc','conf'];
+let _focusedCol = null;
+
+function _setFocusedCol(col) {
+  _focusedCol = col;
+  // Update visual indicator on all cells for selected row
+  if (selectedTxnIndex === null) return;
+  const row = document.getElementById('row-' + selectedTxnIndex);
+  if (!row) return;
+  row.querySelectorAll('td').forEach((td, idx) => {
+    const colKey = TABLE_COLS[idx] || '';
+    td.classList.toggle('cell-focused', colKey === col);
+  });
+}
+
+// Override global keydown to support arrow-key cell navigation + space
+document.addEventListener('keydown', function(e) {
+  if (document.getElementById('reviewOverlay').classList.contains('show')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (selectedTxnIndex === null) return;
+
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (_focusedCol === null) { _setFocusedCol('conf'); return; }
+    const idx = TABLE_COLS.indexOf(_focusedCol);
+    if (idx > 0) _setFocusedCol(TABLE_COLS[idx - 1]);
+    return;
+  }
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (_focusedCol === null) { _setFocusedCol(TABLE_COLS[2]); return; }
+    const idx = TABLE_COLS.indexOf(_focusedCol);
+    if (idx < TABLE_COLS.length - 1) _setFocusedCol(TABLE_COLS[idx + 1]);
+    return;
+  }
+  if (e.key === ' ' && _focusedCol !== null) {
+    e.preventDefault();
+    _handleCellSpaceAction(_focusedCol, selectedTxnIndex);
+    return;
+  }
+  // Clear cell focus on vertical navigation
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    _setFocusedCol(null);
+  }
+}, true); // use capture to run before the existing listener
+
+function _handleCellSpaceAction(col, rowIdx) {
+  const res = classificationResults[rowIdx];
+  const row = document.getElementById('row-' + rowIdx);
+  const td = row ? row.querySelectorAll('td')[TABLE_COLS.indexOf(col)] : null;
+  if (!td) return;
+
+  if (col === 'asset') {
+    toggleAsset(rowIdx);
+    showToast(classificationResults[rowIdx]?.is_asset ? '📦 Marked as Asset' : 'Asset flag removed');
+  } else if (col === 'txntype') {
+    if (res) {
+      const next = res.transaction_type === 'direct' ? 'indirect' : 'direct';
+      setTransactionType(rowIdx, next);
+    }
+  } else if (col === 'classification') {
+    // Simulate a click on the pill-edit-wrap in the cell
+    const pill = td.querySelector('.pill-edit-wrap');
+    if (pill) {
+      const fakeEvent = { target: pill, clientX: td.getBoundingClientRect().left + 10, clientY: td.getBoundingClientRect().top + 10, stopPropagation: () => {} };
+      openPillEditor(fakeEvent, rowIdx);
+    }
+  } else if (col === 'party') {
+    const fakeEvent = { target: td, clientX: td.getBoundingClientRect().left, clientY: td.getBoundingClientRect().top };
+    openPartyEditor(fakeEvent, rowIdx);
+  } else if (col === 'type') {
+    // Toggle receipt/payment — only show info, can't easily change from UI
+    const t = allTransactions[rowIdx];
+    showToast(`Type: ${t.voucher_type} — edit in source sheet to change`);
+  } else if (col === 'gst') {
+    openTaxModalForRow(rowIdx);
+  } else if (col === 'tds') {
+    openTaxModalForRow(rowIdx);
+  }
 }
 
 function applyPillCategory(rowIdx, category) {
@@ -6319,6 +6780,8 @@ async function _applyInlineCategory(rowIdx, category) {
   } catch(e) { /* silent */ }
 
   renderTable(); updateStats();
+  // Re-render detail panel if this row is currently selected
+  if (selectedTxnIndex === rowIdx) renderDetailPanel(rowIdx);
   showToast(`Category set: ${category}`);
 }
 
@@ -6629,34 +7092,67 @@ async function uploadContextFiles(files) {
   } catch(e) { prog.textContent = `Error: ${e.message}`; }
 }
 
-async function refreshContextFilesList() {
-  const nodeId = window._wsCurrentNodeId;
+async function refreshContextFilesList(nodeId) {
+  const nid = nodeId || window._wsCurrentNodeId;
   const container = document.getElementById('contextFilesList');
   if (!container) return;
-  if (!nodeId) {
+  if (!nid) {
     container.innerHTML = `<div style="font-size:0.78rem;color:var(--text-muted)">Open a sheet first to see its context files.</div>`;
     return;
   }
   try {
-    const r = await fetch(`/api/workspace/nodes/${nodeId}/context_files`);
+    const r = await fetch(`/api/workspace/nodes/${nid}/context_files`);
     const d = await r.json();
     const files = d.files || [];
     window._wsCtxFilesByNode = window._wsCtxFilesByNode || {};
-    window._wsCtxFilesByNode[nodeId] = files;
+    window._wsCtxFilesByNode[nid] = files;
+
+    // Check if we have highlight data available
+    const hm = window._ctxHighlightMap || {};
+    const hasHighlights = Object.keys(hm).length > 0;
+
     if (!files.length) {
       container.innerHTML = `<div style="font-size:0.78rem;color:var(--text-muted);padding:6px 0">No context files uploaded yet.</div>`;
     } else {
-      container.innerHTML = files.map(f => {
-        const selCount = (f.selected_tabs || []).length;
+      // Download highlighted button — shown only when highlights are available
+      const dlBtn = hasHighlights
+        ? `<div style="margin-bottom:10px">
+             <button onclick="downloadHighlightedContextFiles(${nid})"
+               style="width:100%;padding:7px 14px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);border-radius:8px;font-size:0.78rem;color:#22c55e;cursor:pointer;font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px"
+               onmouseover="this.style.background='rgba(34,197,94,0.22)'" onmouseout="this.style.background='rgba(34,197,94,0.12)'">
+               ⬇ Download Highlighted Context Files (.xlsx)
+             </button>
+           </div>`
+        : '';
+
+      container.innerHTML = dlBtn + files.map(f => {
+        const selCount  = (f.selected_tabs || []).length;
         const totalTabs = (f.tabs || []).length;
+        const fileHl    = hm[String(f.id)];
+
         const tabsHtml = (f.tabs || []).map(t => {
           const checked = t.selected ? 'checked' : '';
+
+          // Per-tab highlight summary badge
+          let hlBadge = '';
+          if (fileHl) {
+            const tabStatus = (fileHl.tabs || {})[t.tab_name] || {};
+            const mCount = Object.values(tabStatus).filter(s => s === 'matched').length;
+            const uCount = Object.values(tabStatus).filter(s => s === 'unmatched').length;
+            if (mCount + uCount > 0) {
+              hlBadge = `<span style="font-size:0.65rem;margin-left:4px">
+                <span style="background:#d4f4d4;color:#166534;border-radius:3px;padding:1px 5px">${mCount}✓</span>
+                <span style="background:#fff3cd;color:#92400e;border-radius:3px;padding:1px 5px">${uCount}✗</span>
+              </span>`;
+            }
+          }
+
           return `<label style="display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:0.77rem;transition:background 0.1s" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background='transparent'">
             <input type="checkbox" ${checked} style="accent-color:var(--accent2);cursor:pointer"
-              onchange="toggleCtxPanelTab(${nodeId},${f.id},'${escHtml(t.tab_name).replace(/'/g,"\\'")}',this.checked)">
-            <span style="flex:1;color:${t.selected?'var(--text)':'var(--text-muted)'};font-weight:${t.selected?'500':'400'}">${escHtml(t.tab_name)}</span>
+              onchange="toggleCtxPanelTab(${nid},${f.id},'${escHtml(t.tab_name).replace(/'/g,"\\'")}',this.checked)">
+            <span style="flex:1;color:${t.selected?'var(--text)':'var(--text-muted)'};font-weight:${t.selected?'500':'400'}">${escHtml(t.tab_name)}${hlBadge}</span>
             <span style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap">${t.row_count} rows</span>
-            <button onclick="event.preventDefault();openContextFileViewer(${nodeId},${f.id},'${escHtml(t.tab_name).replace(/'/g,"\\'")}')" 
+            <button onclick="event.preventDefault();openContextFileViewer(${nid},${f.id},'${escHtml(t.tab_name).replace(/'/g,"\\'")}')" 
               style="background:none;border:1px solid var(--border);border-radius:5px;padding:2px 8px;font-size:0.68rem;color:var(--text-muted);cursor:pointer;white-space:nowrap"
               onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" 
               onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
@@ -6676,7 +7172,7 @@ async function refreshContextFilesList() {
               <div style="font-size:0.83rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(f.filename)}">${escHtml(f.filename)}</div>
               <div style="font-size:0.7rem;color:${statusColor};margin-top:1px">${statusText}</div>
             </div>
-            <button onclick="deleteContextFileFromPanel(${nodeId},${f.id})"
+            <button onclick="deleteContextFileFromPanel(${nid},${f.id})"
               style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:4px 10px;font-size:0.72rem;color:var(--red);cursor:pointer;white-space:nowrap;flex-shrink:0"
               onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
               ✕ Remove
@@ -7632,14 +8128,100 @@ async function loadContextFileTab(nodeId, fileId, tab, extraHeaderHtml) {
     if (d.error) { bodyEl.innerHTML = (extraHeaderHtml||'') + `<div style="padding:24px;color:var(--red)">${escHtml(d.error)}</div>`; return; }
     const headers = d.headers || [];
     const rows = d.rows || [];
-    const truncNote = d.truncated ? `<div style="padding:6px 12px;font-size:0.72rem;color:var(--yellow);background:rgba(217,119,6,0.08);border-bottom:1px solid var(--border)">⚠ Showing first ${rows.length} of ${d.total_rows} rows</div>` : '';
+    const total = d.total_rows || rows.length;
+    const truncNote = d.truncated ? `<div style="padding:6px 12px;font-size:0.72rem;color:var(--yellow);background:rgba(217,119,6,0.08);border-bottom:1px solid var(--border)">⚠ Showing first ${rows.length} of ${total} rows</div>` : '';
+
+    // ── Highlight map lookup ──────────────────────────────────────────────
+    const hm = window._ctxHighlightMap || {};
+    const fileHl = hm[String(fileId)];
+    const tabHl  = fileHl ? (fileHl.tabs || {})[tab] : null;
+    const hasHighlights = !!tabHl;
+
+    // Legend bar
+    const legendHtml = hasHighlights
+      ? `<div style="display:flex;gap:14px;align-items:center;padding:6px 12px;font-size:0.72rem;border-bottom:1px solid var(--border);background:var(--surface2)">
+           <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:#90EE90;border-radius:3px;display:inline-block"></span> Matched in account statement</span>
+           <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:#FFD580;border-radius:3px;display:inline-block"></span> Not matched</span>
+         </div>`
+      : '';
+
     const thead = `<thead><tr>${headers.map(h=>`<th style="font-size:0.72rem;background:#1c6b40;color:#fff;white-space:nowrap">${escHtml(String(h))}</th>`).join('')}</tr></thead>`;
-    const tbody = `<tbody>${rows.map(row => `<tr>${(Array.isArray(row)?row:Object.values(row)).map(v=>`<td style="font-size:0.73rem;white-space:nowrap">${escHtml(String(v))}</td>`).join('')}</tr>`).join('')}</tbody>`;
-    bodyEl.innerHTML = (extraHeaderHtml||'') + truncNote + `<div style="overflow-x:auto"><table style="min-width:100%;border-collapse:collapse">${thead}${tbody}</table></div>`;
+    const tbody = `<tbody>${rows.map((row, ri) => {
+      const status = tabHl ? tabHl[String(ri)] : null;
+      const rowBg  = status === 'matched'   ? 'background:#d4f4d4;'
+                   : status === 'unmatched' ? 'background:#fff3cd;'
+                   : '';
+      const cells  = (Array.isArray(row) ? row : Object.values(row))
+                       .map(v => `<td style="font-size:0.73rem;white-space:nowrap;${rowBg}">${escHtml(String(v))}</td>`)
+                       .join('');
+      return `<tr style="${rowBg}">${cells}</tr>`;
+    }).join('')}</tbody>`;
+
+    bodyEl.innerHTML = (extraHeaderHtml||'') + legendHtml + truncNote + `<div style="overflow-x:auto"><table style="min-width:100%;border-collapse:collapse">${thead}${tbody}</table></div>`;
   } catch(e) {
     bodyEl.innerHTML = (extraHeaderHtml||'') + `<div style="padding:24px;color:var(--red)">Error: ${escHtml(String(e))}</div>`;
   }
 }
+
+// ===================== CONTEXT FILE HIGHLIGHTING =====================
+// Stores highlight map returned by /api/.../highlight_context_files
+// Shape: { file_id_str: { filename, tabs: { tab_name: { row_idx_str: "matched"|"unmatched" } } } }
+window._ctxHighlightMap = {};
+
+/**
+ * Call the backend to compute which context-file rows were matched vs unmatched
+ * in the current classification run, then store the result so the viewer can
+ * apply background colours when a tab is opened.
+ */
+async function highlightContextFiles(nodeId) {
+  if (!nodeId) return;
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/highlight_context_files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.highlight_map) {
+      window._ctxHighlightMap = d.highlight_map;
+      const matched   = d.matched_rows   || 0;
+      const unmatched = d.unmatched_rows || 0;
+      // Show a toast so the user knows the highlights are ready
+      showToast(`✅ Context files highlighted: ${matched} matched rows (green), ${unmatched} unmatched (orange). Open any context file to view.`);
+      // Refresh the context files panel so the "Download Highlighted" button appears
+      await refreshContextFilesList(nodeId);
+    }
+  } catch(e) {
+    console.warn('highlightContextFiles failed (non-fatal):', e);
+  }
+}
+
+/**
+ * Download the highlighted context files as a single Excel workbook
+ * (one tab per context-file sheet).
+ */
+async function downloadHighlightedContextFiles(nodeId) {
+  if (!nodeId) { showToast('Open a sheet first.'); return; }
+  showToast('Building highlighted Excel file…');
+  try {
+    const r = await fetch(
+      `/api/workspace/nodes/${nodeId}/highlight_context_files?download=1`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }
+    );
+    if (!r.ok) { showToast('Download failed: ' + r.status); return; }
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'context_files_highlighted.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    showToast('Download error: ' + e);
+  }
+}
+
+// ===================== END CONTEXT FILE HIGHLIGHTING =====================
 
 // ===================== ASSET CLASSIFICATION =====================
 
@@ -7746,6 +8328,42 @@ async function runRefundDetection() {
   finally { if (btn) btn.disabled = false; }
 }
 
+// Vendor → category mapping for refund classification
+const _REFUND_VENDOR_CATS = {
+  'MAKEMYTRIP': 'Flight Booking', 'MMT': 'Flight Booking',
+  'GOIBIBO': 'Flight Booking', 'CLEARTRIP': 'Flight Booking',
+  'YATRA': 'Flight Booking', 'EASEMYTRIP': 'Flight Booking',
+  'IXIGO': 'Flight Booking',
+  'BOOKING': 'Hotel Booking',
+  'SWIGGY': 'Office/Admin Expense', 'ZOMATO': 'Office/Admin Expense',
+  'AMAZON': 'Office/Admin Expense', 'AMZN': 'Office/Admin Expense',
+  'FLIPKART': 'Office/Admin Expense', 'MYNTRA': 'Office/Admin Expense',
+  'MEESHO': 'Office/Admin Expense', 'SNAPDEAL': 'Office/Admin Expense',
+  'NYKAA': 'Office/Admin Expense', 'AJIO': 'Office/Admin Expense',
+  'BIGBASKET': 'Office/Admin Expense', 'BLINKIT': 'Office/Admin Expense',
+  'ZEPTO': 'Office/Admin Expense', 'FIRSTCRY': 'Office/Admin Expense',
+  'PAYTM MALL': 'Office/Admin Expense',
+  'QUICKRIDE': 'Cab/Transport Booking', 'SAVAARI': 'Cab/Transport Booking',
+};
+
+function _getRefundCategory(vendor, narration) {
+  const check = (str) => {
+    for (const [kw, cat] of Object.entries(_REFUND_VENDOR_CATS)) {
+      if (str.includes(kw)) return cat;
+    }
+    return null;
+  };
+  if (vendor) {
+    const c = check(vendor.toUpperCase());
+    if (c) return c;
+  }
+  if (narration) {
+    const c = check(narration.toUpperCase());
+    if (c) return c;
+  }
+  return null;
+}
+
 async function toggleRefund(rowIdx) {
   const t = allTransactions[rowIdx];
   const res = classificationResults[rowIdx];
@@ -7753,16 +8371,40 @@ async function toggleRefund(rowIdx) {
   const nodeId = window._wsCurrentNodeId;
   const txnKey = _makeTxnKey(t);
   const newRefund = !(res && res.is_refund);
-  let vendor = '';
+  let vendor = (res && res.refund_vendor) || '';
+
   if (newRefund) {
-    vendor = prompt('Refund vendor (e.g. Amazon, Flipkart):') || '';
+    // Pre-detect vendor from narration for the prompt
+    const narr = (t.narration || '').toUpperCase();
+    const autoDetected = Object.keys(_REFUND_VENDOR_CATS).find(kw => narr.includes(kw)) || '';
+    vendor = prompt('Refund vendor (e.g. MakeMyTrip, Amazon):', autoDetected || vendor) || '';
+    vendor = vendor.trim();
   }
+
+  // Determine correct category for refund (should match vendor domain, NOT Bank/Finance)
+  const existingCls = (res && res.classification) || '';
+  let newClassification = existingCls;
+  if (newRefund) {
+    const suggestedCat = _getRefundCategory(vendor, t.narration);
+    if (suggestedCat && suggestedCat !== existingCls) {
+      // Only override if current category seems wrong (is Bank/Finance or empty)
+      if (!existingCls || existingCls === 'Bank/Finance Transaction' || existingCls === 'Other Income' || existingCls === 'Other Expense') {
+        newClassification = suggestedCat;
+      }
+    }
+  }
+
   classificationResults[rowIdx] = {
-    ...(res || { idx: rowIdx, classification: '', reference_id: '', confidence: 'high', reasoning: '', matched_detail: '' }),
-    is_refund: newRefund, refund_vendor: vendor
+    ...(res || { idx: rowIdx, reference_id: '', confidence: 'high', reasoning: '', matched_detail: '' }),
+    is_refund: newRefund,
+    refund_vendor: vendor,
+    classification: newClassification,
   };
+
   renderTable();
   if (selectedTxnIndex === rowIdx) renderDetailPanel(rowIdx);
+  updateStats();
+
   if (nodeId) {
     try {
       await fetch(`/api/workspace/nodes/${nodeId}/set_refund`, {
@@ -7772,7 +8414,13 @@ async function toggleRefund(rowIdx) {
       await wsSaveNodeClassifications();
     } catch(e) { console.warn('toggleRefund save failed', e); }
   }
-  showToast(newRefund ? `↩ Marked as Refund${vendor ? ' from ' + vendor : ''}` : 'Refund flag removed');
+
+  if (newRefund) {
+    const catMsg = newClassification !== existingCls ? ` · Category → ${newClassification}` : '';
+    showToast(`↩ Marked as Refund${vendor ? ' from ' + vendor : ''}${catMsg}`);
+  } else {
+    showToast('Refund flag removed');
+  }
 }
 
 // ===================== GST/TDS SHEET DATA VIEWER =====================
