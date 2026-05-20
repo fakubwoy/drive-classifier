@@ -1557,6 +1557,86 @@
     max-width: 80px; overflow: hidden; text-overflow: ellipsis;
   }
   .group-badge:hover { background: rgba(14,165,233,0.22); }
+
+  /* ---- Group header row ---- */
+  tr.group-header-row {
+    background: rgba(14,165,233,0.07) !important;
+    border-top: 1px solid rgba(14,165,233,0.28) !important;
+    border-bottom: none !important;
+    cursor: default !important;
+  }
+  tr.group-header-row:hover { background: rgba(14,165,233,0.11) !important; }
+  tr.group-header-row td {
+    padding: 5px 10px 5px 12px !important;
+    border-bottom: none !important;
+  }
+  .group-header-inner {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .group-header-icon {
+    font-size: 0.8rem; flex-shrink: 0;
+  }
+  .group-header-name {
+    font-size: 0.74rem; font-weight: 700;
+    color: #0369a1; letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1;
+  }
+  .group-header-count {
+    font-size: 0.65rem; color: #0369a1; opacity: 0.7;
+    background: rgba(14,165,233,0.12); border: 1px solid rgba(14,165,233,0.25);
+    border-radius: 10px; padding: 1px 7px; white-space: nowrap; flex-shrink: 0;
+    font-family: var(--mono);
+  }
+  .group-header-edit {
+    font-size: 0.65rem; font-weight: 600; color: #0369a1;
+    background: rgba(14,165,233,0.1); border: 1px solid rgba(14,165,233,0.3);
+    border-radius: 5px; padding: 2px 8px; cursor: pointer; flex-shrink: 0;
+    transition: background 0.12s;
+  }
+  .group-header-edit:hover { background: rgba(14,165,233,0.22); }
+  .group-header-collapse {
+    font-size: 0.65rem; color: var(--text-muted);
+    background: none; border: none; cursor: pointer; padding: 2px 4px;
+    flex-shrink: 0; transition: color 0.12s; border-radius: 4px;
+    line-height: 1;
+  }
+  .group-header-collapse:hover { color: var(--text); background: var(--surface3); }
+
+  /* ---- Grouped member rows ---- */
+  tbody tr.row-grouped {
+    background: rgba(14,165,233,0.025) !important;
+    border-bottom: 1px solid rgba(14,165,233,0.13) !important;
+  }
+  tbody tr.row-grouped td:first-child {
+    position: relative;
+  }
+  /* Continuous left accent bar on member rows */
+  tbody tr.row-grouped td:first-child::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: #0ea5e9;
+    opacity: 0.6;
+  }
+  tbody tr.row-grouped-last td:first-child::before {
+    bottom: 6px;
+    border-radius: 0 0 3px 3px;
+  }
+  tbody tr.row-grouped-only td:first-child::before {
+    top: 0; bottom: 6px;
+    border-radius: 0 0 3px 3px;
+  }
+  /* Slight indent for member rows */
+  tbody tr.row-grouped td.narr-cell {
+    padding-left: 20px !important;
+  }
+  /* Collapsed group rows */
+  tbody tr.group-member-hidden { display: none !important; }
+  /* Group label chip — kept for compat but hidden since we use header row now */
+  .group-row-label { display: none; }
+
   .group-box {
     background: rgba(14,165,233,0.06); border: 1px solid rgba(14,165,233,0.25);
     border-radius: 8px; padding: 11px 13px; margin-top: 4px;
@@ -3443,7 +3523,32 @@ function renderTable() {
     tbody.innerHTML = `<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--text-muted)">No transactions match</td></tr>`;
     return;
   }
-  tbody.innerHTML = pageIndices.map((i, rowNum) => {
+
+  // Re-order pageIndices so grouped rows are contiguous (cluster after first member seen)
+  const _orderedIndices = [];
+  const _seenGroupsOrder = new Set();
+  for (const i of pageIndices) {
+    const _g = rowGroupMap[i];
+    if (_g && txnGroups[_g]) {
+      if (_seenGroupsOrder.has(_g)) continue; // already clustered
+      _seenGroupsOrder.add(_g);
+      const _members = txnGroups[_g].txn_keys || [];
+      for (const pi of pageIndices) {
+        if (_members.includes(_makeTxnKey(allTransactions[pi]))) _orderedIndices.push(pi);
+      }
+    } else {
+      _orderedIndices.push(i);
+    }
+  }
+
+  // Track which group IDs have already had their header emitted on this page
+  const _emittedGroupHeaders = new Set();
+  // Collapsed groups persist across renders
+  if (!window._collapsedGroups) window._collapsedGroups = new Set();
+
+  const rows = [];
+  let rowNum = 0;
+  for (const i of _orderedIndices) {
     const t = allTransactions[i];
     const res = classificationResults[i];
     const isReceipt = t.voucher_type === 'Receipt';
@@ -3510,12 +3615,33 @@ function renderTable() {
     }
     const date = t.date.split(' ')[0];
     const bank = (t.source || t.particulars || '').replace('HDFC Bank','HDFC').replace('ICICI Bank - 0901 - Birac','ICICI Birac');
+    // Compute group position class for visual bracketing
+    const _gid = rowGroupMap[i];
+    let groupPosCls = '';
+    if (_gid && txnGroups[_gid]) {
+      const _members = txnGroups[_gid].txn_keys || [];
+      // Find all page indices that belong to this group, in page order
+      const _groupPageIndices = pageIndices.filter(pi => _members.includes(_makeTxnKey(allTransactions[pi])));
+      const _pos = _groupPageIndices.indexOf(i);
+      const _total = _groupPageIndices.length;
+      if (_total === 1) {
+        groupPosCls = 'row-grouped row-grouped-only';
+      } else if (_pos === 0) {
+        groupPosCls = 'row-grouped row-grouped-first';
+      } else if (_pos === _total - 1) {
+        groupPosCls = 'row-grouped row-grouped-last';
+      } else {
+        groupPosCls = 'row-grouped row-grouped-middle';
+      }
+    }
+
     const rowCls = [
       selectedRows.has(i) ? 'row-selected' : '',
       isDup ? 'row-dup' : '',
       decision === 'accepted' ? 'row-accepted' : '',
       decision === 'corrected' ? 'row-corrected' : '',
       decision === 'flagged' ? 'row-flagged' : '',
+      groupPosCls,
     ].filter(Boolean).join(' ');
 
     // GST/TDS badge from taxClassifications store
@@ -3599,13 +3725,40 @@ function renderTable() {
       </tr>`;
     }
 
-    return `<tr onclick="selectRow(${i})" ondblclick="resetRowDecision(${i}, event)" class="${rowCls}" id="row-${i}" title="${decision ? 'Double-click to reset review status' : ''}">
+    // Inject group header row before the first member of each group on this page
+    if (_gid && txnGroups[_gid] && !_emittedGroupHeaders.has(_gid)) {
+      _emittedGroupHeaders.add(_gid);
+      const _grp = txnGroups[_gid];
+      const _grpLabel = _grp.label || 'Transaction Group';
+      // Count how many members appear on this page
+      const _members = _grp.txn_keys || [];
+      const _memberCountOnPage = pageIndices.filter(pi => _members.includes(_makeTxnKey(allTransactions[pi]))).length;
+      const _isCollapsed = window._collapsedGroups.has(_gid);
+      const _chevron = _isCollapsed ? '▶' : '▼';
+      rows.push(
+        `<tr class="group-header-row" id="group-hdr-${escHtml(_gid)}">` +
+        `<td colspan="17">` +
+        `<div class="group-header-inner">` +
+        `<button class="group-header-collapse" onclick="event.stopPropagation();toggleGroupCollapse('${escHtml(_gid)}')" title="${_isCollapsed ? 'Expand group' : 'Collapse group'}">${_chevron}</button>` +
+        `<span class="group-header-icon">🔗</span>` +
+        `<span class="group-header-name">${escHtml(_grpLabel)}</span>` +
+        `<span class="group-header-count">${_memberCountOnPage} transaction${_memberCountOnPage !== 1 ? 's' : ''}</span>` +
+        `<button class="group-header-edit" onclick="event.stopPropagation();openGroupModal(${i})">Edit group</button>` +
+        `</div>` +
+        `</td></tr>`
+      );
+    }
+
+    const _isCollapsed = _gid && window._collapsedGroups.has(_gid);
+    const _hiddenCls = _isCollapsed ? ' group-member-hidden' : '';
+
+    rows.push(`<tr onclick="selectRow(${i})" ondblclick="resetRowDecision(${i}, event)" class="${rowCls}${_hiddenCls}" id="row-${i}" title="${decision ? 'Double-click to reset review status' : ''}">
       <td style="width:28px;padding:5px 4px;text-align:center" onclick="event.stopPropagation()"><input type="checkbox" onchange="toggleRowSelect(${i},this)" ${selectedRows.has(i)?'checked':''}></td>
-      <td class="row-num" style="width:36px;max-width:36px">${(currentPage-1)*pageSize + rowNum + 1}</td>
+      <td class="row-num" style="width:36px;max-width:36px;position:relative">${(currentPage-1)*pageSize + rowNum + 1}</td>
       <td style="width:90px;max-width:90px;white-space:nowrap;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim)">${date}</td>
       <td style="width:76px;max-width:76px;font-size:0.74rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(bank)}</td>
       <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px">${typeBadge}${res && res.is_refund ? '<br><span style="font-size:0.6rem;font-weight:700;color:#7c3aed;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.25);border-radius:4px;padding:1px 4px">↩ Refund</span>' : ''}</td>
-      <td class="narr-cell" title="${escHtml(t.narration)}" onclick="updateFormulaBar(${i},'${escHtml(date)}')">${escHtml(t.narration)}${dupBadge}${res && res.is_refund && res.refund_vendor ? ` <span style="font-size:0.66rem;color:var(--purple);opacity:0.8">(${escHtml(res.refund_vendor)})</span>` : ''}${rowGroupMap[i] ? ` <span class="group-badge" onclick="event.stopPropagation();openGroupModal(${i})" title="Part of group: ${escHtml((txnGroups[rowGroupMap[i]]||{}).label||'')}\nClick to edit group">🔗 ${escHtml((txnGroups[rowGroupMap[i]]||{}).label||'grouped')}</span>` : ''}</td>
+      <td class="narr-cell" title="${escHtml(t.narration)}" onclick="updateFormulaBar(${i},'${escHtml(date)}')">${escHtml(t.narration)}${dupBadge}${res && res.is_refund && res.refund_vendor ? ` <span style="font-size:0.66rem;color:var(--purple);opacity:0.8">(${escHtml(res.refund_vendor)})</span>` : ''}</td>
       <td class="amount-cell ${isReceipt?'receipt':'payment'}" style="width:100px;max-width:100px;text-align:right">${escHtml(t.gross_total)}</td>
       <td style="width:44px;max-width:44px;text-align:center;padding:5px 3px" title="${res && res.is_asset ? 'Asset — click to unmark' : 'Not an asset — click to mark as asset'}" onclick="event.stopPropagation();toggleAsset(${i})">${res && res.is_asset ? '<span style="font-size:0.66rem;font-weight:700;color:#b45309;background:rgba(180,83,9,0.1);border:1px solid rgba(180,83,9,0.3);border-radius:4px;padding:1px 5px;cursor:pointer">📦 Asset</span>' : '<span style="font-size:0.6rem;color:var(--border2);cursor:pointer">○</span>'}</td>
       <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px;cursor:${res ? 'pointer' : 'default'}" title="${res ? 'Click to toggle Direct/Indirect' : 'Not classified'}" onclick="event.stopPropagation();${res ? `setTransactionType(${i},'${res.transaction_type === 'direct' ? 'indirect' : 'direct'}')` : ''}">${txTypeBadge || '<span style="color:var(--text-muted);font-size:0.72rem">—</span>'}</td>
@@ -3617,8 +3770,20 @@ function renderTable() {
       <td style="width:108px;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${refBadge}</td>
       <td style="width:120px;max-width:120px;text-align:center;white-space:nowrap;padding:4px 6px">${itcBadge}</td>
       <td style="width:36px;max-width:36px;text-align:center">${confDot}</td>
-    </tr>${gstMatchRow}`;
-  }).join('');
+    </tr>${gstMatchRow}`);
+    rowNum++;
+  }
+  tbody.innerHTML = rows.join('');
+}
+
+function toggleGroupCollapse(gid) {
+  if (!window._collapsedGroups) window._collapsedGroups = new Set();
+  if (window._collapsedGroups.has(gid)) {
+    window._collapsedGroups.delete(gid);
+  } else {
+    window._collapsedGroups.add(gid);
+  }
+  renderTable();
 }
 
 async function loadRules() {
