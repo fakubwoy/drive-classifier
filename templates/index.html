@@ -1548,6 +1548,52 @@
   }
   .direct-txn-input:focus { border-color: var(--green); }
 
+  /* ---- Transaction Group ---- */
+  .group-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 0.6rem; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+    background: rgba(14,165,233,0.12); color: #0369a1;
+    border: 1px solid rgba(14,165,233,0.3); cursor: pointer; white-space: nowrap;
+    max-width: 80px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .group-badge:hover { background: rgba(14,165,233,0.22); }
+  .group-box {
+    background: rgba(14,165,233,0.06); border: 1px solid rgba(14,165,233,0.25);
+    border-radius: 8px; padding: 11px 13px; margin-top: 4px;
+  }
+  .group-box-title {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #0369a1; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  /* Group modal overlay */
+  #groupModal {
+    display: none; position: fixed; inset: 0; z-index: 3000;
+    background: rgba(15,23,42,0.45); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  #groupModal.open { display: flex; }
+  #groupModalBox {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; width: 540px; max-width: calc(100vw - 32px);
+    max-height: 80vh; display: flex; flex-direction: column; gap: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  }
+  #groupModalBox h3 { font-size: 0.95rem; font-weight: 700; margin: 0; }
+  #groupTxnList { overflow-y: auto; max-height: 320px; border: 1px solid var(--border); border-radius: 8px; }
+  .group-txn-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); cursor: pointer;
+    transition: background 0.1s;
+  }
+  .group-txn-item:last-child { border-bottom: none; }
+  .group-txn-item:hover { background: var(--surface2); }
+  .group-txn-item.selected { background: rgba(14,165,233,0.08); }
+  .group-txn-item input[type=checkbox] { flex-shrink: 0; cursor: pointer; }
+  .group-txn-narr { flex: 1; font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .group-txn-meta { font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; }
+  .group-txn-current { font-size: 0.6rem; font-weight: 700; color: #0369a1; padding: 1px 5px; background: rgba(14,165,233,0.1); border-radius: 3px; flex-shrink: 0; }
+
   .party-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 9px; padding: 12px 14px; cursor: pointer; transition: all 0.13s;
@@ -1565,6 +1611,21 @@
   }
   #bottomPanel.expanded .bottom-panel-collapse-btn { display: flex; }
   .bottom-panel-collapse-btn:hover { color: var(--accent); background: var(--surface); }
+
+  /* ===================== FILTER CHIPS ===================== */
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--surface); border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 20px;
+    padding: 2px 10px; font-size: 0.74rem; font-weight: 600;
+    font-family: var(--mono);
+  }
+  .filter-chip button {
+    background: none; border: none; color: var(--accent);
+    cursor: pointer; font-size: 0.9rem; line-height: 1;
+    padding: 0 2px; margin-left: 2px; opacity: 0.7;
+  }
+  .filter-chip button:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -1705,6 +1766,10 @@
   <div class="nav-tab" onclick="switchTab('rules', this)">
     <svg class="icon" width="13" height="13"><use href="#ic-brain"/></svg> Learned Rules
   </div>
+  <div class="nav-tab" onclick="switchTab('forex', this)">
+    <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M16.5 5.5l-9 9M7.5 5.5l9 9"/></svg>
+    Forex / Imports
+  </div>
 </div>
 
 <!-- ===================== MAIN BREADCRUMB BAR ===================== -->
@@ -1743,6 +1808,9 @@
     <button class="btn btn-secondary" id="classifySelBtn" onclick="classifySelected()" disabled>
       <svg class="icon" width="13" height="13"><use href="#ic-target"/></svg>
       Classify Selected
+    </button>
+    <button class="btn btn-secondary" id="groupSelBtn" onclick="groupSelected()" disabled title="Group selected transactions together (e.g. installment payments)">
+      🔗 Group Selected
     </button>
     <button class="btn btn-warning" onclick="openQuickReview()">
       <svg class="icon" width="13" height="13"><use href="#ic-zap"/></svg>
@@ -1808,7 +1876,15 @@
       <option value="refund">↩ Refunds</option>
       <option value="direct">⚡ Direct</option>
       <option value="indirect">↻ Indirect</option>
+      <option value="forex">💱 Forex/Import</option>
+      <option value="forex_supplier">💱 Forex Pmts</option>
+      <option value="forex_boe">🏛 BOEs</option>
+      <option value="forex_courier">🚚 Import Courier</option>
     </select>
+    <button class="btn btn-secondary btn-sm" onclick="toggleFilterPanel()" title="Advanced filters" style="gap:5px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+      Filters
+    </button>
     <div class="toolbar-sep"></div>
     <div class="col-manager-wrap">
       <button class="btn btn-secondary btn-sm" onclick="toggleColManager(event)">
@@ -1821,6 +1897,41 @@
       </div>
     </div>
   </div>
+
+  <!-- Filter Panel (advanced) -->
+  <div id="filterPanel" style="display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;gap:12px;flex-wrap:wrap;align-items:flex-end" class="toolbar">
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <span style="font-size:0.68rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Category</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select class="filter-select" id="filterCategorySelect" style="min-width:180px"><option value="">Pick a category…</option></select>
+        <button class="btn btn-secondary btn-sm" onclick="applyCategoryFilter()">+ Add</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <span style="font-size:0.68rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Amount Range (₹)</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="filter-select" id="filterAmtMin" type="number" placeholder="Min" style="width:90px">
+        <span style="color:var(--text-muted);font-size:0.8rem">–</span>
+        <input class="filter-select" id="filterAmtMax" type="number" placeholder="Max" style="width:90px">
+        <button class="btn btn-secondary btn-sm" onclick="applyAmtFilter()">Apply</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <span style="font-size:0.68rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Quick Chips</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-xs" onclick="addFilterChip('forex:1')">💱 Forex/Import</button>
+        <button class="btn btn-secondary btn-xs" onclick="addFilterChip('txntype:direct')">⚡ Direct only</button>
+        <button class="btn btn-secondary btn-xs" onclick="addFilterChip('txntype:indirect')">↻ Indirect only</button>
+        <button class="btn btn-secondary btn-xs" onclick="addFilterChip('status:accepted')">✓ Accepted</button>
+        <button class="btn btn-secondary btn-xs" onclick="addFilterChip('status:flagged')">⚑ Flagged</button>
+        <button class="btn btn-secondary btn-xs" onclick="addFilterChip('status:corrected')">✎ Corrected</button>
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="clearAllFilters()">✕ Clear All</button>
+  </div>
+
+  <!-- Active filter chips bar -->
+  <div id="activeFilterBar" style="display:none;background:var(--accent-dim);border-bottom:1px solid rgba(37,99,235,.15);padding:6px 24px;flex-wrap:wrap;align-items:center;gap:6px"></div>
 
   <!-- Stats -->
   <div class="stats-bar" id="statsBar"></div>
@@ -2354,7 +2465,184 @@
   </div>
 </div>
 
-<!-- ===================== TAX CONFIRM MODAL ===================== -->
+<!-- ===================== FOREX / IMPORTS TAB ===================== -->
+<div class="tab-content" id="tab-forex">
+  <div style="padding:24px;max-width:1100px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-family:var(--display);font-size:1.1rem;font-weight:700;margin-bottom:3px">💱 Forex / Import Tracker</div>
+        <div style="font-size:0.78rem;color:var(--text-muted)">Track international supplier payments, AWB numbers, Bills of Entry (BOE), customs duty, and courier charges for each import order.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="loadAllBoes()">📋 View All BOEs</button>
+        <button class="btn btn-primary btn-sm" onclick="openForexModal()">+ New Import Order</button>
+      </div>
+    </div>
+
+    <!-- Detected forex summary banner -->
+    <div id="forexDetectBanner" style="display:none;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.2);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:0.8rem;color:var(--text-dim)">
+      <span id="forexDetectBannerText"></span>
+      <button class="btn btn-secondary btn-xs" onclick="runForexDetect()" style="margin-left:10px">Detect Forex Transactions</button>
+    </div>
+
+    <!-- Orders list -->
+    <div id="forexOrdersList">
+      <div style="text-align:center;padding:48px;color:var(--text-muted);font-size:0.82rem">
+        No import orders yet. Open a sheet node first, then click <strong>+ New Import Order</strong>.
+      </div>
+    </div>
+
+    <!-- All BOEs panel (hidden by default) -->
+    <div id="allBoePanel" style="display:none;margin-top:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-family:var(--display);font-size:0.9rem;font-weight:700">📋 All Bills of Entry</div>
+        <button class="btn btn-ghost btn-xs" onclick="document.getElementById('allBoePanel').style.display='none'">✕ Close</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.78rem">
+        <thead>
+          <tr>
+            <th style="padding:8px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">BOE #</th>
+            <th style="padding:8px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">Date</th>
+            <th style="padding:8px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">Supplier</th>
+            <th style="padding:8px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">AWB #</th>
+            <th style="padding:8px;text-align:right;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">Customs (₹)</th>
+            <th style="padding:8px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">Courier</th>
+            <th style="padding:8px;text-align:right;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">Courier (₹)</th>
+            <th style="padding:8px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:0.67rem;text-transform:uppercase;letter-spacing:.06em">Node</th>
+          </tr>
+        </thead>
+        <tbody id="allBoeTableBody">
+          <tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text-muted)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== FOREX ORDER MODAL ===================== -->
+<div class="overlay-bg" id="forexModalOverlay">
+  <div class="modal-box" style="width:620px;max-width:95vw;overflow-y:auto">
+    <div class="modal-header">
+      <div class="modal-title">💱 <span id="forexModalTitle">New Import Order</span></div>
+      <button class="modal-close" onclick="closeForexModal()">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;font-size:0.82rem">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Order Label</label>
+          <input class="search-input" id="fxOrderLabel" type="text" placeholder="e.g. Headset Batch Apr-25" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Status</label>
+          <select class="filter-select" id="fxStatus" style="width:100%">
+            <option value="open">Open</option>
+            <option value="in_transit">In Transit</option>
+            <option value="customs">At Customs</option>
+            <option value="delivered">Delivered</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">💳 Supplier Payment</div>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Supplier Name</label>
+            <input class="search-input" id="fxSupplier" type="text" placeholder="e.g. Optica Corp Ltd" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Currency</label>
+            <select class="filter-select" id="fxCurrency" style="width:100%">
+              <option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
+              <option value="JPY">JPY</option><option value="SGD">SGD</option><option value="AED">AED</option>
+              <option value="CNY">CNY</option><option value="HKD">HKD</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Foreign Amount</label>
+            <input class="search-input" id="fxForeignAmt" type="text" placeholder="e.g. 5000" style="width:100%">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">INR Amount Paid</label>
+            <input class="search-input" id="fxInrAmt" type="text" placeholder="e.g. 415000" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Exchange Rate</label>
+            <input class="search-input" id="fxRate" type="text" placeholder="e.g. 83.00" style="width:100%">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Bank Transaction (paste narration or select from table)</label>
+          <input class="search-input" id="fxPaymentTxnKey" type="text" placeholder="e.g. SWIFT/OUTWARD REMITTANCE/…" style="width:100%">
+        </div>
+      </div>
+
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:0.72rem;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">📦 Shipment & Customs</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">AWB Number (Air Waybill)</label>
+            <input class="search-input" id="fxAwb" type="text" placeholder="e.g. 7804-5678-9012" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">BOE Number (Bill of Entry)</label>
+            <input class="search-input" id="fxBoe" type="text" placeholder="e.g. 1234567/2025" style="width:100%">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">BOE Date</label>
+            <input class="search-input" id="fxBoeDate" type="date" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Customs Duty Amount (₹)</label>
+            <input class="search-input" id="fxCustomsAmt" type="text" placeholder="e.g. 12500" style="width:100%">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Customs Payment Transaction (narration)</label>
+          <input class="search-input" id="fxCustomsTxnKey" type="text" placeholder="e.g. CUSTOMS DUTY PAYMENT/BOE…" style="width:100%">
+        </div>
+      </div>
+
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:0.72rem;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">🚚 Courier / Freight</div>
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Courier Name</label>
+            <input class="search-input" id="fxCourierName" type="text" placeholder="e.g. FedEx, DHL, BlueDart" style="width:100%">
+          </div>
+          <div>
+            <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Courier Amount (₹)</label>
+            <input class="search-input" id="fxCourierAmt" type="text" placeholder="e.g. 4200" style="width:100%">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:0.7rem;color:var(--text-muted);display:block;margin-bottom:3px">Courier Transaction (narration)</label>
+          <input class="search-input" id="fxCourierTxnKey" type="text" placeholder="e.g. FEDEX EXPRESS PAYMENT/…" style="width:100%">
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:0.78rem;color:var(--text-muted);cursor:pointer">
+          <input type="checkbox" id="fxCourierIncBoe" style="accent-color:var(--accent2)">
+          <span>Courier charge includes BOE/customs fee (combined invoice)</span>
+        </label>
+      </div>
+
+      <div>
+        <label style="font-size:0.72rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px">Notes</label>
+        <textarea class="search-input" id="fxNotes" rows="2" placeholder="Any additional notes about this import order…" style="width:100%;resize:vertical"></textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button class="btn btn-ghost" onclick="closeForexModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveForexOrder()">Save Order</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="overlay-bg" id="taxModalOverlay">
   <div class="tax-modal-box">
     <div class="tax-modal-title">
@@ -2932,6 +3220,7 @@ function switchTab(tab, el, _skipPush) {
   if (tab === 'rules')  loadRules();
   if (tab === 'upload') refreshUploadedSheetsList();
   if (tab === 'gst')    { loadTaxClassifications().then(() => { if (taxTableData.length) renderTaxTable(); }); }
+  if (tab === 'forex')  { loadForexOrders(); }
 }
 
 // --- Aux panel openers (Upload Sheets / GST / TDS) ---
@@ -2955,34 +3244,145 @@ function closeAuxPanel() {
 }
 
 // ---- Filters ----
+// Active filter chips: { type, value } — type can be: status, txntype, voucher, category, party, amtMin, amtMax
+let activeFilters = new Set(); // set of filter strings like "status:accepted", "forex:1", "voucher:Payment"
+
 function _getFilteredBase() {
   const search = document.getElementById('searchBox').value.toLowerCase();
   const typeF = document.getElementById('typeFilter').value;
   const classF = document.getElementById('classFilter').value;
+  // Parse active filter chips
+  const fChips = Array.from(activeFilters);
+  const fStatus = fChips.filter(f=>f.startsWith('status:')).map(f=>f.slice(7));
+  const fTxnType = fChips.filter(f=>f.startsWith('txntype:')).map(f=>f.slice(8));
+  const fForex = fChips.some(f=>f==='forex:1');
+  const fCategory = fChips.filter(f=>f.startsWith('category:')).map(f=>f.slice(9));
+  const fParty = fChips.filter(f=>f.startsWith('party:')).map(f=>f.slice(6).toLowerCase());
+  const fAmtMin = fChips.find(f=>f.startsWith('amtmin:'));
+  const fAmtMax = fChips.find(f=>f.startsWith('amtmax:'));
+  const amtMin = fAmtMin ? parseFloat(fAmtMin.split(':')[1]) : null;
+  const amtMax = fAmtMax ? parseFloat(fAmtMax.split(':')[1]) : null;
+
   return allTransactions.map((t, i) => ({ t, i })).filter(({ t, i }) => {
+    const res = classificationResults[i];
     if (search) {
-      const partyN = (classificationResults[i]?.party_name || '').toLowerCase();
+      const partyN = (res?.party_name || '').toLowerCase();
       if (!t.narration.toLowerCase().includes(search) &&
           !t.particulars.toLowerCase().includes(search) &&
           !partyN.includes(search)) return false;
     }
     if (typeF && t.voucher_type !== typeF) return false;
-    if (classF === 'classified' && !classificationResults[i]) return false;
-    if (classF === 'unclassified' && classificationResults[i]) return false;
+    if (classF === 'classified' && !res) return false;
+    if (classF === 'unclassified' && res) return false;
     if (classF === 'duplicate' && !duplicatesMap[String(i)]) return false;
     if (classF === 'accepted' && reviewDecisions[i] !== 'accepted') return false;
     if (classF === 'corrected' && reviewDecisions[i] !== 'corrected') return false;
     if (classF === 'flagged' && reviewDecisions[i] !== 'flagged') return false;
     if (classF === 'rejected' && reviewDecisions[i] !== 'rejected') return false;
-    if (classF === 'asset' && !classificationResults[i]?.is_asset) return false;
-    if (classF === 'refund' && !classificationResults[i]?.is_refund) return false;
-    if (classF === 'direct' && classificationResults[i]?.transaction_type !== 'direct') return false;
-    if (classF === 'indirect' && (!classificationResults[i] || classificationResults[i]?.transaction_type === 'direct')) return false;
+    if (classF === 'asset' && !res?.is_asset) return false;
+    if (classF === 'refund' && !res?.is_refund) return false;
+    if (classF === 'direct' && res?.transaction_type !== 'direct') return false;
+    if (classF === 'indirect' && (!res || res?.transaction_type === 'direct')) return false;
+    if (classF === 'forex') {
+      const cls = res?.classification || '';
+      if (!['Forex Supplier Payment','Customs/BOE Payment','Import Courier Charge'].includes(cls)) return false;
+    }
+    if (classF === 'forex_supplier' && res?.classification !== 'Forex Supplier Payment') return false;
+    if (classF === 'forex_boe'      && res?.classification !== 'Customs/BOE Payment') return false;
+    if (classF === 'forex_courier'  && res?.classification !== 'Import Courier Charge') return false;
+    // Active filter chips
+    if (fStatus.length && !fStatus.includes(reviewDecisions[i] || 'none')) {
+      if (!(fStatus.includes('unreviewed') && !reviewDecisions[i])) return false;
+    }
+    if (fTxnType.length && !fTxnType.includes(res?.transaction_type || 'indirect')) return false;
+    if (fForex) {
+      const cls = res?.classification || '';
+      if (!['Forex Supplier Payment','Customs/BOE Payment','Import Courier Charge'].includes(cls) && !res?.forex_flag) return false;
+    }
+    if (fCategory.length && !fCategory.includes(res?.classification || '')) return false;
+    if (fParty.length && !fParty.some(p => (res?.party_name||'').toLowerCase().includes(p))) return false;
+    if (amtMin !== null) {
+      const amt = parseFloat(String(t.gross_total).replace(/[^0-9.]/g,'')) || 0;
+      if (amt < amtMin) return false;
+    }
+    if (amtMax !== null) {
+      const amt = parseFloat(String(t.gross_total).replace(/[^0-9.]/g,'')) || 0;
+      if (amt > amtMax) return false;
+    }
     return true;
   }).map(({ i }) => i);
 }
 function getFilteredIndices() { return _getFilteredBase(); } // replaced by sort-aware version below
 function filterTable() { currentPage = 1; renderTable(); updateStats(); }
+
+function addFilterChip(key) {
+  activeFilters.add(key);
+  renderFilterChips();
+  filterTable();
+}
+function removeFilterChip(key) {
+  activeFilters.delete(key);
+  renderFilterChips();
+  filterTable();
+}
+function clearAllFilters() {
+  activeFilters.clear();
+  document.getElementById('searchBox').value = '';
+  document.getElementById('typeFilter').value = '';
+  document.getElementById('classFilter').value = '';
+  const amtMin = document.getElementById('filterAmtMin');
+  const amtMax = document.getElementById('filterAmtMax');
+  if (amtMin) amtMin.value = '';
+  if (amtMax) amtMax.value = '';
+  renderFilterChips();
+  filterTable();
+}
+function renderFilterChips() {
+  const bar = document.getElementById('activeFilterBar');
+  if (!bar) return;
+  if (!activeFilters.size) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const LABELS = {
+    'forex:1': '💱 Forex/Import',
+    'txntype:direct': '⚡ Direct',
+    'txntype:indirect': '↻ Indirect',
+    'status:accepted': '✓ Accepted',
+    'status:corrected': '✎ Corrected',
+    'status:flagged': '⚑ Flagged',
+  };
+  bar.innerHTML = Array.from(activeFilters).map(f => {
+    const label = LABELS[f] || f.split(':').slice(1).join(':');
+    return `<span class="filter-chip">${escHtml(label)}<button onclick="removeFilterChip('${escHtml(f)}')" title="Remove filter">×</button></span>`;
+  }).join('') + `<button class="btn btn-ghost btn-xs" onclick="clearAllFilters()" style="font-size:0.7rem;padding:2px 8px">Clear all</button>`;
+}
+function applyAmtFilter() {
+  const minVal = document.getElementById('filterAmtMin')?.value.trim();
+  const maxVal = document.getElementById('filterAmtMax')?.value.trim();
+  activeFilters.forEach(f => { if (f.startsWith('amtmin:') || f.startsWith('amtmax:')) activeFilters.delete(f); });
+  if (minVal) activeFilters.add('amtmin:' + minVal);
+  if (maxVal) activeFilters.add('amtmax:' + maxVal);
+  renderFilterChips();
+  filterTable();
+}
+function applyCategoryFilter() {
+  const sel = document.getElementById('filterCategorySelect');
+  if (!sel || !sel.value) return;
+  activeFilters.add('category:' + sel.value);
+  renderFilterChips();
+  filterTable();
+  sel.value = '';
+}
+function toggleFilterPanel() {
+  const panel = document.getElementById('filterPanel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  // Populate category dropdown with unique classified categories
+  const catSel = document.getElementById('filterCategorySelect');
+  if (catSel && !catSel.options.length) {
+    const cats = [...new Set(Object.values(classificationResults).map(r=>r?.classification).filter(Boolean))].sort();
+    catSel.innerHTML = '<option value="">Pick a category…</option>' + cats.map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  }
+}
 
 
 function changePageSize(val) {
@@ -3205,7 +3605,7 @@ function renderTable() {
       <td style="width:90px;max-width:90px;white-space:nowrap;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim)">${date}</td>
       <td style="width:76px;max-width:76px;font-size:0.74rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(bank)}</td>
       <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px">${typeBadge}${res && res.is_refund ? '<br><span style="font-size:0.6rem;font-weight:700;color:#7c3aed;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.25);border-radius:4px;padding:1px 4px">↩ Refund</span>' : ''}</td>
-      <td class="narr-cell" title="${escHtml(t.narration)}" onclick="updateFormulaBar(${i},'${escHtml(date)}')">${escHtml(t.narration)}${dupBadge}${res && res.is_refund && res.refund_vendor ? ` <span style="font-size:0.66rem;color:var(--purple);opacity:0.8">(${escHtml(res.refund_vendor)})</span>` : ''}</td>
+      <td class="narr-cell" title="${escHtml(t.narration)}" onclick="updateFormulaBar(${i},'${escHtml(date)}')">${escHtml(t.narration)}${dupBadge}${res && res.is_refund && res.refund_vendor ? ` <span style="font-size:0.66rem;color:var(--purple);opacity:0.8">(${escHtml(res.refund_vendor)})</span>` : ''}${rowGroupMap[i] ? ` <span class="group-badge" onclick="event.stopPropagation();openGroupModal(${i})" title="Part of group: ${escHtml((txnGroups[rowGroupMap[i]]||{}).label||'')}\nClick to edit group">🔗 ${escHtml((txnGroups[rowGroupMap[i]]||{}).label||'grouped')}</span>` : ''}</td>
       <td class="amount-cell ${isReceipt?'receipt':'payment'}" style="width:100px;max-width:100px;text-align:right">${escHtml(t.gross_total)}</td>
       <td style="width:44px;max-width:44px;text-align:center;padding:5px 3px" title="${res && res.is_asset ? 'Asset — click to unmark' : 'Not an asset — click to mark as asset'}" onclick="event.stopPropagation();toggleAsset(${i})">${res && res.is_asset ? '<span style="font-size:0.66rem;font-weight:700;color:#b45309;background:rgba(180,83,9,0.1);border:1px solid rgba(180,83,9,0.3);border-radius:4px;padding:1px 5px;cursor:pointer">📦 Asset</span>' : '<span style="font-size:0.6rem;color:var(--border2);cursor:pointer">○</span>'}</td>
       <td style="width:62px;max-width:62px;text-align:center;padding:5px 4px;cursor:${res ? 'pointer' : 'default'}" title="${res ? 'Click to toggle Direct/Indirect' : 'Not classified'}" onclick="event.stopPropagation();${res ? `setTransactionType(${i},'${res.transaction_type === 'direct' ? 'indirect' : 'direct'}')` : ''}">${txTypeBadge || '<span style="color:var(--text-muted);font-size:0.72rem">—</span>'}</td>
@@ -3269,6 +3669,12 @@ function updateStats() {
   const directTxns   = Object.values(classificationResults).filter(r => r?.transaction_type === 'direct').length;
   const indirectTxns = Object.values(classificationResults).filter(r => r && r.transaction_type !== 'direct').length;
 
+  // Forex stats
+  const forexSupplier = Object.values(classificationResults).filter(r => r?.classification === 'Forex Supplier Payment').length;
+  const forexCustoms  = Object.values(classificationResults).filter(r => r?.classification === 'Customs/BOE Payment').length;
+  const forexCourier  = Object.values(classificationResults).filter(r => r?.classification === 'Import Courier Charge').length;
+  const forexTotal    = forexSupplier + forexCustoms + forexCourier;
+
   // Determine current active filter to highlight the matching card
   const curType  = document.getElementById('typeFilter').value;
   const curClass = document.getElementById('classFilter').value;
@@ -3276,6 +3682,10 @@ function updateStats() {
     const typeMatch  = curType  === typeVal;
     const classMatch = curClass === classVal;
     return (typeMatch && classMatch) ? ' stat-active' : '';
+  }
+  function activeCategoryClass(category) {
+    return (activeFilters.size === 1 && activeFilters.has('category:' + category) && !curType && !curClass)
+      ? ' stat-active' : '';
   }
 
   document.getElementById('statsBar').innerHTML = `
@@ -3295,6 +3705,9 @@ function updateStats() {
     ${indirectTxns > 0 ? `<div class="stat-card clickable${activeClass('','indirect')}" onclick="statCardFilter('','indirect')"><div class="stat-num" style="color:#6b7280">${indirectTxns}</div><div class="stat-lbl">↻ Indirect</div></div>` : ''}
     ${assets > 0 ? `<div class="stat-card clickable${activeClass('','asset')}" onclick="statCardFilter('','asset')"><div class="stat-num" style="color:#b45309">${assets}</div><div class="stat-lbl">📦 Assets</div></div>` : ''}
     ${refunds > 0 ? `<div class="stat-card clickable${activeClass('','refund')}" onclick="statCardFilter('','refund')"><div class="stat-num" style="color:#7c3aed">${refunds}</div><div class="stat-lbl">↩ Refunds</div></div>` : ''}
+    ${forexSupplier > 0 ? `<div class="stat-card clickable${activeClass('','forex_supplier')}" onclick="statCardFilter('','forex_supplier')" title="Click to filter · Shows all foreign currency supplier payments"><div class="stat-num" style="color:var(--accent)">${forexSupplier}</div><div class="stat-lbl">💱 Forex Pmts</div></div>` : ''}
+    ${forexCustoms > 0 ? `<div class="stat-card clickable${activeClass('','forex_boe')}" onclick="statCardFilter('','forex_boe')" title="Click to filter · Shows all Customs/BOE payments"><div class="stat-num" style="color:#059669">${forexCustoms}</div><div class="stat-lbl">🏛 BOEs</div></div>` : ''}
+    ${forexCourier > 0 ? `<div class="stat-card clickable${activeClass('','forex_courier')}" onclick="statCardFilter('','forex_courier')" title="Click to filter · Shows import courier charges"><div class="stat-num" style="color:#7c3aed">${forexCourier}</div><div class="stat-lbl">🚚 Import Courier</div></div>` : ''}
   `;
 }
 
@@ -3304,6 +3717,29 @@ function statCardFilter(typeVal, classVal) {
   currentPage = 1;
   renderTable();
   updateStats(); // re-render cards so active state refreshes
+}
+
+function statCardFilterCategory(category) {
+  const key = 'category:' + category;
+  // Toggle: if this filter is already active, remove it; otherwise add it
+  if (activeFilters.has(key)) {
+    activeFilters.delete(key);
+  } else {
+    activeFilters.add(key);
+  }
+  renderFilterChips();
+  filterTable();
+  updateStats();
+  // Switch to transactions tab if not already there
+  const txnNavTab = document.querySelector('.nav-tab[onclick*="\'transactions\'"]');
+  if (txnNavTab) switchTab('transactions', txnNavTab);
+}
+
+function openForexTabBoes() {
+  // Navigate to Forex tab and immediately open the All BOEs panel
+  const forexNavTab = document.querySelector('.nav-tab[onclick*="\'forex\'"]');
+  if (forexNavTab) switchTab('forex', forexNavTab);
+  setTimeout(() => loadAllBoes(), 100);
 }
 
 // ---- Row / Detail ----
@@ -3541,7 +3977,9 @@ function _renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions) {
   const directBoxHtml = isDirect
     ? '<div class="direct-txn-box">' +
         '<div class="direct-txn-title">📦 Direct Transaction Details</div>' +
-        '<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">Add product and quantity for this direct business transaction:</div>' +
+        (res.direct_product_name || res.direct_quantity
+          ? '<div style="font-size:0.72rem;color:var(--green);margin-bottom:6px;display:flex;align-items:center;gap:5px">✓ AI identified: <strong>' + escHtml(res.direct_product_name||'') + (res.direct_quantity ? ' · ' + escHtml(res.direct_quantity) : '') + '</strong></div>'
+          : '<div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">Add product and quantity for this direct business transaction:</div>') +
         '<input class="direct-txn-input" id="directProductName" type="text" placeholder="Product name (e.g. Headset, Tablet, Carry Case, Lens…)" value="' + escHtml(res.direct_product_name||'') + '" onchange="saveDirectTxnDetail(' + i + ')">' +
         '<input class="direct-txn-input" id="directQuantity" type="text" placeholder="Quantity (e.g. 5 units, 2 pcs, 1 box…)" value="' + escHtml(res.direct_quantity||'') + '" onchange="saveDirectTxnDetail(' + i + ')">' +
         '<button class="btn btn-success btn-xs" onclick="saveDirectTxnDetail(' + i + ')" style="margin-top:2px">Save Details</button>' +
@@ -3552,11 +3990,22 @@ function _renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions) {
   // Asset & Refund badges
   const isAsset = !!(res.is_asset);
   const isRefund = !!(res.is_refund);
+  const isForex = !!(res.forex_flag);
+  const forexType = res.forex_type || '';
+  const FOREX_TYPE_LABELS = {
+    'supplier_payment': 'Supplier Payment',
+    'customs_duty': 'Customs/BOE',
+    'courier_import': 'Courier (Import)',
+    'general_forex': 'Foreign Currency',
+  };
   const assetBadge = isAsset
     ? '<span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(180,83,9,0.12);color:#b45309;border:1px solid rgba(180,83,9,0.3)">📦 Capital Asset</span>'
     : '';
   const refundBadge = isRefund
     ? '<span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(124,58,237,0.1);color:#7c3aed;border:1px solid rgba(124,58,237,0.25)">↩ Refund' + (res.refund_vendor ? ' · ' + escHtml(res.refund_vendor) : '') + '</span>'
+    : '';
+  const forexBadge = isForex
+    ? '<span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:5px;background:rgba(37,99,235,0.1);color:var(--accent);border:1px solid rgba(37,99,235,0.3)">💱 Forex/Import' + (forexType ? ' · ' + escHtml(FOREX_TYPE_LABELS[forexType]||forexType) : '') + '</span>'
     : '';
   const assetBtnCls   = isAsset  ? 'btn-warning'   : 'btn-secondary';
   const assetBtnLabel = isAsset  ? '📦 Unmark Asset' : '📦 Mark as Asset';
@@ -3567,7 +4016,7 @@ function _renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions) {
     '<div class="ai-result-title">' + icon('ic-sparkle',11) + ' AI Classification</div>' +
     '<div class="ai-category">' + escHtml(res.classification) + '</div>' +
     subclsHtml +
-    '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px">' + typeBadge + partyHtml + (assetBadge ? ' ' + assetBadge : '') + (refundBadge ? ' ' + refundBadge : '') + '</div>' +
+    '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px">' + typeBadge + partyHtml + (assetBadge ? ' ' + assetBadge : '') + (refundBadge ? ' ' + refundBadge : '') + (forexBadge ? ' ' + forexBadge : '') + '</div>' +
     refHtml + matchHtml +
     renderItcDetailHtml(t) +
     '<div style="margin:5px 0;display:flex;align-items:center;gap:5px"><span class="conf-dot conf-' + res.confidence + '"></span><span style="font-size:0.72rem;color:var(--text-muted)">' + res.confidence + ' confidence</span></div>' +
@@ -3598,6 +4047,9 @@ function _renderClassifiedPanel(res, i, t, reviewStatusHtml, catOptions) {
     '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
       '<button class="btn btn-xs ' + assetBtnCls + '" onclick="toggleAsset(' + i + ')" title="Toggle capital asset flag">' + assetBtnLabel + '</button>' +
       '<button class="btn btn-xs ' + refundBtnCls + '" onclick="toggleRefund(' + i + ')" title="Toggle refund flag">' + refundBtnLabel + '</button>' +
+      '<button class="btn btn-xs btn-secondary" onclick="openGroupModal(' + i + ')" title="Group with other transactions (e.g. installments)">' +
+        (rowGroupMap[i] ? '🔗 Edit Group' : '🔗 Group with…') +
+      '</button>' +
     '</div>' +
     '<div style="margin-top:9px;font-size:0.7rem;color:var(--text-muted);text-align:center;border-top:1px solid var(--border);padding-top:8px">' +
       '<span class="key">Enter</span> Accept &amp; next &nbsp;·&nbsp; <span class="key">F</span> Flag &amp; next &nbsp;·&nbsp; <span class="key">R</span> Correct &nbsp;·&nbsp; <span class="key">↑↓</span> Navigate<br>' +
@@ -3677,6 +4129,29 @@ function renderDetailPanel(i) {
     ${dupHtml}
 
     ${refundPairHtml}
+
+    ${(() => {
+      const gid = rowGroupMap[i];
+      if (!gid) return '';
+      const g = txnGroups[gid] || {};
+      const memberIndices = allTransactions
+        .map((t2, idx) => (g.txn_keys || []).includes(_makeTxnKey(t2)) ? idx : -1)
+        .filter(idx => idx >= 0 && idx !== i);
+      const memberLinks = memberIndices.map(mi => {
+        const mt = allTransactions[mi];
+        const mres = classificationResults[mi];
+        return `<span class="dup-link" onclick="selectRow(${mi})">#${escHtml(mt.voucher_no)} — ${String(mt.date||'').slice(0,10)} (${escHtml(mt.gross_total)})${mres&&mres.party_name?' · '+escHtml(mres.party_name):''}</span>`;
+      }).join('');
+      return `<div class="group-box">
+        <div class="group-box-title">🔗 Transaction Group${g.label ? ': ' + escHtml(g.label) : ''}</div>
+        <div style="font-size:0.73rem;color:var(--text-muted);margin-bottom:6px">${memberIndices.length + 1} transactions grouped together</div>
+        ${memberLinks ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${memberLinks}</div>` : ''}
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-xs btn-secondary" onclick="openGroupModal(${i})">✏️ Edit Group</button>
+          ${memberIndices.length > 0 ? `<button class="btn btn-xs btn-secondary" onclick="jumpToGroupMember(1)" title="Jump to next member">→ Next in group</button>` : ''}
+        </div>
+      </div>`;
+    })()}
 
     <div class="detail-section">
       <div class="detail-section-title">Transaction Details</div>
@@ -4325,11 +4800,13 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function toggleRowSelect(i, cb) {
   if (cb.checked) selectedRows.add(i); else selectedRows.delete(i);
   document.getElementById('classifySelBtn').disabled = selectedRows.size === 0;
+  document.getElementById('groupSelBtn').disabled = selectedRows.size < 2;
 }
 function toggleSelectAll(cb) {
   const indices = getFilteredIndices();
   if (cb.checked) indices.forEach(i => selectedRows.add(i)); else selectedRows.clear();
   document.getElementById('classifySelBtn').disabled = selectedRows.size === 0;
+  document.getElementById('groupSelBtn').disabled = selectedRows.size < 2;
   renderTable();
 }
 
@@ -5897,11 +6374,15 @@ async function wsOpenClassifier(nodeId) {
           is_asset: !!(c.is_asset),
           is_refund: !!(c.is_refund),
           refund_vendor: c.refund_vendor || '',
+          group_id: c.group_id || '',
           idx: idx
         };
         if (c.review_decision) reviewDecisions[idx] = c.review_decision;
       }
     });
+
+    // Load manual transaction groups (must come after classificationResults is built)
+    await loadTxnGroups(nodeId);
 
     // Patch classify stream & feedback to use workspace node routes
     _wsCurrentNodeId = nodeId;
@@ -6278,7 +6759,10 @@ async function wsSaveNodeClassifications() {
       direct_quantity: res.direct_quantity || '',
       is_asset: res.is_asset ? 1 : 0,
       is_refund: res.is_refund ? 1 : 0,
-      refund_vendor: res.refund_vendor || ''
+      refund_vendor: res.refund_vendor || '',
+      group_id: res.group_id || '',
+      forex_flag: res.forex_flag ? 1 : 0,
+      forex_type: res.forex_type || ''
     };
   }).filter(Boolean);
   if (!records.length) return;
@@ -6287,6 +6771,256 @@ async function wsSaveNodeClassifications() {
     body: JSON.stringify({ records })
   });
 }
+
+// ======== Forex / Import Tracker ========
+let _forexEditingId = null;
+let _forexOrders = [];
+
+async function loadForexOrders() {
+  const nodeId = window._wsCurrentNodeId;
+  const listEl = document.getElementById('forexOrdersList');
+  if (!listEl) return;
+  if (!nodeId) {
+    listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:0.82rem">Open a sheet node first, then come back here to add import orders.</div>';
+    return;
+  }
+  listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)"><div class="spinner" style="margin:0 auto 8px"></div>Loading…</div>';
+  try {
+    const resp = await fetch(`/api/workspace/nodes/${nodeId}/forex`);
+    const data = await resp.json();
+    _forexOrders = data.forex || [];
+    renderForexOrders();
+  } catch(e) {
+    listEl.innerHTML = '<div style="padding:20px;color:var(--red)">Error: ' + escHtml(String(e)) + '</div>';
+  }
+}
+
+const STATUS_LABELS = {
+  open: '🔵 Open', in_transit: '🚢 In Transit',
+  customs: '🏛 At Customs', delivered: '✅ Delivered', closed: '⬛ Closed'
+};
+const FOREX_TYPE_LABELS_2 = {
+  supplier_payment: '💳 Supplier Payment', customs_duty: '🏛 Customs/BOE',
+  courier_import: '🚚 Courier (Import)', general_forex: '💱 Forex'
+};
+
+function renderForexOrders() {
+  const listEl = document.getElementById('forexOrdersList');
+  if (!listEl) return;
+  if (!_forexOrders.length) {
+    listEl.innerHTML = '<div style="text-align:center;padding:48px;color:var(--text-muted);font-size:0.82rem">No import orders yet. Click <strong>+ New Import Order</strong> to start tracking.</div>';
+    return;
+  }
+  listEl.innerHTML = _forexOrders.map(o => {
+    const totalCost = [
+      parseFloat(o.inr_amount)||0,
+      parseFloat(o.customs_amount)||0,
+      o.courier_includes_boe ? 0 : (parseFloat(o.courier_amount)||0),
+      o.courier_includes_boe ? (parseFloat(o.courier_amount)||0) : 0,
+    ].reduce((a,b)=>a+b,0);
+    const hasBoe = o.boe_number && o.boe_number.trim();
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-family:var(--display);font-size:0.95rem;font-weight:700;margin-bottom:4px">${escHtml(o.order_label||'Unnamed Order')}</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">Supplier: <strong style="color:var(--text)">${escHtml(o.supplier_name||'—')}</strong> &nbsp;|&nbsp; ${STATUS_LABELS[o.status]||o.status}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-xs" onclick="editForexOrder(${o.id})">✎ Edit</button>
+          <button class="btn btn-danger btn-xs" onclick="deleteForexOrder(${o.id})">✕</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px">
+        <div style="background:var(--surface2);border-radius:7px;padding:8px 12px">
+          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Payment</div>
+          <div style="font-family:var(--mono);font-size:0.88rem;font-weight:600">${escHtml(o.currency)} ${escHtml(o.foreign_amount||'—')}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted)">₹${escHtml(o.inr_amount||'—')}${o.exchange_rate?' @ '+escHtml(o.exchange_rate):''}</div>
+        </div>
+        ${hasBoe ? `<div style="background:rgba(5,150,105,0.06);border:1px solid rgba(5,150,105,0.2);border-radius:7px;padding:8px 12px">
+          <div style="font-size:0.65rem;color:#059669;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">BOE</div>
+          <div style="font-family:var(--mono);font-size:0.82rem;font-weight:600">${escHtml(o.boe_number)}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted)">${escHtml(o.boe_date||'—')} &nbsp;|&nbsp; ₹${escHtml(o.customs_amount||'—')}</div>
+        </div>` : `<div style="background:var(--surface2);border-radius:7px;padding:8px 12px;opacity:0.5">
+          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">BOE</div>
+          <div style="font-size:0.78rem;color:var(--text-muted)">Not yet entered</div>
+        </div>`}
+        ${o.awb_number ? `<div style="background:var(--surface2);border-radius:7px;padding:8px 12px">
+          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">AWB</div>
+          <div style="font-family:var(--mono);font-size:0.82rem;font-weight:600">${escHtml(o.awb_number)}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted)">${escHtml(o.courier_name||'—')}</div>
+        </div>` : ''}
+        ${o.courier_amount ? `<div style="background:var(--surface2);border-radius:7px;padding:8px 12px">
+          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Courier</div>
+          <div style="font-family:var(--mono);font-size:0.88rem;font-weight:600">₹${escHtml(o.courier_amount)}</div>
+          ${o.courier_includes_boe ? '<div style="font-size:0.68rem;color:var(--yellow)">⚠ Includes BOE charge</div>' : ''}
+        </div>` : ''}
+        ${totalCost > 0 ? `<div style="background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.2);border-radius:7px;padding:8px 12px">
+          <div style="font-size:0.65rem;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Total INR Cost</div>
+          <div style="font-family:var(--mono);font-size:0.88rem;font-weight:700;color:var(--accent)">₹${totalCost.toFixed(2)}</div>
+        </div>` : ''}
+      </div>
+      ${o.notes ? `<div style="margin-top:10px;font-size:0.75rem;color:var(--text-muted);border-top:1px solid var(--border);padding-top:8px">📝 ${escHtml(o.notes)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function openForexModal(prefill) {
+  _forexEditingId = null;
+  document.getElementById('forexModalTitle').textContent = 'New Import Order';
+  // Clear fields
+  ['fxOrderLabel','fxSupplier','fxForeignAmt','fxInrAmt','fxRate',
+   'fxPaymentTxnKey','fxAwb','fxBoe','fxBoeDate','fxCustomsAmt',
+   'fxCustomsTxnKey','fxCourierName','fxCourierAmt','fxCourierTxnKey','fxNotes']
+  .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  document.getElementById('fxCourierIncBoe').checked = false;
+  document.getElementById('fxStatus').value = 'open';
+  document.getElementById('fxCurrency').value = 'USD';
+  // Pre-fill from detected transaction if provided
+  if (prefill) {
+    if (prefill.paymentTxnKey) document.getElementById('fxPaymentTxnKey').value = prefill.paymentTxnKey;
+    if (prefill.customsTxnKey) document.getElementById('fxCustomsTxnKey').value = prefill.customsTxnKey;
+    if (prefill.courierTxnKey) document.getElementById('fxCourierTxnKey').value = prefill.courierTxnKey;
+  }
+  document.getElementById('forexModalOverlay').classList.add('show');
+}
+
+function editForexOrder(id) {
+  const o = _forexOrders.find(x => x.id === id);
+  if (!o) return;
+  _forexEditingId = id;
+  document.getElementById('forexModalTitle').textContent = 'Edit Import Order';
+  document.getElementById('fxOrderLabel').value = o.order_label||'';
+  document.getElementById('fxStatus').value = o.status||'open';
+  document.getElementById('fxSupplier').value = o.supplier_name||'';
+  document.getElementById('fxCurrency').value = o.currency||'USD';
+  document.getElementById('fxForeignAmt').value = o.foreign_amount||'';
+  document.getElementById('fxInrAmt').value = o.inr_amount||'';
+  document.getElementById('fxRate').value = o.exchange_rate||'';
+  document.getElementById('fxPaymentTxnKey').value = o.payment_txn_key||'';
+  document.getElementById('fxAwb').value = o.awb_number||'';
+  document.getElementById('fxBoe').value = o.boe_number||'';
+  document.getElementById('fxBoeDate').value = o.boe_date||'';
+  document.getElementById('fxCustomsAmt').value = o.customs_amount||'';
+  document.getElementById('fxCustomsTxnKey').value = o.customs_txn_key||'';
+  document.getElementById('fxCourierName').value = o.courier_name||'';
+  document.getElementById('fxCourierAmt').value = o.courier_amount||'';
+  document.getElementById('fxCourierTxnKey').value = o.courier_txn_key||'';
+  document.getElementById('fxCourierIncBoe').checked = !!o.courier_includes_boe;
+  document.getElementById('fxNotes').value = o.notes||'';
+  document.getElementById('forexModalOverlay').classList.add('show');
+}
+
+function closeForexModal() {
+  document.getElementById('forexModalOverlay').classList.remove('show');
+  _forexEditingId = null;
+}
+
+async function saveForexOrder() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) { showToast('Open a sheet node first.'); return; }
+  const payload = {
+    id: _forexEditingId || undefined,
+    order_label: document.getElementById('fxOrderLabel').value.trim(),
+    status: document.getElementById('fxStatus').value,
+    supplier_name: document.getElementById('fxSupplier').value.trim(),
+    currency: document.getElementById('fxCurrency').value,
+    foreign_amount: document.getElementById('fxForeignAmt').value.trim(),
+    inr_amount: document.getElementById('fxInrAmt').value.trim(),
+    exchange_rate: document.getElementById('fxRate').value.trim(),
+    payment_txn_key: document.getElementById('fxPaymentTxnKey').value.trim(),
+    awb_number: document.getElementById('fxAwb').value.trim(),
+    boe_number: document.getElementById('fxBoe').value.trim(),
+    boe_date: document.getElementById('fxBoeDate').value.trim(),
+    customs_amount: document.getElementById('fxCustomsAmt').value.trim(),
+    customs_txn_key: document.getElementById('fxCustomsTxnKey').value.trim(),
+    courier_name: document.getElementById('fxCourierName').value.trim(),
+    courier_amount: document.getElementById('fxCourierAmt').value.trim(),
+    courier_txn_key: document.getElementById('fxCourierTxnKey').value.trim(),
+    courier_includes_boe: document.getElementById('fxCourierIncBoe').checked,
+    notes: document.getElementById('fxNotes').value.trim(),
+  };
+  try {
+    const resp = await fetch(`/api/workspace/nodes/${nodeId}/forex`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      closeForexModal();
+      showToast(_forexEditingId ? 'Import order updated.' : 'Import order created.');
+      await loadForexOrders();
+    } else {
+      showToast('Error: ' + (data.error || 'save failed'));
+    }
+  } catch(e) {
+    showToast('Error: ' + String(e));
+  }
+}
+
+async function deleteForexOrder(id) {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) return;
+  if (!confirm('Delete this import order?')) return;
+  try {
+    await fetch(`/api/workspace/nodes/${nodeId}/forex/${id}`, { method: 'DELETE' });
+    showToast('Import order deleted.');
+    await loadForexOrders();
+  } catch(e) {
+    showToast('Error: ' + String(e));
+  }
+}
+
+async function loadAllBoes() {
+  const panel = document.getElementById('allBoePanel');
+  const tbody = document.getElementById('allBoeTableBody');
+  if (!panel || !tbody) return;
+  panel.style.display = 'block';
+  tbody.innerHTML = '<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--text-muted)"><div class="spinner" style="display:inline-block;margin-right:6px"></div>Loading BOEs…</td></tr>';
+  try {
+    const resp = await fetch('/api/forex/boes');
+    const data = await resp.json();
+    const boes = data.boes || [];
+    if (!boes.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--text-muted)">No BOEs recorded yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = boes.map(b => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px;font-family:var(--mono);font-weight:600">${escHtml(b.boe_number||'—')}</td>
+        <td style="padding:8px;font-family:var(--mono)">${escHtml(b.boe_date||'—')}</td>
+        <td style="padding:8px">${escHtml(b.supplier_name||'—')}</td>
+        <td style="padding:8px;font-family:var(--mono)">${escHtml(b.awb_number||'—')}</td>
+        <td style="padding:8px;text-align:right;font-family:var(--mono)">${b.customs_amount ? '₹'+escHtml(b.customs_amount) : '—'}</td>
+        <td style="padding:8px">${escHtml(b.courier_name||'—')}</td>
+        <td style="padding:8px;text-align:right;font-family:var(--mono)">${b.courier_amount ? '₹'+escHtml(b.courier_amount)+(b.courier_includes_boe?' <span style="font-size:0.65rem;color:var(--yellow)">(incl. BOE)</span>':'') : '—'}</td>
+        <td style="padding:8px;font-size:0.75rem;color:var(--text-muted)">${escHtml(b.node_name||'—')}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:16px;color:var(--red)">Error: ' + escHtml(String(e)) + '</td></tr>';
+  }
+}
+
+async function runForexDetect() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) { showToast('Open a sheet node first.'); return; }
+  try {
+    const resp = await fetch(`/api/workspace/nodes/${nodeId}/detect_forex`, { method: 'POST' });
+    const data = await resp.json();
+    const total = data.total || 0;
+    const banner = document.getElementById('forexDetectBanner');
+    const bannerText = document.getElementById('forexDetectBannerText');
+    if (banner && bannerText) {
+      bannerText.textContent = `Found ${total} transaction${total===1?'':'s'} that look like forex/import payments. Use the Forex/Import filter in the Transactions tab to review them.`;
+      banner.style.display = 'block';
+    }
+    showToast(`Detected ${total} potential forex transaction${total===1?'':'s'}.`);
+  } catch(e) {
+    showToast('Error: ' + String(e));
+  }
+}
+
+document.getElementById('forexModalOverlay').addEventListener('click', function(e) { if (e.target === this) closeForexModal(); });
 
 // Patch classifyViaStream to auto-save after completion.
 // Use an IIFE to capture the original before reassigning — avoids the hoisting
@@ -8578,6 +9312,313 @@ async function createManualRule() {
 }
 
 // ===================== END SPA ROUTING =====================
+</script>
+
+<!-- ===================== TRANSACTION GROUP MODAL ===================== -->
+<div id="groupModal">
+  <div id="groupModalBox">
+    <h3>🔗 Group Transactions</h3>
+    <div style="font-size:0.78rem;color:var(--text-muted)">
+      Select transactions to group together (e.g. installment payments to the same party).
+      The current transaction is always included.
+    </div>
+    <input id="groupLabelInput" type="text" placeholder="Group label (e.g. BlueDart Installments Q1)…"
+      style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:6px;
+             padding:7px 10px;font-size:0.82rem;color:var(--text);outline:none;font-family:var(--sans)">
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="groupSearchInput" type="text" placeholder="Search by narration or party…"
+        style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:6px;
+               padding:6px 10px;font-size:0.8rem;color:var(--text);outline:none;font-family:var(--sans)"
+        oninput="renderGroupTxnList()">
+      <span style="font-size:0.72rem;color:var(--text-muted)" id="groupSelCount"></span>
+    </div>
+    <div id="groupTxnList"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="closeGroupModal()">Cancel</button>
+      <button class="btn btn-danger btn-xs" id="groupDeleteBtn" onclick="deleteCurrentGroup()" style="margin-right:auto;display:none">🗑 Ungroup</button>
+      <button class="btn btn-primary" onclick="saveGroup()">🔗 Save Group</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== TRANSACTION GROUPING =====================
+// txnGroups:  { group_id → { label, txn_keys: [key,...] } }
+// rowGroupMap:{ rowIdx  → group_id }
+let txnGroups    = {};
+let rowGroupMap  = {};
+let _groupModalAnchorIdx = null;   // row that opened the modal
+let _groupModalGroupId   = null;   // existing group id (null = new)
+let _groupModalChecked   = new Set(); // txn_keys currently checked
+
+// ── Load groups from server ──────────────────────────────────────────────────
+async function loadTxnGroups(nodeId) {
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/groups`);
+    const d = await r.json();
+    txnGroups   = {};
+    rowGroupMap = {};
+    (d.groups || []).forEach(g => {
+      txnGroups[g.group_id] = { label: g.label, txn_keys: g.txn_keys };
+    });
+    // Build rowGroupMap
+    allTransactions.forEach((t, i) => {
+      const key = _makeTxnKey(t);
+      for (const [gid, g] of Object.entries(txnGroups)) {
+        if (g.txn_keys.includes(key)) {
+          rowGroupMap[i] = gid;
+          break;
+        }
+      }
+    });
+    // Also read group_id from classificationResults (already loaded from server)
+    allTransactions.forEach((t, i) => {
+      const res = classificationResults[i];
+      if (res && res.group_id && !rowGroupMap[i]) {
+        rowGroupMap[i] = res.group_id;
+        // Ensure txnGroups has an entry (may be loaded via classifications fallback)
+        if (!txnGroups[res.group_id]) {
+          txnGroups[res.group_id] = { label: '', txn_keys: [_makeTxnKey(t)] };
+        } else if (!txnGroups[res.group_id].txn_keys.includes(_makeTxnKey(t))) {
+          txnGroups[res.group_id].txn_keys.push(_makeTxnKey(t));
+        }
+      }
+    });
+  } catch(e) { console.warn('loadTxnGroups failed', e); }
+}
+
+// ── Open modal ───────────────────────────────────────────────────────────────
+function openGroupModal(rowIdx) {
+  _groupModalAnchorIdx = rowIdx;
+  const existingGid = rowGroupMap[rowIdx];
+  _groupModalGroupId   = existingGid || null;
+  const existingGroup  = existingGid ? (txnGroups[existingGid] || {}) : {};
+
+  document.getElementById('groupLabelInput').value = existingGroup.label || '';
+  document.getElementById('groupSearchInput').value = '';
+  document.getElementById('groupDeleteBtn').style.display = existingGid ? '' : 'none';
+
+  // Pre-check: all members of the existing group + the current row
+  _groupModalChecked = new Set(existingGroup.txn_keys || []);
+  const anchorKey = _makeTxnKey(allTransactions[rowIdx]);
+  _groupModalChecked.add(anchorKey);
+
+  renderGroupTxnList();
+  document.getElementById('groupModal').classList.add('open');
+  setTimeout(() => document.getElementById('groupLabelInput').focus(), 50);
+}
+
+function closeGroupModal() {
+  document.getElementById('groupModal').classList.remove('open');
+  _groupModalAnchorIdx = null;
+  _groupModalGroupId   = null;
+}
+
+// ── Open modal pre-populated from the current multi-row selection ────────────
+function groupSelected() {
+  if (selectedRows.size < 2) return;
+  const indices = [...selectedRows].sort((a, b) => a - b);
+
+  // If all selected rows already belong to the same group, open that group for editing
+  const gids = [...new Set(indices.map(i => rowGroupMap[i]).filter(Boolean))];
+  const singleExistingGroup = gids.length === 1 ? gids[0] : null;
+
+  _groupModalAnchorIdx = indices[0];
+  _groupModalGroupId   = singleExistingGroup || null;
+  const existingGroup  = singleExistingGroup ? (txnGroups[singleExistingGroup] || {}) : {};
+
+  // Pre-check exactly the selected rows (plus any existing group members if editing)
+  _groupModalChecked = new Set([
+    ...indices.map(i => _makeTxnKey(allTransactions[i])),
+    ...(existingGroup.txn_keys || [])
+  ]);
+
+  document.getElementById('groupLabelInput').value = existingGroup.label || '';
+  document.getElementById('groupSearchInput').value = '';
+  document.getElementById('groupDeleteBtn').style.display = singleExistingGroup ? '' : 'none';
+
+  renderGroupTxnList();
+  document.getElementById('groupModal').classList.add('open');
+  setTimeout(() => document.getElementById('groupLabelInput').focus(), 50);
+}
+
+// ── Render list of transactions inside modal ─────────────────────────────────
+function renderGroupTxnList() {
+  const search  = (document.getElementById('groupSearchInput').value || '').toLowerCase();
+  const anchor  = _groupModalAnchorIdx;
+  const anchorKey = anchor !== null ? _makeTxnKey(allTransactions[anchor]) : '';
+
+  // Build candidate list: all transactions that either
+  //  (a) match the search query, or
+  //  (b) are already checked, or
+  //  (c) share the same party_name or classification as the anchor (pre-suggestions)
+  const anchorRes = anchor !== null ? classificationResults[anchor] : null;
+  const anchorParty = (anchorRes && anchorRes.party_name || '').toLowerCase();
+  const anchorCls   = (anchorRes && anchorRes.classification || '').toLowerCase();
+
+  const items = allTransactions.map((t, i) => {
+    const key  = _makeTxnKey(t);
+    const res  = classificationResults[i];
+    const narr = (t.narration || '').toLowerCase();
+    const party = (res && res.party_name || '').toLowerCase();
+    const cls   = (res && res.classification || '').toLowerCase();
+    const isCurrent = key === anchorKey;
+    const isChecked = _groupModalChecked.has(key);
+
+    let score = 0;
+    if (isCurrent)                             score = 100;
+    else if (isChecked)                        score = 90;
+    else if (anchorParty && party === anchorParty) score = 80;
+    else if (anchorCls && cls === anchorCls)   score = 50;
+
+    if (search && !isCurrent) {
+      if (!narr.includes(search) && !party.includes(search)) score = -1;
+    }
+    return { i, t, res, key, isCurrent, isChecked, score };
+  }).filter(x => x.score >= 0 || x.isChecked);
+
+  // Sort: current first, then checked, then by score desc, then by index
+  items.sort((a, b) => b.score - a.score || a.i - b.i);
+  const visible = items.slice(0, 80); // cap at 80 rows for perf
+
+  const count = _groupModalChecked.size;
+  document.getElementById('groupSelCount').textContent =
+    count < 2 ? `${count} selected (need ≥ 2)` : `${count} selected`;
+
+  document.getElementById('groupTxnList').innerHTML = visible.map(({ i, t, res, key, isCurrent, isChecked }) => {
+    const date  = String(t.date || '').slice(0, 10);
+    const narr  = escHtml(t.narration || '');
+    const amt   = escHtml(t.gross_total || '');
+    const party = escHtml(res && res.party_name || '');
+    const cls   = escHtml(res && res.classification || '');
+    return `<div class="group-txn-item${isChecked ? ' selected' : ''}" onclick="_groupItemClick('${escHtml(key)}', this)">
+      <input type="checkbox" ${isChecked ? 'checked' : ''} ${isCurrent ? 'disabled' : ''}
+             onchange="event.stopPropagation();_groupItemToggle('${escHtml(key)}', this)">
+      ${isCurrent ? `<span class="group-txn-current">THIS</span>` : ''}
+      <span class="group-txn-narr" title="${narr}">${narr}${party ? ` <span style="color:var(--accent);font-size:0.68rem">(${party})</span>` : ''}</span>
+      <span class="group-txn-meta">${date} · ${amt}${cls ? ` · ${cls}` : ''}</span>
+    </div>`;
+  }).join('');
+}
+
+function _groupItemClick(key, el) {
+  const cb = el.querySelector('input[type=checkbox]');
+  if (cb && cb.disabled) return;
+  _groupItemToggle(key, cb);
+  if (cb) cb.checked = _groupModalChecked.has(key);
+}
+
+function _groupItemToggle(key, cb) {
+  if (_groupModalChecked.has(key)) {
+    // Don't let user uncheck the anchor
+    const anchor = _groupModalAnchorIdx;
+    if (anchor !== null && key === _makeTxnKey(allTransactions[anchor])) return;
+    _groupModalChecked.delete(key);
+  } else {
+    _groupModalChecked.add(key);
+  }
+  renderGroupTxnList();
+}
+
+// ── Save group ───────────────────────────────────────────────────────────────
+async function saveGroup() {
+  const nodeId = window._wsCurrentNodeId;
+  if (!nodeId) { showToast('No sheet loaded', 'error'); return; }
+
+  const keys = [..._groupModalChecked];
+  if (keys.length < 2) {
+    showToast('Select at least 2 transactions to group', 'error'); return;
+  }
+  const label = (document.getElementById('groupLabelInput').value || '').trim()
+    || _autoGroupLabel(keys);
+
+  try {
+    const r = await fetch(`/api/workspace/nodes/${nodeId}/groups`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ group_id: _groupModalGroupId || '', label, txn_keys: keys })
+    });
+    const d = await r.json();
+    if (!d.ok) { showToast('Save failed: ' + (d.error||''), 'error'); return; }
+
+    // Update local state
+    const gid = d.group_id;
+    txnGroups[gid] = { label, txn_keys: keys };
+    // Clear old group mapping for this gid
+    Object.keys(rowGroupMap).forEach(ri => {
+      if (rowGroupMap[ri] === gid) delete rowGroupMap[ri];
+    });
+    // Set new mapping
+    allTransactions.forEach((t, i) => {
+      if (keys.includes(_makeTxnKey(t))) {
+        rowGroupMap[i] = gid;
+        if (classificationResults[i]) classificationResults[i].group_id = gid;
+      }
+    });
+    _groupModalGroupId = gid;
+    closeGroupModal();
+    renderTable();
+    if (selectedTxnIndex !== null) renderDetailPanel(selectedTxnIndex);
+    showToast(`🔗 Group saved (${keys.length} transactions)`);
+  } catch(e) { showToast('Error: ' + e, 'error'); }
+}
+
+// ── Delete/ungroup ───────────────────────────────────────────────────────────
+async function deleteCurrentGroup() {
+  const nodeId = window._wsCurrentNodeId;
+  const gid    = _groupModalGroupId;
+  if (!nodeId || !gid) return;
+  if (!confirm('Remove this group? Transactions will remain but the grouping will be cleared.')) return;
+  try {
+    await fetch(`/api/workspace/nodes/${nodeId}/groups/${gid}`, { method: 'DELETE' });
+    const oldKeys = (txnGroups[gid] || {}).txn_keys || [];
+    delete txnGroups[gid];
+    allTransactions.forEach((t, i) => {
+      if (oldKeys.includes(_makeTxnKey(t))) {
+        delete rowGroupMap[i];
+        if (classificationResults[i]) classificationResults[i].group_id = '';
+      }
+    });
+    closeGroupModal();
+    renderTable();
+    if (selectedTxnIndex !== null) renderDetailPanel(selectedTxnIndex);
+    showToast('Group removed');
+  } catch(e) { showToast('Error: ' + e, 'error'); }
+}
+
+// ── Auto-generate a label from the most common party_name in selection ───────
+function _autoGroupLabel(keys) {
+  const parties = keys.map(k => {
+    const idx = allTransactions.findIndex(t => _makeTxnKey(t) === k);
+    if (idx < 0) return '';
+    return (classificationResults[idx] && classificationResults[idx].party_name) || '';
+  }).filter(Boolean);
+  if (!parties.length) return 'Transaction Group';
+  const freq = {};
+  parties.forEach(p => { freq[p] = (freq[p]||0)+1; });
+  const top = Object.entries(freq).sort((a,b) => b[1]-a[1])[0][0];
+  return `Group – ${top}`;
+}
+
+// ── Navigate between group members from detail panel ────────────────────────
+function jumpToGroupMember(direction) {
+  const anchor = selectedTxnIndex;
+  if (anchor === null) return;
+  const gid = rowGroupMap[anchor];
+  if (!gid) return;
+  const members = (txnGroups[gid]||{}).txn_keys || [];
+  const indices = allTransactions
+    .map((t, i) => members.includes(_makeTxnKey(t)) ? i : -1)
+    .filter(i => i >= 0);
+  if (indices.length < 2) return;
+  const pos = indices.indexOf(anchor);
+  const next = indices[(pos + direction + indices.length) % indices.length];
+  selectRow(next);
+}
+
+// Close modal when clicking backdrop
+document.getElementById('groupModal').addEventListener('click', function(e) {
+  if (e.target === this) closeGroupModal();
+});
 </script>
 </body>
 </html>

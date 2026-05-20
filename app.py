@@ -204,6 +204,8 @@ def init_db():
         "ADD COLUMN IF NOT EXISTS is_asset INTEGER DEFAULT 0",
         "ADD COLUMN IF NOT EXISTS is_refund INTEGER DEFAULT 0",
         "ADD COLUMN IF NOT EXISTS refund_vendor TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS forex_flag INTEGER DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS forex_type TEXT DEFAULT ''",
     ]:
         c.execute(f"ALTER TABLE node_classifications {_col_def}")
 
@@ -250,6 +252,8 @@ def init_db():
         "ADD COLUMN IF NOT EXISTS is_asset INTEGER DEFAULT 0",
         "ADD COLUMN IF NOT EXISTS is_refund INTEGER DEFAULT 0",
         "ADD COLUMN IF NOT EXISTS refund_vendor TEXT DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS forex_flag INTEGER DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS forex_type TEXT DEFAULT ''",
     ]:
         c.execute(f"ALTER TABLE account_classifications {_col_def2}")
 
@@ -359,6 +363,83 @@ def init_db():
             UNIQUE(user_id, txn_key)
         )
     """)
+
+    # ── manual transaction groups (per user + node) ───────────────────────────
+    # Each group bundles 2+ transactions together under a shared label.
+    # txn_keys is a JSON array of txn_key strings belonging to this group.
+    # group_id is a short random slug so the frontend can reference it without
+    # knowing the DB primary key (node-agnostic, stable across renames).
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS transaction_groups (
+            id          SERIAL PRIMARY KEY,
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            node_id     INTEGER NOT NULL REFERENCES workspace_nodes(id) ON DELETE CASCADE,
+            group_id    TEXT    NOT NULL,
+            label       TEXT    NOT NULL DEFAULT '',
+            txn_keys    TEXT    NOT NULL DEFAULT '[]',
+            created_at  TIMESTAMPTZ DEFAULT NOW(),
+            updated_at  TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(user_id, node_id, group_id)
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transaction_groups_user_node
+        ON transaction_groups(user_id, node_id)
+    """)
+    # group_id column on node_classifications — stores which group (if any) a
+    # transaction belongs to. Empty string = not grouped.
+    c.execute("""
+        ALTER TABLE node_classifications
+        ADD COLUMN IF NOT EXISTS group_id TEXT DEFAULT ''
+    """)
+    c.execute("""
+        ALTER TABLE account_classifications
+        ADD COLUMN IF NOT EXISTS group_id TEXT DEFAULT ''
+    """)
+
+    # ── Forex / import transactions ───────────────────────────────────────────
+    # Each row represents one "import order" which can span multiple bank
+    # transactions: supplier payment (USD/foreign), AWB courier charge,
+    # BOE (Bill of Entry / customs duty), and optional combined courier+BOE.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS forex_transactions (
+            id                  SERIAL PRIMARY KEY,
+            user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            node_id             INTEGER REFERENCES workspace_nodes(id) ON DELETE SET NULL,
+            order_label         TEXT NOT NULL DEFAULT '',
+            supplier_name       TEXT NOT NULL DEFAULT '',
+            currency            TEXT NOT NULL DEFAULT 'USD',
+            foreign_amount      TEXT NOT NULL DEFAULT '',
+            inr_amount          TEXT NOT NULL DEFAULT '',
+            exchange_rate       TEXT NOT NULL DEFAULT '',
+            payment_txn_key     TEXT NOT NULL DEFAULT '',
+            awb_number          TEXT NOT NULL DEFAULT '',
+            boe_number          TEXT NOT NULL DEFAULT '',
+            boe_date            TEXT NOT NULL DEFAULT '',
+            customs_amount      TEXT NOT NULL DEFAULT '',
+            customs_txn_key     TEXT NOT NULL DEFAULT '',
+            courier_name        TEXT NOT NULL DEFAULT '',
+            courier_amount      TEXT NOT NULL DEFAULT '',
+            courier_txn_key     TEXT NOT NULL DEFAULT '',
+            courier_includes_boe INTEGER NOT NULL DEFAULT 0,
+            notes               TEXT NOT NULL DEFAULT '',
+            status              TEXT NOT NULL DEFAULT 'open',
+            created_at          TIMESTAMPTZ DEFAULT NOW(),
+            updated_at          TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_forex_transactions_user
+        ON forex_transactions(user_id)
+    """)
+    # Migrations for forex_transactions
+    for _fx_col in [
+        "ADD COLUMN IF NOT EXISTS order_label TEXT NOT NULL DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS awb_number TEXT NOT NULL DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS courier_includes_boe INTEGER NOT NULL DEFAULT 0",
+        "ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open'",
+    ]:
+        c.execute(f"ALTER TABLE forex_transactions {_fx_col}")
 
     # ── GST ITC match results (deterministic pre-match, per user+node) ────────
     c.execute("""
@@ -911,6 +992,9 @@ PAYMENTS (outgoing) — pick the MOST SPECIFIC matching category:
 - "Bank/Finance Transaction" — LITE (UPI Lite add money), ADD MONEY, wallet top-up, UPIRET refund, PHONEPE REVERSE
 - "Business Travel/Logistics" — DELHI EXPENSES, city name + EXPENSES, travel reimbursement, petrol/toll, any travel cost without a specific booking match
 - "Sales Consultant Payment" — SALES CONSULTANT, commission payment
+- "Forex Supplier Payment" — SWIFT, OUTWARD REMITTANCE, WIRE TRANSFER, TELEGRAPHIC TRANSFER, TT PAYMENT, any payment in USD/EUR/GBP/foreign currency to an overseas supplier; always set forex_flag=true
+- "Customs/BOE Payment" — BILL OF ENTRY, BOE, CUSTOMS DUTY, IMPORT DUTY, BASIC CUSTOMS DUTY, BCD, IGST ON IMPORT, customs clearance payment; always set forex_flag=true
+- "Import Courier Charge" — FedEx, DHL, Aramex, UPS, TNT freight/courier charge explicitly for imported goods or linked to an AWB/air waybill; always set forex_flag=true
 - "Other Expense" — ONLY if truly none of the above fit
 
 REFUND CLASSIFICATION RULE (CRITICAL):
@@ -1000,6 +1084,22 @@ For each transaction also provide:
   * "direct": the transaction relates directly to the core product/service business — purchasing inventory (headsets, tablets, carry cases, lenses, lens holders), courier/shipping of products, sales receipts from customers for devices, device payment receipts
   * "indirect": everything else — office expenses, admin costs, travel, salaries, taxes, bank charges, marketing, software subscriptions, etc.
 
+- direct_product_name: REQUIRED when transaction_type="direct". Extract the inventory item name from the narration or context sheet.
+  Examples: "Headset", "Carry Case", "Lens Holder", "Tablet", "BIOM Lens", "Slit Lamp".
+  Use "" only for indirect transactions.
+
+- direct_quantity: REQUIRED when transaction_type="direct". Extract quantity if present in the narration or context sheet.
+  Examples: "5 units", "2 pcs", "1 box", "10 sets".
+  If quantity cannot be determined, put "1 unit" as a default guess for direct transactions.
+  Use "" only for indirect transactions.
+
+- forex_flag: Set to true if this transaction involves a FOREIGN CURRENCY payment or is clearly related to an import order:
+  * Payment to an overseas supplier in USD/EUR/GBP/etc.
+  * Customs/BOE (Bill of Entry) payment
+  * FedEx/DHL/courier charge for imported goods
+  * Swift/remittance/wire transfer with a foreign currency mention
+  Otherwise set to false.
+
 Return a JSON array (same length, same order):
 [
   {{
@@ -1008,6 +1108,9 @@ Return a JSON array (same length, same order):
     "subclassification": "<sub-category or empty>",
     "party_name": "<vendor/party name or empty>",
     "transaction_type": "direct|indirect",
+    "direct_product_name": "<inventory item name when direct, else empty>",
+    "direct_quantity": "<quantity when direct, else empty>",
+    "forex_flag": true|false,
     "reference_id": "<the exact value from the [REF] column of the matched context sheet row — NOT a vendor name, bank name, or narration text. Empty string if no row was matched>",
     "matched_detail": "<what was matched>",
     "confidence": "high|medium|low",
@@ -1718,6 +1821,212 @@ def _extract_refund_vendor(narr: str) -> str:
     # Fall back to first meaningful token
     tokens = [t for t in narr.split() if len(t) > 3]
     return tokens[0].title() if tokens else ''
+
+
+# ── Forex / Import Transaction Detection ──────────────────────────────────────
+
+_FOREX_NARRATION_SIGNALS = [
+    'SWIFT', 'REMITTANCE', 'WIRE TRANSFER', 'OUTWARD REMITTANCE',
+    'USD', 'EUR', 'GBP', 'IMPORT', 'FOREIGN CURRENCY', 'TT PAYMENT',
+    'TELEGRAPHIC', 'FEDEX', 'FED EX', 'DHL EXPRESS',
+    'BILL OF ENTRY', 'BOE', 'CUSTOMS DUTY', 'CUSTOMS PAYMENT',
+    'IMPORT DUTY', 'BASIC CUSTOMS DUTY', 'BCD', 'IGST ON IMPORT',
+    'AWB', 'AIR WAYBILL',
+]
+
+_FOREX_COURIER_VENDORS = ['FEDEX', 'FED EX', 'DHL', 'TNT', 'ARAMEX', 'UPS', 'BLUEDART']
+
+
+def detect_forex_transactions(transactions_df):
+    """Flag transactions that look like forex/import payments.
+    Returns {row_index: {"forex_type": str, "currency": str}}
+    forex_type: "supplier_payment" | "customs_duty" | "courier_import" | "general_forex"
+    """
+    flags = {}
+    for i, (_, row) in enumerate(transactions_df.iterrows()):
+        narr = str(row.get('Narration', '')).upper()
+        # BOE / customs
+        if any(kw in narr for kw in ['BILL OF ENTRY', 'BOE', 'CUSTOMS DUTY', 'CUSTOMS PAYMENT',
+                                      'IMPORT DUTY', 'BASIC CUSTOMS DUTY', 'BCD', 'IGST ON IMPORT']):
+            flags[i] = {"forex_type": "customs_duty", "currency": "INR"}
+        # International courier for imports
+        elif any(kw in narr for kw in _FOREX_COURIER_VENDORS) and any(
+                kw in narr for kw in ['AWB', 'AIR WAYBILL', 'IMPORT', 'SHIPMENT', 'FREIGHT']):
+            flags[i] = {"forex_type": "courier_import", "currency": "INR"}
+        # Swift / outward remittance = supplier payment
+        elif any(kw in narr for kw in ['SWIFT', 'OUTWARD REMITTANCE', 'TELEGRAPHIC', 'TT PAYMENT', 'WIRE TRANSFER']):
+            # Try to detect currency
+            cur = 'USD'
+            for c in ['USD', 'EUR', 'GBP', 'JPY', 'CNY', 'SGD', 'AED']:
+                if c in narr:
+                    cur = c
+                    break
+            flags[i] = {"forex_type": "supplier_payment", "currency": cur}
+        # Generic foreign currency mention
+        elif any(kw in narr for kw in ['USD', 'EUR', 'GBP', 'IMPORT', 'FOREIGN CURRENCY']):
+            flags[i] = {"forex_type": "general_forex", "currency": "USD"}
+    return flags
+
+
+# ── Forex CRUD API ────────────────────────────────────────────────────────────
+
+@app.route("/api/workspace/nodes/<int:node_id>/forex", methods=["GET"])
+@login_required
+def workspace_list_forex(node_id):
+    """List all forex/import orders for a node."""
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    c.execute("""
+        SELECT * FROM forex_transactions
+        WHERE user_id=%s AND node_id=%s
+        ORDER BY created_at DESC
+    """, (uid, node_id))
+    rows = c.fetchall()
+    conn.close()
+    return jsonify({"forex": [dict(r) for r in rows]})
+
+
+@app.route("/api/forex/boes", methods=["GET"])
+@login_required
+def list_all_boes():
+    """List all BOE records across all nodes for the user."""
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT ft.*, wn.name as node_name
+        FROM forex_transactions ft
+        LEFT JOIN workspace_nodes wn ON wn.id = ft.node_id
+        WHERE ft.user_id=%s AND ft.boe_number IS NOT NULL AND ft.boe_number <> ''
+        ORDER BY ft.boe_date DESC NULLS LAST, ft.created_at DESC
+    """, (uid,))
+    rows = c.fetchall()
+    conn.close()
+    return jsonify({"boes": [dict(r) for r in rows]})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/forex", methods=["POST"])
+@login_required
+def workspace_create_forex(node_id):
+    """Create or update a forex/import order record."""
+    uid  = current_user_id()
+    data = request.json or {}
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+
+    record_id = data.get("id")
+    if record_id:
+        # Update existing
+        c.execute("""
+            UPDATE forex_transactions SET
+              order_label=%s, supplier_name=%s, currency=%s,
+              foreign_amount=%s, inr_amount=%s, exchange_rate=%s,
+              payment_txn_key=%s, awb_number=%s,
+              boe_number=%s, boe_date=%s, customs_amount=%s, customs_txn_key=%s,
+              courier_name=%s, courier_amount=%s, courier_txn_key=%s,
+              courier_includes_boe=%s, notes=%s, status=%s, updated_at=NOW()
+            WHERE id=%s AND user_id=%s AND node_id=%s
+            RETURNING *
+        """, (
+            data.get("order_label", ""), data.get("supplier_name", ""),
+            data.get("currency", "USD"),
+            data.get("foreign_amount", ""), data.get("inr_amount", ""),
+            data.get("exchange_rate", ""), data.get("payment_txn_key", ""),
+            data.get("awb_number", ""),
+            data.get("boe_number", ""), data.get("boe_date", ""),
+            data.get("customs_amount", ""), data.get("customs_txn_key", ""),
+            data.get("courier_name", ""), data.get("courier_amount", ""),
+            data.get("courier_txn_key", ""),
+            int(bool(data.get("courier_includes_boe", False))),
+            data.get("notes", ""), data.get("status", "open"),
+            record_id, uid, node_id,
+        ))
+    else:
+        c.execute("""
+            INSERT INTO forex_transactions
+              (user_id, node_id, order_label, supplier_name, currency,
+               foreign_amount, inr_amount, exchange_rate, payment_txn_key,
+               awb_number, boe_number, boe_date, customs_amount, customs_txn_key,
+               courier_name, courier_amount, courier_txn_key, courier_includes_boe,
+               notes, status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING *
+        """, (
+            uid, node_id,
+            data.get("order_label", ""), data.get("supplier_name", ""),
+            data.get("currency", "USD"),
+            data.get("foreign_amount", ""), data.get("inr_amount", ""),
+            data.get("exchange_rate", ""), data.get("payment_txn_key", ""),
+            data.get("awb_number", ""),
+            data.get("boe_number", ""), data.get("boe_date", ""),
+            data.get("customs_amount", ""), data.get("customs_txn_key", ""),
+            data.get("courier_name", ""), data.get("courier_amount", ""),
+            data.get("courier_txn_key", ""),
+            int(bool(data.get("courier_includes_boe", False))),
+            data.get("notes", ""), data.get("status", "open"),
+        ))
+    row = c.fetchone()
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "forex": dict(row) if row else None})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/forex/<int:forex_id>", methods=["DELETE"])
+@login_required
+def workspace_delete_forex(node_id, forex_id):
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    c.execute("DELETE FROM forex_transactions WHERE id=%s AND user_id=%s AND node_id=%s",
+              (forex_id, uid, node_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/detect_forex", methods=["POST"])
+@login_required
+def workspace_detect_forex(node_id):
+    """Auto-detect forex transactions and return the flagged indices."""
+    uid  = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    node = c.fetchone()
+    conn.close()
+    if not node:
+        return jsonify({"error": "not found"}), 404
+    try:
+        source_type = (node['source_type'] if 'source_type' in node.keys() else None) or 'gsheet'
+        if source_type == 'excel':
+            excel_id = node['excel_file_id'] if 'excel_file_id' in node.keys() else None
+            if not excel_id:
+                return jsonify({"error": "No Excel file attached"}), 400
+            transactions = load_excel_source_tab(int(excel_id), node['tab_name'], uid)
+        else:
+            tokens_str = get_setting('oauth_tokens', user_id=uid)
+            if not tokens_str:
+                return jsonify({'error': 'not_connected'}), 401
+            transactions = load_from_gsheets_oauth(node['sheet_id'], node['tab_name'], json.loads(tokens_str))
+        flags = detect_forex_transactions(transactions)
+        return jsonify({"ok": True, "forex_flags": {str(k): v for k, v in flags.items()},
+                        "total": len(flags)})
+    except Exception as e:
+        log.exception("detect_forex error")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/workspace/nodes/<int:node_id>/set_refund", methods=["POST"])
@@ -3132,7 +3441,10 @@ def workspace_get_classifications(node_id):
                direct_product_name, direct_quantity,
                COALESCE(is_asset, 0) as is_asset,
                COALESCE(is_refund, 0) as is_refund,
-               COALESCE(refund_vendor, '') as refund_vendor
+               COALESCE(refund_vendor, '') as refund_vendor,
+               COALESCE(group_id, '') as group_id,
+               COALESCE(forex_flag, 0) as forex_flag,
+               COALESCE(forex_type, '') as forex_type
         FROM node_classifications WHERE node_id=%s AND user_id=%s
     """, (node_id, uid))
     node_rows = c.fetchall()
@@ -3148,7 +3460,10 @@ def workspace_get_classifications(node_id):
                direct_product_name, direct_quantity,
                COALESCE(is_asset, 0) as is_asset,
                COALESCE(is_refund, 0) as is_refund,
-               COALESCE(refund_vendor, '') as refund_vendor
+               COALESCE(refund_vendor, '') as refund_vendor,
+               COALESCE(group_id, '') as group_id,
+               COALESCE(forex_flag, 0) as forex_flag,
+               COALESCE(forex_type, '') as forex_type
         FROM account_classifications WHERE user_id=%s
     """, (uid,))
     # Filter out empty/degenerate keys defensively — they can't match a
@@ -3198,8 +3513,9 @@ def workspace_save_classifications(node_id):
             INSERT INTO node_classifications
               (user_id, node_id, txn_key, classification, subclassification, party_name, transaction_type,
                reference_id, matched_detail, confidence, reasoning, review_decision,
-               direct_product_name, direct_quantity, is_asset, is_refund, refund_vendor, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
+               direct_product_name, direct_quantity, is_asset, is_refund, refund_vendor, group_id,
+               forex_flag, forex_type, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
             ON CONFLICT (user_id, node_id, txn_key) DO UPDATE SET
               classification      = EXCLUDED.classification,
               subclassification   = EXCLUDED.subclassification,
@@ -3215,6 +3531,9 @@ def workspace_save_classifications(node_id):
               is_asset            = EXCLUDED.is_asset,
               is_refund           = EXCLUDED.is_refund,
               refund_vendor       = EXCLUDED.refund_vendor,
+              group_id            = EXCLUDED.group_id,
+              forex_flag          = EXCLUDED.forex_flag,
+              forex_type          = EXCLUDED.forex_type,
               updated_at          = NOW()
         """, (uid, node_id,
               key,
@@ -3231,7 +3550,10 @@ def workspace_save_classifications(node_id):
               rec.get("direct_quantity",""),
               int(bool(rec.get("is_asset", False))),
               int(bool(rec.get("is_refund", False))),
-              rec.get("refund_vendor","")))
+              rec.get("refund_vendor",""),
+              rec.get("group_id",""),
+              int(bool(rec.get("forex_flag", False))),
+              rec.get("forex_type","")))
         # Mirror to the account-wide cache so this classification persists
         # across node deletes, sheet re-uploads, and node recreations. Same
         # txn_key shape, same fields — node_classifications stays the
@@ -3240,8 +3562,9 @@ def workspace_save_classifications(node_id):
             INSERT INTO account_classifications
               (user_id, txn_key, classification, subclassification, party_name, transaction_type,
                reference_id, matched_detail, confidence, reasoning, review_decision,
-               direct_product_name, direct_quantity, is_asset, is_refund, refund_vendor, updated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
+               direct_product_name, direct_quantity, is_asset, is_refund, refund_vendor, group_id,
+               forex_flag, forex_type, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, NOW())
             ON CONFLICT (user_id, txn_key) DO UPDATE SET
               classification      = EXCLUDED.classification,
               subclassification   = EXCLUDED.subclassification,
@@ -3257,6 +3580,9 @@ def workspace_save_classifications(node_id):
               is_asset            = EXCLUDED.is_asset,
               is_refund           = EXCLUDED.is_refund,
               refund_vendor       = EXCLUDED.refund_vendor,
+              group_id            = EXCLUDED.group_id,
+              forex_flag          = EXCLUDED.forex_flag,
+              forex_type          = EXCLUDED.forex_type,
               updated_at          = NOW()
         """, (uid,
               key,
@@ -3273,7 +3599,10 @@ def workspace_save_classifications(node_id):
               rec.get("direct_quantity",""),
               int(bool(rec.get("is_asset", False))),
               int(bool(rec.get("is_refund", False))),
-              rec.get("refund_vendor","")))
+              rec.get("refund_vendor",""),
+              rec.get("group_id",""),
+              int(bool(rec.get("forex_flag", False))),
+              rec.get("forex_type","")))
     conn.commit()
     conn.close()
     saved = len(records) - skipped
@@ -3871,6 +4200,8 @@ def workspace_classify_stream(node_id):
                             "is_asset":       _is_asset,
                             "is_refund":      _is_refund,
                             "refund_vendor":  _rfund_vendor,
+                            "forex_flag":     int(bool(res.get("forex_flag", False))),
+                            "forex_type":     res.get("forex_type", ""),
                             **res,
                         })
                 completed += len(output)
@@ -3932,14 +4263,23 @@ def workspace_classify_stream(node_id):
                         is_refund    = int(bool(rflag.get("is_refund", False)))
                         refund_vendor = rflag.get("refund_vendor", "")
 
+                        # ── Forex detection ───────────────────────────────────────
+                        try:
+                            _forex_flags_full = detect_forex_transactions(transactions)
+                        except Exception:
+                            _forex_flags_full = {}
+                        _fx = _forex_flags_full.get(oi, {})
+                        forex_flag = int(bool(_fx or item.get("forex_flag", False)))
+                        forex_type = _fx.get("forex_type", item.get("forex_type", ""))
+
                         # node_classifications (per-node authoritative)
                         c2.execute("""
                             INSERT INTO node_classifications
                               (user_id, node_id, txn_key, classification, subclassification,
                                party_name, transaction_type, reference_id,
                                matched_detail, confidence, reasoning, review_decision,
-                               is_asset, is_refund, refund_vendor, updated_at)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,NOW())
+                               is_asset, is_refund, refund_vendor, forex_flag, forex_type, updated_at)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,%s,%s,NOW())
                             ON CONFLICT (user_id, node_id, txn_key) DO UPDATE SET
                               classification    = EXCLUDED.classification,
                               subclassification = EXCLUDED.subclassification,
@@ -3952,17 +4292,19 @@ def workspace_classify_stream(node_id):
                               is_asset          = EXCLUDED.is_asset,
                               is_refund         = EXCLUDED.is_refund,
                               refund_vendor     = EXCLUDED.refund_vendor,
+                              forex_flag        = EXCLUDED.forex_flag,
+                              forex_type        = EXCLUDED.forex_type,
                               updated_at        = NOW()
                         """, (uid, node_id, txn_key, cls, subcls, party, txtyp, ref, det, conf, rsn,
-                              is_asset, is_refund, refund_vendor))
+                              is_asset, is_refund, refund_vendor, forex_flag, forex_type))
                         # account_classifications (cross-node fallback cache)
                         c2.execute("""
                             INSERT INTO account_classifications
                               (user_id, txn_key, classification, subclassification,
                                party_name, transaction_type, reference_id,
                                matched_detail, confidence, reasoning, review_decision,
-                               is_asset, is_refund, refund_vendor, updated_at)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,NOW())
+                               is_asset, is_refund, refund_vendor, forex_flag, forex_type, updated_at)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,%s,%s,NOW())
                             ON CONFLICT (user_id, txn_key) DO UPDATE SET
                               classification    = EXCLUDED.classification,
                               subclassification = EXCLUDED.subclassification,
@@ -3975,9 +4317,11 @@ def workspace_classify_stream(node_id):
                               is_asset          = EXCLUDED.is_asset,
                               is_refund         = EXCLUDED.is_refund,
                               refund_vendor     = EXCLUDED.refund_vendor,
+                              forex_flag        = EXCLUDED.forex_flag,
+                              forex_type        = EXCLUDED.forex_type,
                               updated_at        = NOW()
                         """, (uid, txn_key, cls, subcls, party, txtyp, ref, det, conf, rsn,
-                              is_asset, is_refund, refund_vendor))
+                              is_asset, is_refund, refund_vendor, forex_flag, forex_type))
                     conn2.commit()
                     conn2.close()
                     log.info("Auto-persisted %d classifications (with asset/refund flags) for node %s",
@@ -5321,6 +5665,148 @@ def save_tax_classification():
           data.get("tds_applicable","no"), data.get("tds_direction",""),
           data.get("tds_section",""), data.get("tds_rate",""),
           data.get("ai_reasoning",""), int(data.get("confirmed", 1))))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+
+
+# ── Manual Transaction Groups ─────────────────────────────────────────────────
+
+@app.route("/api/workspace/nodes/<int:node_id>/groups", methods=["GET"])
+@login_required
+def workspace_list_groups(node_id):
+    """List all manual transaction groups for a node."""
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    c.execute("""
+        SELECT group_id, label, txn_keys, created_at, updated_at
+        FROM transaction_groups
+        WHERE user_id=%s AND node_id=%s
+        ORDER BY created_at DESC
+    """, (uid, node_id))
+    rows = c.fetchall()
+    conn.close()
+    groups = []
+    for r in rows:
+        try:
+            keys = json.loads(r["txn_keys"] or "[]")
+        except Exception:
+            keys = []
+        groups.append({
+            "group_id": r["group_id"],
+            "label": r["label"],
+            "txn_keys": keys,
+            "created_at": str(r["created_at"]),
+        })
+    return jsonify({"groups": groups})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/groups", methods=["POST"])
+@login_required
+def workspace_create_or_update_group(node_id):
+    """Create a new group or update an existing one (add/remove members, rename).
+
+    POST body:
+      {
+        "group_id":  "<existing group_id or empty/omitted to create new>",
+        "label":     "<human-readable label, e.g. 'Installments – BlueDart Q1'>",
+        "txn_keys":  ["date|narr|amt", ...]   ← full replacement list
+      }
+
+    Returns the saved group object.
+    """
+    uid  = current_user_id()
+    data = request.json or {}
+    txn_keys = data.get("txn_keys", [])
+    label    = (data.get("label") or "").strip()
+    if not isinstance(txn_keys, list) or len(txn_keys) < 2:
+        return jsonify({"error": "txn_keys must be an array with at least 2 entries"}), 400
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+
+    group_id = (data.get("group_id") or "").strip()
+    if not group_id:
+        # Generate a short random slug
+        group_id = secrets.token_hex(5)  # 10-char hex string
+
+    c.execute("""
+        INSERT INTO transaction_groups (user_id, node_id, group_id, label, txn_keys, updated_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (user_id, node_id, group_id) DO UPDATE SET
+          label     = EXCLUDED.label,
+          txn_keys  = EXCLUDED.txn_keys,
+          updated_at = NOW()
+    """, (uid, node_id, group_id, label, json.dumps(txn_keys)))
+
+    # Mirror group_id into node_classifications rows so the table-render
+    # can show the badge without fetching groups separately per row.
+    c.execute("""
+        UPDATE node_classifications
+           SET group_id = %s, updated_at = NOW()
+         WHERE user_id=%s AND node_id=%s AND txn_key = ANY(%s)
+    """, (group_id, uid, node_id, txn_keys))
+    c.execute("""
+        UPDATE account_classifications
+           SET group_id = %s, updated_at = NOW()
+         WHERE user_id=%s AND txn_key = ANY(%s)
+    """, (group_id, uid, txn_keys))
+
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "group_id": group_id, "label": label, "txn_keys": txn_keys})
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/groups/<group_id>", methods=["DELETE"])
+@login_required
+def workspace_delete_group(node_id, group_id):
+    """Delete a group and clear the group_id field from all member transactions."""
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id FROM workspace_nodes WHERE id=%s AND user_id=%s", (node_id, uid))
+    if not c.fetchone():
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+
+    # Fetch member keys before deleting
+    c.execute("""
+        SELECT txn_keys FROM transaction_groups
+        WHERE user_id=%s AND node_id=%s AND group_id=%s
+    """, (uid, node_id, group_id))
+    row = c.fetchone()
+    if row:
+        try:
+            keys = json.loads(row["txn_keys"] or "[]")
+        except Exception:
+            keys = []
+        if keys:
+            c.execute("""
+                UPDATE node_classifications
+                   SET group_id = '', updated_at = NOW()
+                 WHERE user_id=%s AND node_id=%s AND txn_key = ANY(%s)
+            """, (uid, node_id, keys))
+            c.execute("""
+                UPDATE account_classifications
+                   SET group_id = '', updated_at = NOW()
+                 WHERE user_id=%s AND txn_key = ANY(%s)
+            """, (uid, keys))
+
+    c.execute("""
+        DELETE FROM transaction_groups
+        WHERE user_id=%s AND node_id=%s AND group_id=%s
+    """, (uid, node_id, group_id))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
