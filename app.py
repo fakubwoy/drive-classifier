@@ -295,6 +295,11 @@ def init_db():
         ALTER TABLE node_context_files
         ADD COLUMN IF NOT EXISTS source_label TEXT NOT NULL DEFAULT ''
     """)
+    # Migration: persist highlight map so it survives redeploys
+    c.execute("""
+        ALTER TABLE node_context_files
+        ADD COLUMN IF NOT EXISTS highlight_map TEXT NOT NULL DEFAULT '{}'
+    """)
     c.execute("""
         CREATE INDEX IF NOT EXISTS idx_node_context_files_user_node
         ON node_context_files(user_id, node_id)
@@ -3353,6 +3358,22 @@ def workspace_highlight_context_files(node_id):
             "tabs":     file_highlights,
         }
 
+    # ── Persist highlight_map to DB so it survives redeploys ─────────────
+    if not download:
+        try:
+            _conn = get_db()
+            _c = _conn.cursor()
+            for _fid_str, _fmap in highlight_map.items():
+                _c.execute("""
+                    UPDATE node_context_files
+                       SET highlight_map = %s
+                     WHERE id = %s AND user_id = %s AND node_id = %s
+                """, (json.dumps(_fmap.get("tabs", {})), int(_fid_str), uid, node_id))
+            _conn.commit()
+            _conn.close()
+        except Exception as _e:
+            log.warning("Failed to persist highlight_map: %s", _e)
+
     if download and wb_out is not None and wb_out.sheetnames:
         buf = io.BytesIO()
         wb_out.save(buf)
@@ -3379,6 +3400,44 @@ def workspace_highlight_context_files(node_id):
         "ok":             True,
         "highlight_map":  highlight_map,
         "matched_refs":   list(matched_refs),
+        "matched_rows":   matched_total,
+        "unmatched_rows": unmatched_total,
+    })
+
+
+@app.route("/api/workspace/nodes/<int:node_id>/highlight_context_files", methods=["GET"])
+@login_required
+def workspace_get_highlight_map(node_id):
+    """Return the persisted highlight_map for all context files of this node.
+    Called on sheet open so highlights survive redeploys without re-running classification."""
+    uid = current_user_id()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""SELECT id, filename, highlight_map FROM node_context_files
+                 WHERE user_id=%s AND node_id=%s ORDER BY id""", (uid, node_id))
+    rows = c.fetchall()
+    conn.close()
+
+    highlight_map = {}
+    matched_total = 0
+    unmatched_total = 0
+    for r in rows:
+        try:
+            tabs = json.loads(r["highlight_map"] or "{}")
+        except Exception:
+            tabs = {}
+        if tabs:
+            highlight_map[str(r["id"])] = {"filename": r["filename"], "tabs": tabs}
+            for tab_data in tabs.values():
+                for s in tab_data.values():
+                    if s == "matched":
+                        matched_total += 1
+                    else:
+                        unmatched_total += 1
+
+    return jsonify({
+        "ok": True,
+        "highlight_map":  highlight_map,
         "matched_rows":   matched_total,
         "unmatched_rows": unmatched_total,
     })
@@ -4282,14 +4341,22 @@ def workspace_classify_stream(node_id):
                             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,%s,%s,NOW())
                             ON CONFLICT (user_id, node_id, txn_key) DO UPDATE SET
                               classification    = EXCLUDED.classification,
-                              subclassification = EXCLUDED.subclassification,
-                              party_name        = EXCLUDED.party_name,
+                              subclassification = CASE
+                                WHEN node_classifications.subclassification IS NOT NULL
+                                 AND node_classifications.subclassification <> ''
+                                THEN node_classifications.subclassification
+                                ELSE EXCLUDED.subclassification END,
+                              party_name        = CASE
+                                WHEN node_classifications.party_name IS NOT NULL
+                                 AND node_classifications.party_name <> ''
+                                THEN node_classifications.party_name
+                                ELSE EXCLUDED.party_name END,
                               transaction_type  = EXCLUDED.transaction_type,
                               reference_id      = EXCLUDED.reference_id,
                               matched_detail    = EXCLUDED.matched_detail,
                               confidence        = EXCLUDED.confidence,
                               reasoning         = EXCLUDED.reasoning,
-                              is_asset          = EXCLUDED.is_asset,
+                              is_asset          = GREATEST(node_classifications.is_asset, EXCLUDED.is_asset),
                               is_refund         = EXCLUDED.is_refund,
                               refund_vendor     = EXCLUDED.refund_vendor,
                               forex_flag        = EXCLUDED.forex_flag,
@@ -4307,14 +4374,22 @@ def workspace_classify_stream(node_id):
                             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'',%s,%s,%s,%s,%s,NOW())
                             ON CONFLICT (user_id, txn_key) DO UPDATE SET
                               classification    = EXCLUDED.classification,
-                              subclassification = EXCLUDED.subclassification,
-                              party_name        = EXCLUDED.party_name,
+                              subclassification = CASE
+                                WHEN account_classifications.subclassification IS NOT NULL
+                                 AND account_classifications.subclassification <> ''
+                                THEN account_classifications.subclassification
+                                ELSE EXCLUDED.subclassification END,
+                              party_name        = CASE
+                                WHEN account_classifications.party_name IS NOT NULL
+                                 AND account_classifications.party_name <> ''
+                                THEN account_classifications.party_name
+                                ELSE EXCLUDED.party_name END,
                               transaction_type  = EXCLUDED.transaction_type,
                               reference_id      = EXCLUDED.reference_id,
                               matched_detail    = EXCLUDED.matched_detail,
                               confidence        = EXCLUDED.confidence,
                               reasoning         = EXCLUDED.reasoning,
-                              is_asset          = EXCLUDED.is_asset,
+                              is_asset          = GREATEST(account_classifications.is_asset, EXCLUDED.is_asset),
                               is_refund         = EXCLUDED.is_refund,
                               refund_vendor     = EXCLUDED.refund_vendor,
                               forex_flag        = EXCLUDED.forex_flag,

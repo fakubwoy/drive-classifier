@@ -4636,10 +4636,16 @@ function navigateRow(dir) {
   const nextPos = pos + dir;
   if (nextPos < 0 || nextPos >= visibleIndices.length) return;
   const nextIdx = visibleIndices[nextPos];
+  // Preserve the currently focused column across row changes
+  const savedCol = _focusedCol;
   // Switch page if necessary
   const newPage = Math.floor(nextPos / pageSize) + 1;
   if (newPage !== currentPage) { currentPage = newPage; renderTable(); }
   selectRow(nextIdx);
+  // Restore focused column in the new row (Excel-like column preservation)
+  if (savedCol) {
+    setTimeout(() => { _setFocusedCol(savedCol); _scrollFocusedCellIntoView(); }, 20);
+  }
   // Scroll row into view
   setTimeout(() => { const r = document.getElementById('row-' + nextIdx); if (r) r.scrollIntoView({ block: 'nearest' }); }, 50);
 }
@@ -6221,6 +6227,16 @@ async function wsLoadContextFilesSilent(nodeId) {
     window._wsCtxFilesByNode[nodeId] = data.files || [];
     refreshClassifierCtxBtn();
   } catch (_) { /* swallow — best-effort */ }
+  // Also restore persisted highlight map from DB so colours survive redeploys
+  try {
+    const hmRes = await fetch(`/api/workspace/nodes/${nodeId}/highlight_context_files`);
+    if (hmRes.ok) {
+      const hmData = await hmRes.json();
+      if (hmData.highlight_map && Object.keys(hmData.highlight_map).length > 0) {
+        window._ctxHighlightMap = hmData.highlight_map;
+      }
+    }
+  } catch (_) { /* non-fatal */ }
 }
 
 function wsRenderContextFilesList(nodeId) {
@@ -6540,6 +6556,8 @@ async function wsOpenClassifier(nodeId) {
           is_refund: !!(c.is_refund),
           refund_vendor: c.refund_vendor || '',
           group_id: c.group_id || '',
+          forex_flag: !!(c.forex_flag),
+          forex_type: c.forex_type || '',
           idx: idx
         };
         if (c.review_decision) reviewDecisions[idx] = c.review_decision;
@@ -7568,6 +7586,21 @@ function _setFocusedCol(col) {
   });
 }
 
+// Scroll the currently focused cell into view horizontally (like Excel)
+function _scrollFocusedCellIntoView() {
+  if (selectedTxnIndex === null || _focusedCol === null) return;
+  const row = document.getElementById('row-' + selectedTxnIndex);
+  if (!row) return;
+  const colIdx = TABLE_COLS.indexOf(_focusedCol);
+  const td = row.querySelectorAll('td')[colIdx];
+  if (!td) return;
+  // Find the scrollable table container
+  const container = td.closest('.table-wrap') || td.closest('[style*="overflow"]') || td.closest('div');
+  if (td.scrollIntoView) {
+    td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+}
+
 // Override global keydown to support arrow-key cell navigation + space
 document.addEventListener('keydown', function(e) {
   if (document.getElementById('reviewOverlay').classList.contains('show')) return;
@@ -7578,24 +7611,38 @@ document.addEventListener('keydown', function(e) {
     e.preventDefault();
     if (_focusedCol === null) { _setFocusedCol('conf'); return; }
     const idx = TABLE_COLS.indexOf(_focusedCol);
-    if (idx > 0) _setFocusedCol(TABLE_COLS[idx - 1]);
+    if (idx > 0) {
+      // Skip hidden columns
+      let newIdx = idx - 1;
+      while (newIdx > 0 && !colVisible[TABLE_COLS[newIdx]]) newIdx--;
+      _setFocusedCol(TABLE_COLS[newIdx]);
+      _scrollFocusedCellIntoView();
+    }
     return;
   }
   if (e.key === 'ArrowRight') {
     e.preventDefault();
     if (_focusedCol === null) { _setFocusedCol(TABLE_COLS[2]); return; }
     const idx = TABLE_COLS.indexOf(_focusedCol);
-    if (idx < TABLE_COLS.length - 1) _setFocusedCol(TABLE_COLS[idx + 1]);
+    if (idx < TABLE_COLS.length - 1) {
+      // Skip hidden columns
+      let newIdx = idx + 1;
+      while (newIdx < TABLE_COLS.length - 1 && !colVisible[TABLE_COLS[newIdx]]) newIdx++;
+      _setFocusedCol(TABLE_COLS[newIdx]);
+      _scrollFocusedCellIntoView();
+    }
     return;
   }
   if (e.key === ' ' && _focusedCol !== null) {
     e.preventDefault();
     _handleCellSpaceAction(_focusedCol, selectedTxnIndex);
+    // Re-apply focus highlight after action (space must not lose cell selection)
+    setTimeout(() => _setFocusedCol(_focusedCol), 50);
     return;
   }
-  // Clear cell focus on vertical navigation
+  // Preserve focused column on vertical navigation
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    _setFocusedCol(null);
+    // _focusedCol is preserved — navigateRow picks it up via _setFocusedCol after selectRow
   }
 }, true); // use capture to run before the existing listener
 
