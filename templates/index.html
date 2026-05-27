@@ -3912,6 +3912,8 @@ function selectRow(i) {
   selectedTxnIndex = i;
   document.querySelectorAll('tbody tr').forEach(r => {
     r.classList.remove('row-selected');
+    // Clear any stale cell-focused highlights from all rows
+    r.querySelectorAll('td.cell-focused').forEach(td => td.classList.remove('cell-focused'));
     // Re-apply status classes in case renderTable hasn't run (e.g. Enter-key navigate)
     const ri = r.id && r.id.startsWith('row-') ? parseInt(r.id.slice(4)) : -1;
     if (ri >= 0) {
@@ -7576,6 +7578,8 @@ let _focusedCol = null;
 
 function _setFocusedCol(col) {
   _focusedCol = col;
+  // Clear cell-focused from ALL rows first (prevents stale highlights on prev row)
+  document.querySelectorAll('tbody td.cell-focused').forEach(td => td.classList.remove('cell-focused'));
   // Update visual indicator on all cells for selected row
   if (selectedTxnIndex === null) return;
   const row = document.getElementById('row-' + selectedTxnIndex);
