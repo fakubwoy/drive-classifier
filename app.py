@@ -5264,18 +5264,48 @@ def workspace_context_row_status(node_id):
     """, (node_id, uid))
     cls_rows = c.fetchall()
 
-    # Build sets of matched reference strings for fast lookup
+    # Build sets of matched reference strings for fast lookup.
+    # We collect, for every classified transaction:
+    #   • matched_refs    — the literal reference_id, PLUS any invoice/PO-like
+    #                       tokens mined out of reference_id AND matched_detail
+    #                       (the AI sometimes stores the ref inside the detail
+    #                       text rather than the reference_id column, which is
+    #                       why preview rows weren't lighting up before)
+    #   • matched_details — full matched_detail strings (for vendor substring
+    #                       matching)
+    #   • matched_parties — party names (for fuzzy vendor matching)
+    import re as _re
+    # Invoice / PO / booking-reference shaped tokens.
+    _ref_token_re = _re.compile(r'[A-Za-z0-9][A-Za-z0-9/_\-]{2,}')
+
     matched_refs = set()
     matched_details = set()
     matched_parties = set()
+
+    def _add_ref_tokens(text):
+        """Mine invoice/PO-like tokens from free text and add them (lowercased)
+        to matched_refs so a context-sheet cell holding the bare invoice number
+        will match even when the AI buried it inside matched_detail."""
+        for tok in _ref_token_re.findall(str(text or "")):
+            tok = tok.strip().lower()
+            if len(tok) >= 3 and any(ch.isdigit() for ch in tok):
+                matched_refs.add(tok)
+            elif len(tok) >= 4:
+                # Allow longer all-alpha tokens (e.g. a distinctive PNR/code)
+                matched_refs.add(tok)
+
     for r in cls_rows:
         if r["reference_id"] and r["reference_id"].strip():
-            matched_refs.add(r["reference_id"].strip().lower())
+            ref = r["reference_id"].strip().lower()
+            matched_refs.add(ref)
+            _add_ref_tokens(ref)
         if r["matched_detail"] and r["matched_detail"].strip() not in (
             "", "Auto-classified", "Auto-classified from learned feedback",
             "User corrected", "User corrected + learned"
         ):
-            matched_details.add(r["matched_detail"].strip().lower())
+            md = r["matched_detail"].strip().lower()
+            matched_details.add(md)
+            _add_ref_tokens(md)
         if r["party_name"] and r["party_name"].strip():
             matched_parties.add(r["party_name"].strip().lower())
 
@@ -5331,6 +5361,14 @@ def workspace_context_row_status(node_id):
                     if cell_val and cell_val not in ("nan", "none", ""):
                         if cell_val in matched_refs:
                             is_referenced = True
+                        elif len(cell_val) >= 3:
+                            # Substring either direction: handles "INV-001" vs
+                            # "inv001" style differences and refs embedded in
+                            # longer matched_detail tokens.
+                            for ref in matched_refs:
+                                if len(ref) >= 3 and (cell_val in ref or ref in cell_val):
+                                    is_referenced = True
+                                    break
 
                 # Check by vendor/party name in matched_details or matched_parties
                 if not is_referenced and vendor_col_idx is not None and vendor_col_idx < len(row):
@@ -5359,6 +5397,11 @@ def workspace_context_row_status(node_id):
                         cv = str(cell).strip().lower()
                         if cv and cv not in ("nan", "none", "") and len(cv) > 3:
                             if cv in matched_refs:
+                                is_referenced = True
+                                break
+                            # Substring match against mined invoice/ref tokens
+                            if any(len(ref) >= 3 and (cv in ref or ref in cv)
+                                   for ref in matched_refs):
                                 is_referenced = True
                                 break
                             for md in matched_details:
