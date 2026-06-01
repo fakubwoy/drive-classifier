@@ -2832,6 +2832,13 @@
       <div class="progress-phase" id="progressPhase" style="margin-top:0">&nbsp;</div>
       <div id="progressTimer" style="font-size:0.7rem;font-family:var(--mono);color:var(--text-muted)"></div>
     </div>
+    <div style="display:flex;justify-content:center;margin-top:14px">
+      <button class="btn btn-ghost btn-sm" id="progressStopBtn" onclick="cancelClassification()"
+              style="border:1px solid var(--border)">
+        <svg class="icon" width="13" height="13"><use href="#ic-x"/></svg>
+        Stop classification
+      </button>
+    </div>
   </div>
 </div>
 
@@ -4759,10 +4766,39 @@ async function classifySelected() {
  * and updates the table after every Gemini sub-batch (~20 transactions) completes.
  * The backend yields one SSE event per Gemini call so the UI updates in real time.
  */
+// Holds the AbortController for the in-flight classification stream (if any),
+// so the Stop button can cancel it. null when nothing is running.
+let _classifyAbort = null;
+
+// Called by the Stop button in the progress overlay. Aborts the fetch, which
+// closes the SSE connection; the backend generator stops on its next yield.
+// Results already streamed in are kept.
+function cancelClassification() {
+  if (_classifyAbort) {
+    const btn = document.getElementById('progressStopBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Stopping…'; }
+    document.getElementById('progressPhase').textContent = 'Stopping — finishing current batch…';
+    _classifyAbort.abort();
+  }
+}
+
 const classifyViaStream = function classifyViaStream(indices) {
   return new Promise(async (resolve) => {
     const total = indices.length;
     let completed = 0;
+    let cancelled = false;
+
+    // Fresh controller for this run; expose it for the Stop button.
+    const abortController = new AbortController();
+    _classifyAbort = abortController;
+
+    // Reset the Stop button to its default enabled state for this run.
+    const stopBtn = document.getElementById('progressStopBtn');
+    if (stopBtn) {
+      stopBtn.disabled = false;
+      stopBtn.style.display = '';
+      stopBtn.innerHTML = '<svg class="icon" width="13" height="13"><use href="#ic-x"/></svg> Stop classification';
+    }
 
     // --- Idle animation state ---
     // While waiting for the FIRST Gemini response the main bar crawls forward
@@ -4836,16 +4872,23 @@ const classifyViaStream = function classifyViaStream(indices) {
       res = await fetch('/api/classify_stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ indices })
+        body: JSON.stringify({ indices }),
+        signal: abortController.signal
       });
     } catch (e) {
       cleanup();
-      showToast('Stream connection failed: ' + e);
+      _classifyAbort = null;
+      if (e.name === 'AbortError') {
+        showToast(`Classification stopped — ${completed} of ${total} classified.`);
+      } else {
+        showToast('Stream connection failed: ' + e);
+      }
       resolve(); return;
     }
 
     if (!res.ok || !res.body) {
       cleanup();
+      _classifyAbort = null;
       showToast('Classification stream error: ' + res.status);
       resolve(); return;
     }
@@ -4856,7 +4899,12 @@ const classifyViaStream = function classifyViaStream(indices) {
 
     while (true) {
       let chunk;
-      try { chunk = await reader.read(); } catch (e) { break; }
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        if (e.name === 'AbortError') cancelled = true;
+        break;
+      }
       if (chunk.done) break;
 
       buffer += decoder.decode(chunk.value, { stream: true });
@@ -4870,6 +4918,7 @@ const classifyViaStream = function classifyViaStream(indices) {
 
         if (event.error) {
           cleanup();
+          _classifyAbort = null;
           showToast('Classification error: ' + event.error);
           resolve(); return;
         }
@@ -4957,6 +5006,7 @@ const classifyViaStream = function classifyViaStream(indices) {
             renderTable(); // re-render so ITC badges appear immediately
           }
           cleanup();
+          _classifyAbort = null;
           document.getElementById('progressSubFill').style.width = completed > 0 ? '100%' : '0%';
           await sleep(400);
           resolve(); return;
@@ -4964,6 +5014,10 @@ const classifyViaStream = function classifyViaStream(indices) {
       }
     }
     cleanup();
+    _classifyAbort = null;
+    if (cancelled) {
+      showToast(`Classification stopped — ${completed} of ${total} classified. The rest are unchanged.`);
+    }
     resolve();
   });
 }
